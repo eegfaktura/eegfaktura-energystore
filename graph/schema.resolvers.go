@@ -6,6 +6,7 @@ package graph
 import (
 	"at.ourproject/energystore/excel"
 	"context"
+	"fmt"
 
 	"at.ourproject/energystore/calculation"
 	"at.ourproject/energystore/graph/generated"
@@ -15,6 +16,7 @@ import (
 
 // SingleUpload is the resolver for the singleUpload field.
 func (r *mutationResolver) SingleUpload(ctx context.Context, tenant string, sheet string, file graphql.Upload) (bool, error) {
+	fmt.Printf("START UPLOAD: %+v %+v\n", tenant, sheet)
 	err := excel.ImportFile(tenant, file.Filename, sheet, file.File)
 	return err == nil, err
 }

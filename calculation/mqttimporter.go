@@ -2,6 +2,7 @@ package calculation
 
 import (
 	"at.ourproject/energystore/model"
+	"at.ourproject/energystore/mqttclient"
 	"at.ourproject/energystore/store"
 	"at.ourproject/energystore/utils"
 	"encoding/json"
@@ -12,21 +13,24 @@ import (
 	"time"
 )
 
-type MqttEnergyImporter struct {
-	tenant string
-}
+type MqttEnergyImporter struct{}
 
-func NewMqttEnergyImporter(tenant string) *MqttEnergyImporter {
-	return &MqttEnergyImporter{tenant}
+func NewMqttEnergyImporter() *MqttEnergyImporter {
+	return &MqttEnergyImporter{}
 }
 
 func (mw *MqttEnergyImporter) Execute(msg mqtt.Message) {
+
+	tenant := mqttclient.TopicType(msg.Topic()).Tenant()
+	if len(tenant) == 0 {
+		return
+	}
 	data := decodeMessage(msg.Payload())
 	if data == nil {
 		return
 	}
-	fmt.Printf("Execute Energy Data Message for Topic (%v)\n", mw.tenant)
-	err := importEnergy(mw.tenant, data)
+	fmt.Printf("Execute Energy Data Message for Topic (%v)\n", tenant)
+	err := importEnergy(tenant, data)
 	if err != nil {
 		glog.Error(err)
 	}
@@ -102,24 +106,68 @@ func importEnergy(tenant string, data *model.MqttEnergyResponse) error {
 	// Update RawDataStructure
 	glog.Infof("Len Loaded Resources %d", len(resources))
 
-	sort.Slice(data.Message.Energy.Data[0].Value, func(i, j int) bool {
-		a := time.UnixMilli(data.Message.Energy.Data[0].Value[i].From)
-		b := time.UnixMilli(data.Message.Energy.Data[0].Value[j].From)
+	meterCodeMeta := make(map[string]*model.MeterCodeMeta, len(data.Message.Energy.Data))
+	for i, d := range data.Message.Energy.Data {
+		meterMeta := utils.DecodeMeterCode(d.MeterCode, i)
+		meterCodeMeta[meterMeta.Type] = meterMeta
+	}
+
+	///
+	var updated []*model.RawSourceLine
+	for _, v := range meterCodeMeta {
+		updated, err = importEnergyValues(v, data.Message.Energy, metaCP, &year, consumerCount, producerCount, determineMeta)
+		// Store updated RawDataStructure
+		glog.Infof("Update CP %s energy values (%d) from %s to %s",
+			data.Message.Meter.MeteringPoint,
+			len(updated),
+			time.UnixMilli(data.Message.Energy.Start).Format(time.RFC822),
+			time.UnixMilli(data.Message.Energy.End).Format(time.RFC822))
+		err = db.SetLines(updated)
+		if err != nil {
+			return err
+		}
+	}
+	///
+
+	for _, y := range years {
+		if err = CalculateMonthlyDash(db, fmt.Sprintf("%d", y), CalculateEEG); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func importEnergyValues(
+	meterCode *model.MeterCodeMeta,
+	data model.MqttEnergy,
+	metaCP *model.CounterPointMeta,
+	year *int,
+	consumerCount, producerCount int,
+	determineMeta func() error) ([]*model.RawSourceLine, error) {
+
+	var err error
+
+	sort.Slice(data.Data[meterCode.SourceInData].Value, func(i, j int) bool {
+		a := time.UnixMilli(data.Data[0].Value[i].From)
+		b := time.UnixMilli(data.Data[0].Value[j].From)
 		return a.Unix() < b.Unix()
 	})
+
+	var tablePrefix = fmt.Sprintf("CP-%s/", meterCode.Code)
+	var resources = map[string]*model.RawSourceLine{}
 	updated := []*model.RawSourceLine{}
-	for _, v := range data.Message.Energy.Data[0].Value {
+	for _, v := range data.Data[meterCode.SourceInData].Value {
 		t := time.UnixMilli(v.From)
-		if t.Year() != year {
-			year = t.Year()
+		if t.Year() != *year {
+			*year = t.Year()
 			if err = determineMeta(); err != nil {
-				return err
+				return updated, err
 			}
 		}
 
-		id, err := utils.ConvertUnixTimeToRowId("CP/", time.UnixMilli(v.From))
+		id, err := utils.ConvertUnixTimeToRowId(tablePrefix, time.UnixMilli(v.From))
 		if err != nil {
-			return err
+			return updated, err
 		}
 		_, ok := resources[id]
 		if !ok {
@@ -134,22 +182,5 @@ func importEnergy(tenant string, data *model.MqttEnergyResponse) error {
 		}
 		updated = append(updated, resources[id])
 	}
-
-	// Store updated RawDataStructure
-	glog.Infof("Update CP %s energy values (%d) from %s to %s",
-		data.Message.Meter.MeteringPoint,
-		len(updated),
-		time.UnixMilli(data.Message.Energy.Start).Format(time.RFC822),
-		time.UnixMilli(data.Message.Energy.End).Format(time.RFC822))
-	err = db.SetLines(updated)
-	if err != nil {
-		return err
-	}
-
-	for _, y := range years {
-		if err = CalculateMonthlyDash(db, fmt.Sprintf("%d", y), CalculateEEG); err != nil {
-			return err
-		}
-	}
-	return nil
+	return updated, nil
 }

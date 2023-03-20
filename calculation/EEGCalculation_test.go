@@ -15,7 +15,7 @@ func TestAllocDynamic(t *testing.T) {
 	}
 	line.Producers[0] = 35000
 
-	m := AllocDynamic(line)
+	m := AllocDynamic1(line)
 
 	v1 := m.GetElm(10, 0)
 

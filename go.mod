@@ -6,7 +6,10 @@ require (
 	github.com/99designs/gqlgen v0.17.20
 	github.com/dgraph-io/badger/v3 v3.2103.4
 	github.com/eclipse/paho.mqtt.golang v1.4.2
+	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/golang/glog v1.0.0
+	github.com/gorilla/mux v1.8.0
+	github.com/sirupsen/logrus v1.9.0
 	github.com/sony/sonyflake v1.1.0
 	github.com/spf13/viper v1.14.0
 	github.com/stretchr/testify v1.8.1

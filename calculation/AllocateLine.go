@@ -6,6 +6,7 @@ import (
 	"math"
 )
 
+// AllocDynamic Deprecated: Use AllocDynamic1/*
 func AllocDynamic(line *model.RawSourceLine) *model.Matrix {
 
 	resultArray := make([]float64, len(line.Consumers)*len(line.Producers))
@@ -24,7 +25,7 @@ func AllocDynamic(line *model.RawSourceLine) *model.Matrix {
 	}
 
 	diffProdCons := utils.Sum(valueAboveMean)
-	var allocation float64 = float64(0)
+	var allocation = float64(0)
 	if diffProdCons > 0 {
 		allocation = math.Max(0, float64((consumerSum-producerSum)/diffProdCons))
 	}
@@ -64,7 +65,7 @@ func AllocDynamic1(line *model.RawSourceLine) *model.Matrix {
 			greenValue = l / alloc_prod_to_cons_factor
 		}
 		for j, pl := range line.Producers {
-			var prod_factor float64 = float64(0)
+			var prod_factor = float64(0)
 			if producerSum > float64(0) {
 				prod_factor = pl / producerSum
 			}

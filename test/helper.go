@@ -7,17 +7,13 @@ import (
 	"testing"
 )
 
-func ImportTestContent(t *testing.T, db *store.BowStorage) (yearSet []int) {
-	excelFile, err := excel.OpenExceFile("./zaehlpunkte-beispieldatei.xlsx")
+func ImportTestContent(t *testing.T, file, sheet string, db *store.BowStorage) (yearSet []int) {
+	excelFile, err := excel.OpenExceFile(file)
 	require.NoError(t, err)
 	defer excelFile.Close()
 
-	yearSet, err = excel.ImportExcelEnergyFile(excelFile, "ConsumptionDataReport", db)
+	yearSet, err = excel.ImportExcelEnergyFile(excelFile, sheet, db)
 	require.NoError(t, err)
 
-	//for _, k := range yearSet {
-	//	err = calculation.CalculateMonthlyDash(db, fmt.Sprintf("%d", k), calculation.CalculateEEG)
-	//	require.NoError(t, err)
-	//}
 	return
 }

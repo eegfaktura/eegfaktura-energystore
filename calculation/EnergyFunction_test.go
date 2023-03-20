@@ -15,5 +15,5 @@ func TestCalcHourSum(t *testing.T) {
 	rCons, rProd := CalcHourSum(db, "2021/04/18")
 
 	fmt.Printf("Hour 12: Consumed - %+v\n", rCons[12])
-	fmt.Printf("Hour 12: Produced - %+v\n", rProd[12])
+	fmt.Printf("Hour 12: TotalProduced - %+v\n", rProd[12])
 }

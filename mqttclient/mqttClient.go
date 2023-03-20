@@ -5,8 +5,19 @@ import (
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/golang/glog"
 	"github.com/spf13/viper"
+	"strings"
 	"time"
 )
+
+type TopicType string
+
+func (t TopicType) Tenant() string {
+	elems := strings.Split(string(t), "/")
+	if len(elems) > 3 {
+		return elems[3]
+	}
+	return ""
+}
 
 type MQTTStreamer struct {
 	client mqtt.Client

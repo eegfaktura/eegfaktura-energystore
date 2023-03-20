@@ -15,7 +15,7 @@ func GetCalcFunc(id string) CalcHandler {
 	return nil
 }
 
-func CalcWhenProduced(db *store.BowStorage, period string) (*model.Matrix, *model.Matrix, float64) {
+func CalcWhenProduced(db *store.BowStorage, period string) (*model.Matrix, *model.Matrix, *model.Matrix, float64) {
 	iter := db.GetLinePrefix(fmt.Sprintf("CP/%s", period))
 	defer iter.Close()
 
@@ -23,6 +23,7 @@ func CalcWhenProduced(db *store.BowStorage, period string) (*model.Matrix, *mode
 
 	var rAlloc *model.Matrix
 	var rCons *model.Matrix
+	var rProd *model.Matrix
 	var pSum float64 = 0.0
 
 	for iter.Next(&_line) {
@@ -40,6 +41,12 @@ func CalcWhenProduced(db *store.BowStorage, period string) (*model.Matrix, *mode
 			rCons.Add(model.MakeMatrix(line.Consumers, len(line.Consumers), 1))
 		}
 
+		if rProd == nil {
+			rProd = model.MakeMatrix(line.Producers, len(line.Producers), 1)
+		} else {
+			rProd.Add(model.MakeMatrix(line.Producers, len(line.Producers), 1))
+		}
+
 		if rAlloc == nil {
 			rAlloc = model.MakeMatrix(m.Elements, m.CountRows(), m.CountCols())
 		} else {
@@ -47,5 +54,5 @@ func CalcWhenProduced(db *store.BowStorage, period string) (*model.Matrix, *mode
 		}
 		pSum += utils.Sum(line.Producers)
 	}
-	return rAlloc, rCons, pSum
+	return rAlloc, rCons, rProd, pSum
 }

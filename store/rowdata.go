@@ -5,6 +5,7 @@ import (
 	"at.ourproject/energystore/store/ebow"
 	"fmt"
 	"github.com/spf13/viper"
+	"strings"
 )
 
 type BowStorage struct {
@@ -13,7 +14,7 @@ type BowStorage struct {
 
 func OpenStorage(tenant string) (*BowStorage, error) {
 	basePath := viper.GetString("persistence.path")
-	db, err := ebow.Open(fmt.Sprintf("%s/%s", basePath, tenant))
+	db, err := ebow.Open(fmt.Sprintf("%s/%s", basePath, strings.ToLower(tenant)))
 	if err != nil {
 		return nil, err
 	}

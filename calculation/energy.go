@@ -46,8 +46,11 @@ func EnergyDashboard(tenant, function string, year, month int) (*model.EegEnergy
 	} else {
 		//metaMap := map[int]*model.CounterPointMeta{}
 		for _, m := range meta.CounterPoints {
-			if m.Dir == "CONSUMPTION" {
+			fmt.Printf("Meta: %+v\n", m)
+			if m.Dir == "CONSUMPTION" || m.Dir == "GENERATION" {
 				eegModel.Meta = append(eegModel.Meta, m)
+			} else {
+				fmt.Printf("Omitted Meta: %+v\n", m)
 			}
 		}
 	}

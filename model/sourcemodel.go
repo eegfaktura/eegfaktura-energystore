@@ -7,7 +7,7 @@ type RawSourceLine struct {
 }
 
 func (c RawSourceLine) Copy(cLength int) RawSourceLine {
-	r := RawSourceLine{Id: c.Id, Consumers: make([]float64, cLength), Producers: make([]float64, len(c.Consumers))}
+	r := RawSourceLine{Id: c.Id, Consumers: make([]float64, cLength), Producers: make([]float64, len(c.Producers))}
 	copy(r.Consumers[:], c.Consumers[:])
 	copy(r.Producers[:], c.Producers[:])
 	return r
@@ -69,8 +69,9 @@ func (a ByReportDate) Less(i, j int) bool { return a[i].Id < a[j].Id }
 func (a ByReportDate) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 
 type EnergyReport struct {
-	Id        string    `bow:"key" json:"id"`
-	Allocated []float64 `bow:"values" json:"allocated"`
-	Consumed  []float64 `bow:"consumed" json:"consumed"`
-	Produced  float64   `bow:"produced" json:"produced"`
+	Id            string    `bow:"key" json:"id"`
+	Allocated     []float64 `bow:"values" json:"allocated"`
+	Consumed      []float64 `bow:"consumed" json:"consumed"`
+	Produced      []float64 `bow:"produced" json:"produced"`
+	TotalProduced float64   `bow:"totalProduced" json:"total_produced"`
 }

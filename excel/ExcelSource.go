@@ -110,7 +110,7 @@ func ImportExcelEnergyFile(f *excelize.File, sheet string, db *store.BowStorage)
 					var y, m, d, hh, mm, ss int
 					rawData := &model.RawSourceLine{Consumers: []float64{}, Producers: []float64{}}
 					if _, err := fmt.Sscanf(cols[0], "%d.%d.%d %d:%d:%d", &d, &m, &y, &hh, &mm, &ss); err == nil {
-						rawData.Id = fmt.Sprintf("CP/%d/%.2d/%.2d/%.2d/%.2d/%.2d", y, m, d, hh, mm, ss)
+						rawData.Id = fmt.Sprintf("CP-G.01/%d/%.2d/%.2d/%.2d/%.2d/%.2d", y, m, d, hh, mm, ss)
 						yearSet[y] = true
 					} else {
 						glog.Infof("Error Time parsing: %s (%s)", err, cols[0])
@@ -291,4 +291,18 @@ func returnMeterCode(c string) MeterCodeType {
 	default:
 		return Bad
 	}
+}
+
+func convertExcelMeterCode(code MeterCodeType) string {
+	switch code {
+	case Total:
+		return "G.01"
+	case Share:
+		return "G.02"
+	case Coverage:
+		return "G.03"
+	case Profit:
+		return "G.02"
+	}
+	return ""
 }

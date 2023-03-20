@@ -113,3 +113,18 @@ type ParticipantInvoiceHistory struct {
 	Updated       int64   `json:"updated,omitempty"`
 	Comment       string  `json:"comment,omitempty"`
 }
+
+// MeterCodeMeta
+//Type of Metercode:
+//	- GEN: Energy Generation - GENERATOR  1-1:2.9.0 G.01
+//	- PLUS: Energy Overage - GENERATOR 1-1:2.9.0 P.01
+//	- CON: Energy Consumption - CONSUMPTION 1-1:1.9.0 G.01
+//	- SHARE: Energy Allocation - CONSUMPTION 1-1:2.9.0 G.02
+//	- COVER: Energy coverage - CONSUMPTION 1-1:2.9.0 G.03
+///*
+type MeterCodeMeta struct {
+	Type         string
+	Code         string
+	SourceInData int
+	SourceDelta  int
+}
