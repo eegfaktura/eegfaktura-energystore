@@ -9,7 +9,6 @@ import (
 	"context"
 	"flag"
 	"github.com/99designs/gqlgen/graphql/handler"
-	"github.com/99designs/gqlgen/graphql/playground"
 	"log"
 	"net/http"
 	"os"
@@ -37,7 +36,7 @@ func main() {
 
 	r := rest.NewRestServer()
 	srv := handler.NewDefaultServer(generated.NewExecutableSchema(generated.Config{Resolvers: &graph.Resolver{}}))
-	r.Handle("/", playground.Handler("GraphQL playground", "/query"))
+	//r.Handle("/", playground.Handler("GraphQL playground", "/query"))
 	r.Handle("/query", srv)
 
 	log.Printf("connect to http://localhost:%s/ for GraphQL playground", port)
@@ -53,7 +52,7 @@ func SetupMqttDispatcher(ctx context.Context) {
 	worker := map[string]mqttclient.Executor{}
 	energyTopicPrefix := viper.GetString("mqtt.energySubscriptionTopic")
 	worker[energyTopicPrefix] = calculation.NewMqttEnergyImporter()
-	
+
 	dispatcher := mqttclient.NewDispatcher(ctx, streamer, worker)
 	_ = dispatcher
 }

@@ -1,0 +1,13 @@
+
+persistence:
+  path: "/opt/energy/rawdata"
+
+jwt:
+  privKeyFile: "./zertifikat-key.pem"
+  pubKeyFile: "./zertifikat-pub.pem"
+
+mqtt:
+  host: "localhost:1883"
+  id: "edash-energystore-1"
+  qos: 1
+  energySubscriptionTopic: "eda/response/energy/+"
