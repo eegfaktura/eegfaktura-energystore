@@ -59,7 +59,7 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 						End:   timeV2.UnixMilli(),
 						Data: []model.MqttEnergyData{
 							model.MqttEnergyData{
-								MeterCode: "G1",
+								MeterCode: "1-1:1.9.0 G.01",
 								Value: []model.MqttEnergyValue{
 									model.MqttEnergyValue{
 										From:   timeV1.UnixMilli(),
@@ -91,7 +91,7 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 						End:   timeV2.UnixMilli(),
 						Data: []model.MqttEnergyData{
 							model.MqttEnergyData{
-								MeterCode: "G1",
+								MeterCode: "1-1:1.9.0 G.01",
 								Value: []model.MqttEnergyValue{
 									model.MqttEnergyValue{
 										From:   timeV1.UnixMilli(),
@@ -123,7 +123,7 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 						End:   timeV2.UnixMilli(),
 						Data: []model.MqttEnergyData{
 							model.MqttEnergyData{
-								MeterCode: "G1",
+								MeterCode: "1-1:1.9.0 G.01",
 								Value: []model.MqttEnergyValue{
 									model.MqttEnergyValue{
 										From:   timeV1.UnixMilli(),
@@ -138,7 +138,7 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 				},
 			},
 			expected: func(t *testing.T, l *model.RawSourceLine) {
-				require.Equal(t, 2, len(l.Producers))
+				require.Equal(t, 1, len(l.Producers))
 				assert.Equal(t, 10.1, l.Producers[0])
 			},
 		},
@@ -155,7 +155,7 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 						End:   timeV2.UnixMilli(),
 						Data: []model.MqttEnergyData{
 							model.MqttEnergyData{
-								MeterCode: "G1",
+								MeterCode: "1-1:2.9.0 G.01",
 								Value: []model.MqttEnergyValue{
 									model.MqttEnergyValue{
 										From:   timeV1.UnixMilli(),
@@ -185,7 +185,7 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 
 			db, err := store.OpenStorageTest("importer", "../test/rawdata")
 			require.NoError(t, err)
-			it := db.GetLinePrefix(fmt.Sprintf("CP/%s", "2022/10/24"))
+			it := db.GetLinePrefix(fmt.Sprintf("CP-G.01/%s", "2022/10/24"))
 			defer it.Close()
 			defer db.Close()
 
@@ -193,7 +193,7 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 
 			r := it.Next(&_line)
 			assert.Equal(t, true, r)
-			assert.Equal(t, "CP/2022/10/24/00/00/00", _line.Id)
+			assert.Equal(t, "CP-G.01/2022/10/24/00/00/00", _line.Id)
 			tt.expected(t, &_line)
 		})
 	}

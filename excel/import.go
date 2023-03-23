@@ -46,22 +46,6 @@ func ImportEEG(db *store.BowStorage, r io.Reader, filename, sheet, tenant string
 			}
 			return nil
 		}
-	} else if ext == ".csv" {
-		if f, err := OpenCsvReader(r); err == nil {
-			var err error
-			var yearSet map[int]bool
-			if yearSet, err = ImportCsvFile(f, db); err != nil {
-				glog.Infof("Import Csv Error: %v\n", err)
-				return err
-			}
-			for k, _ := range yearSet {
-				err = calculation.CalculateMonthlyDash(db, fmt.Sprintf("%d", k), calculation.CalculateEEG)
-				if err != nil {
-					return err
-				}
-			}
-			return nil
-		}
 	}
 	return errors.New("Invalid Text File")
 }

@@ -30,8 +30,8 @@ func (rsm RawSourceMeta) Copy() RawSourceMeta {
 	for i := 0; i < len(rsm.CounterPoints); i++ {
 		r.CounterPoints = append(r.CounterPoints,
 			&CounterPointMeta{ID: rsm.CounterPoints[i].ID,
-				Name:        rsm.CounterPoints[i].Name,
-				Idx:         rsm.CounterPoints[i].Idx,
+				Name: rsm.CounterPoints[i].Name,
+				//Idx:         rsm.CounterPoints[i].Idx,
 				Dir:         rsm.CounterPoints[i].Dir,
 				Count:       rsm.CounterPoints[i].Count,
 				PeriodStart: rsm.CounterPoints[i].PeriodStart,
@@ -45,9 +45,9 @@ func (rsm RawSourceMeta) Copy() RawSourceMeta {
 CounterPointMeta describe the raw data source in db. Be aware, the meta data are just applicable for one year.
 */
 type CounterPointMeta struct {
-	ID          string `bow:"key" json:"id"`                   // Usually, the Id represents Table-Type and Year (e.g. cpmeta/2021)
-	Name        string `bow:"name" json:"name"`                // Counterpoint name (e.g. ZPxxxxxxxxZaehlpunktxx)
-	Idx         int    `bow:"idx" json:"idx"`                  // Index of rawdata array in excel (Just needed for manual excel/csv import)
+	ID   string `bow:"key" json:"id"`    // Usually, the Id represents Table-Type and Year (e.g. cpmeta/2021)
+	Name string `bow:"name" json:"name"` // Counterpoint name (e.g. ZPxxxxxxxxZaehlpunktxx)
+	//	Idx         int    `bow:"idx" json:"idx"`                  // Index of rawdata array in excel (Just needed for manual excel/csv import)
 	SourceIdx   int    `bow:"srcIdx" json:"sourceIdx"`         // Index of rawdata array in db
 	Dir         string `bow:"dir" json:"dir"`                  // Direction of consumption (GENERATOR or. CONSUMER)
 	Count       uint16 `bow:"count" json:"count"`              // Number of measurements

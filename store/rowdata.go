@@ -26,11 +26,23 @@ func (b *BowStorage) Close() error {
 }
 
 func (b *BowStorage) SetLines(line []*model.RawSourceLine) error {
+	return b.SetLinesRaw("rawdata", line)
+}
+
+func (b *BowStorage) SetLinesG2(line []*model.RawSourceLine) error {
+	return b.SetLinesRaw("rawdata", line)
+}
+
+func (b *BowStorage) SetLinesG3(line []*model.RawSourceLine) error {
+	return b.SetLinesRaw("rawdata", line)
+}
+
+func (b *BowStorage) SetLinesRaw(bucket string, line []*model.RawSourceLine) error {
 	i := make([]interface{}, len(line))
 	for l := range line {
 		i[l] = line[l]
 	}
-	return b.db.Bucket("rawdata").PutBatch(i)
+	return b.db.Bucket(bucket).PutBatch(i)
 }
 
 func (b *BowStorage) SetLine(line *model.RawSourceLine) error {
@@ -63,5 +75,11 @@ func (b *BowStorage) GetLinePrefix(key string) *ebow.Iter {
 }
 
 func (b *BowStorage) GetLine(line *model.RawSourceLine) error {
+	return b.db.Bucket("rawdata").Get(line.Id, line)
+}
+func (b *BowStorage) GetLineG2(line *model.RawSourceLine) error {
+	return b.db.Bucket("rawdata").Get(line.Id, line)
+}
+func (b *BowStorage) GetLineG3(line *model.RawSourceLine) error {
 	return b.db.Bucket("rawdata").Get(line.Id, line)
 }

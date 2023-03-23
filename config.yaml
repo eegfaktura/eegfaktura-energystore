@@ -10,4 +10,4 @@ mqtt:
   host: "localhost:1883"
   id: "edash-energystore-1"
   qos: 1
-  energySubscriptionTopic: "eda/response/cp/+"
+  energySubscriptionTopic: "eda/response/energy/+"

@@ -106,10 +106,12 @@ func importEnergy(tenant string, data *model.MqttEnergyResponse) error {
 	// Update RawDataStructure
 	glog.Infof("Len Loaded Resources %d", len(resources))
 
-	meterCodeMeta := make(map[string]*model.MeterCodeMeta, len(data.Message.Energy.Data))
+	meterCodeMeta := map[string]*model.MeterCodeMeta{}
 	for i, d := range data.Message.Energy.Data {
-		meterMeta := utils.DecodeMeterCode(d.MeterCode, i)
-		meterCodeMeta[meterMeta.Type] = meterMeta
+		if meterMeta := utils.DecodeMeterCode(d.MeterCode, i); meterMeta != nil {
+			meterCodeMeta[meterMeta.Type] = meterMeta
+		}
+
 	}
 
 	///

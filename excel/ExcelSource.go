@@ -53,6 +53,13 @@ type excelHeader struct {
 	meterCode       map[int]MeterCodeType
 }
 
+type excelCounterPointMeta struct {
+	*model.CounterPointMeta
+	Idx   int
+	IdxG2 int
+	IdxG3 int
+}
+
 func ImportExcelEnergyFile(f *excelize.File, sheet string, db *store.BowStorage) ([]int, error) {
 	rows, err := f.Rows(sheet)
 	if err != nil {
@@ -63,11 +70,13 @@ func ImportExcelEnergyFile(f *excelize.File, sheet string, db *store.BowStorage)
 
 	var rIdx int = 1
 	var rawDatas []*model.RawSourceLine = []*model.RawSourceLine{}
+	var rawDatasG2 []*model.RawSourceLine = []*model.RawSourceLine{}
+	var rawDatasG3 []*model.RawSourceLine = []*model.RawSourceLine{}
 
 	var excelHeader excelHeader
 	excelHeaderInitialized := false
 
-	var excelCpMeta map[int]*model.CounterPointMeta
+	var excelCpMeta map[int]*excelCounterPointMeta
 	var updatedCpMeta []*model.CounterPointMeta
 	var yearSet map[int]bool = make(map[int]bool)
 
@@ -117,8 +126,15 @@ func ImportExcelEnergyFile(f *excelize.File, sheet string, db *store.BowStorage)
 						continue
 					}
 
+					//
+					// Insert G1 values
+					//
+					if len(rawDatas) == 4900 {
+						te := 1
+						println(te)
+					}
+					rawData.Id = fmt.Sprintf("CP-G.01/%d/%.2d/%.2d/%.2d/%.2d/%.2d", y, m, d, hh, mm, ss)
 					_ = db.GetLine(rawData)
-
 					for i := 0; i < len(excelCpMeta); i++ {
 						v := excelCpMeta[i]
 						value := returnFloat(cols[v.Idx+1])
@@ -131,8 +147,56 @@ func ImportExcelEnergyFile(f *excelize.File, sheet string, db *store.BowStorage)
 							v.Count += 1
 						}
 					}
-
 					rawDatas = append(rawDatas, rawData)
+
+					//
+					// Insert G2 values
+					//
+					rawDataG2 := &model.RawSourceLine{Consumers: []float64{}, Producers: []float64{}}
+					rawDataG2.Id = fmt.Sprintf("CP-G.02/%d/%.2d/%.2d/%.2d/%.2d/%.2d", y, m, d, hh, mm, ss)
+					_ = db.GetLineG2(rawDataG2)
+					for i := 0; i < len(excelCpMeta); i++ {
+						v := excelCpMeta[i]
+						if v.IdxG2 < 0 {
+							continue
+						}
+						value := returnFloat(cols[v.IdxG2+1])
+						switch v.Dir {
+						case "CONSUMPTION":
+							rawDataG2.Consumers = utils.Insert(rawDataG2.Consumers, v.SourceIdx, value)
+							v.Count += 1
+						case "GENERATION":
+							rawDataG2.Producers = utils.Insert(rawDataG2.Producers, v.SourceIdx, value)
+							v.Count += 1
+						}
+					}
+					rawDatasG2 = append(rawDatasG2, rawDataG2)
+
+					//
+					// Insert G3 values
+					//
+					rawDataG3 := &model.RawSourceLine{Consumers: []float64{}, Producers: []float64{}}
+					rawDataG3.Id = fmt.Sprintf("CP-G.03/%d/%.2d/%.2d/%.2d/%.2d/%.2d", y, m, d, hh, mm, ss)
+					_ = db.GetLineG3(rawData)
+					for i := 0; i < len(excelCpMeta); i++ {
+						v := excelCpMeta[i]
+						if v.IdxG3 < 0 {
+							continue
+						}
+						value := returnFloat(cols[v.IdxG3+1])
+						switch v.Dir {
+						case "CONSUMPTION":
+							rawDataG3.Consumers = utils.Insert(rawDataG3.Consumers, v.SourceIdx, value)
+							v.Count += 1
+						case "GENERATION":
+							rawDataG3.Producers = utils.Insert(rawDataG3.Producers, v.SourceIdx, value)
+							v.Count += 1
+						}
+					}
+					rawDatasG3 = append(rawDatasG3, rawDataG3)
+					//
+					//
+					//
 					rIdx += 1
 				}
 			}
@@ -140,6 +204,12 @@ func ImportExcelEnergyFile(f *excelize.File, sheet string, db *store.BowStorage)
 	}
 	fmt.Printf("Time taken via read file: %v\n", time.Since(t))
 	if err := db.SetLines(rawDatas); err != nil {
+		return []int{}, err
+	}
+	if err := db.SetLinesG2(rawDatasG2); err != nil {
+		return []int{}, err
+	}
+	if err := db.SetLinesG3(rawDatasG3); err != nil {
 		return []int{}, err
 	}
 
@@ -159,21 +229,54 @@ func ImportExcelEnergyFile(f *excelize.File, sheet string, db *store.BowStorage)
 	return years, nil
 }
 
-func buildMatrixMetaStruct(db *store.BowStorage, excelHeader excelHeader) (map[int]*model.CounterPointMeta, []*model.CounterPointMeta, error) {
+func buildMatrixMetaStruct(db *store.BowStorage, excelHeader excelHeader) (map[int]*excelCounterPointMeta, []*model.CounterPointMeta, error) {
 	type pair struct {
 		key   string
 		value int
+		vG2   int
+		vG3   int
 	}
-	var ms []pair
-
+	msSet := map[string]pair{}
 	meteringIdSet := map[string]int{}
 	for i := 0; i < len(excelHeader.meteringPointId); i++ {
-		if i < len(excelHeader.meterCode) && excelHeader.meterCode[i] == Total {
+		if i < len(excelHeader.meterCode) {
 			v := excelHeader.meteringPointId[i]
-			if _, ok := meteringIdSet[v]; !ok && strings.ToLower(v) != "total" {
-				meteringIdSet[v] = i
-				ms = append(ms, pair{v, i})
+			if v == "AT0030000000000000000000030032764" {
+				pe := 1
+				println(pe)
 			}
+			if excelHeader.meterCode[i] == Total {
+				if _, ok := meteringIdSet[v]; !ok && strings.ToLower(v) != "total" {
+					meteringIdSet[v] = i
+					if _ms, ok := msSet[v]; ok {
+						_ms.value = i
+						msSet[v] = _ms
+					} else {
+						msSet[v] = pair{v, i, -1, -1}
+					}
+				}
+			} else if strings.ToLower(v) != "total" && (excelHeader.meterCode[i] == Share || excelHeader.meterCode[i] == Profit) {
+				if _ms, ok := msSet[v]; ok {
+					_ms.vG2 = i
+					msSet[v] = _ms
+				} else {
+					msSet[v] = pair{v, -1, i, -1}
+				}
+			} else if strings.ToLower(v) != "total" && excelHeader.meterCode[i] == Coverage {
+				if _ms, ok := msSet[v]; ok {
+					_ms.vG3 = i
+					msSet[v] = _ms
+				} else {
+					msSet[v] = pair{v, -1, -1, i}
+				}
+			}
+		}
+	}
+
+	ms := []pair{}
+	for _, v := range msSet {
+		if !(v.value < 0) {
+			ms = append(ms, v)
 		}
 	}
 
@@ -181,7 +284,7 @@ func buildMatrixMetaStruct(db *store.BowStorage, excelHeader excelHeader) (map[i
 		return ms[i].value < ms[j].value
 	})
 
-	excelCpMeta := make(map[int]*model.CounterPointMeta, len(ms))
+	excelCpMeta := make(map[int]*excelCounterPointMeta, len(ms))
 	storedCpMeta, metaInfo, err := store.GetMetaInfo(db)
 	if err != nil {
 		return nil, nil, err
@@ -226,13 +329,17 @@ func buildMatrixMetaStruct(db *store.BowStorage, excelHeader excelHeader) (map[i
 			storedMeta.PeriodStart = excelHeader.periodStart[kv.value]
 		}
 
+		excelCpMeta[i] = &excelCounterPointMeta{CounterPointMeta: storedMeta}
 		switch excelHeader.energyDirection[kv.value] {
 		case model.PRODUCER_DIRECTION:
-			storedMeta.Idx = kv.value
+			excelCpMeta[i].Idx = kv.value
+			excelCpMeta[i].IdxG2 = kv.vG2
+			excelCpMeta[i].IdxG3 = kv.vG3
 		default:
-			storedMeta.Idx = kv.value
+			excelCpMeta[i].Idx = kv.value
+			excelCpMeta[i].IdxG2 = kv.vG2
+			excelCpMeta[i].IdxG3 = kv.vG3
 		}
-		excelCpMeta[i] = storedMeta
 	}
 
 	updateCpMeta := []*model.CounterPointMeta{}
