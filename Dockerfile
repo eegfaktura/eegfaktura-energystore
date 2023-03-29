@@ -15,4 +15,6 @@ RUN rm -r ./*
 
 VOLUME /opt/rawdata
 
+EXPOSE 8080
+
 CMD ["energystore", "-configPath", "/etc/energystore/", "-v=3", "-logtostderr=true", "-stderrthreshold=INFO"]

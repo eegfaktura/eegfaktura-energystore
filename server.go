@@ -4,6 +4,7 @@ import (
 	"at.ourproject/energystore/calculation"
 	"at.ourproject/energystore/graph"
 	"at.ourproject/energystore/graph/generated"
+	"at.ourproject/energystore/middleware"
 	"at.ourproject/energystore/mqttclient"
 	"at.ourproject/energystore/rest"
 	"context"
@@ -35,6 +36,7 @@ func main() {
 	SetupMqttDispatcher(ctx)
 
 	r := rest.NewRestServer()
+	r.Use(middleware.GQLMiddleware(viper.GetString("jwt.pubKeyFile")))
 	srv := handler.NewDefaultServer(generated.NewExecutableSchema(generated.Config{Resolvers: &graph.Resolver{}}))
 	//r.Handle("/", playground.Handler("GraphQL playground", "/query"))
 	r.Handle("/query", srv)

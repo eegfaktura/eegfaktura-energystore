@@ -46,7 +46,7 @@ func NewMqttStreamer() (*MQTTStreamer, error) {
 
 	// Log events
 	opts.OnConnectionLost = func(cl mqtt.Client, err error) {
-		glog.Info("connection lost")
+		glog.Infof("connection lost Err: %+v", err.Error())
 	}
 	opts.OnConnect = func(mqtt.Client) {
 		glog.Info("connection established")
