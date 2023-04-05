@@ -34,7 +34,7 @@ func NewMqttStreamer() (*MQTTStreamer, error) {
 	opts.AddBroker(brokerHost)
 	opts.SetClientID(brokerId)
 
-	opts.SetOrderMatters(true)        // Allow out of order messages (use this option unless in order delivery is essential)
+	opts.SetOrderMatters(false)       // Allow out of order messages (use this option unless in order delivery is essential)
 	opts.ConnectTimeout = time.Second // Minimal delays on connect
 	opts.WriteTimeout = time.Second   // Minimal delays on writes
 	opts.KeepAlive = 10               // Keepalive every 10 seconds so we quickly detect network outages

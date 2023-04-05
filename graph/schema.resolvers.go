@@ -4,21 +4,27 @@ package graph
 // will be copied through when generating and any unknown code will be moved to the end.
 
 import (
-	"at.ourproject/energystore/excel"
 	"context"
-	"fmt"
 
 	"at.ourproject/energystore/calculation"
+	"at.ourproject/energystore/excel"
 	"at.ourproject/energystore/graph/generated"
 	"at.ourproject/energystore/model"
+	"at.ourproject/energystore/services"
 	"github.com/99designs/gqlgen/graphql"
+	"github.com/golang/glog"
 )
 
 // SingleUpload is the resolver for the singleUpload field.
 func (r *mutationResolver) SingleUpload(ctx context.Context, tenant string, sheet string, file graphql.Upload) (bool, error) {
-	fmt.Printf("START UPLOAD: %+v %+v\n", tenant, sheet)
+	glog.Infof("START UPLOAD: %+v %+v", tenant, sheet)
 	err := excel.ImportFile(tenant, file.Filename, sheet, file.File)
 	return err == nil, err
+}
+
+// LastEnergyDate is the resolver for the lastEnergyDate field.
+func (r *queryResolver) LastEnergyDate(ctx context.Context, tenant string) (string, error) {
+	return services.GetLastEnergyEntry(tenant)
 }
 
 // Eeg is the resolver for the eeg field.

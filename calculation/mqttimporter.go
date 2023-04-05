@@ -5,6 +5,7 @@ import (
 	"at.ourproject/energystore/mqttclient"
 	"at.ourproject/energystore/store"
 	"at.ourproject/energystore/utils"
+	"context"
 	"encoding/json"
 	"fmt"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -13,14 +14,26 @@ import (
 	"time"
 )
 
-type MqttEnergyImporter struct{}
-
-func NewMqttEnergyImporter() *MqttEnergyImporter {
-	return &MqttEnergyImporter{}
+type MqttMessage struct {
+	data   *model.MqttEnergyResponse
+	tenant string
 }
 
-func (mw *MqttEnergyImporter) Execute(msg mqtt.Message) {
+type MqttEnergyImporter struct {
+	msgChan chan MqttMessage
+	ctx     context.Context
+}
 
+func NewMqttEnergyImporter(ctx context.Context) *MqttEnergyImporter {
+	importer := &MqttEnergyImporter{msgChan: make(chan MqttMessage), ctx: ctx}
+	go importer.process()
+	return importer
+}
+
+var gloablReceivedMsg int = 0
+
+func (mw *MqttEnergyImporter) Execute(msg mqtt.Message) {
+	gloablReceivedMsg = gloablReceivedMsg + 1
 	tenant := mqttclient.TopicType(msg.Topic()).Tenant()
 	if len(tenant) == 0 {
 		return
@@ -29,10 +42,25 @@ func (mw *MqttEnergyImporter) Execute(msg mqtt.Message) {
 	if data == nil {
 		return
 	}
-	fmt.Printf("Execute Energy Data Message for Topic (%v)\n", tenant)
-	err := importEnergy(tenant, data)
-	if err != nil {
-		glog.Error(err)
+
+	mw.msgChan <- MqttMessage{data: data, tenant: tenant}
+	msg.Ack()
+}
+
+func (mw *MqttEnergyImporter) process() {
+	for {
+		select {
+		case msg := <-mw.msgChan:
+			glog.Infof("Execute Energy Data Message for Topic (%v)\n", msg.tenant)
+			err := importEnergy(msg.tenant, msg.data)
+			if err != nil {
+				glog.Error(err)
+			}
+			glog.Infof("Execution finish (%d)", gloablReceivedMsg)
+
+		case <-mw.ctx.Done():
+			break
+		}
 	}
 }
 
@@ -53,7 +81,7 @@ func importEnergy(tenant string, data *model.MqttEnergyResponse) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = db.Close() }()
+	defer func() { db.Close() }()
 
 	defaultDirection := utils.DetermineDirection(data.Message.Meter.MeteringPoint)
 
@@ -75,7 +103,6 @@ func importEnergy(tenant string, data *model.MqttEnergyResponse) error {
 	}
 
 	//// GetRawDataStructur from Period xxxx -> yyyy
-	var _line model.RawSourceLine
 	var resources map[string]*model.RawSourceLine = map[string]*model.RawSourceLine{}
 
 	begin := time.UnixMilli(data.Message.Energy.Start)
@@ -89,14 +116,19 @@ func importEnergy(tenant string, data *model.MqttEnergyResponse) error {
 		return err
 	}
 
+	meterCodeMeta := map[string]*model.MeterCodeMeta{}
+	for i, d := range data.Message.Energy.Data {
+		if meterMeta := utils.DecodeMeterCode(d.MeterCode, i); meterMeta != nil {
+			meterCodeMeta[meterMeta.Type] = meterMeta
+		}
+	}
+
 	y := year
 	years := []int{year}
 	for i := 0; i < duration; i++ {
-		key := fmt.Sprintf("CP/%.4d/%.2d", y, ((month+i-1)%12)+1)
-		iter := db.GetLinePrefix(key)
-		for iter.Next(&_line) {
-			l := _line.Copy(len(_line.Consumers))
-			resources[_line.Id] = &l
+		for _, v := range meterCodeMeta {
+			key := fmt.Sprintf("CP-%s/%.4d/%.2d", v.Code, y, ((month+i-1)%12)+1)
+			fetchSource(db, key, resources)
 		}
 		if (month+i)%12 == 0 {
 			y += 1
@@ -104,20 +136,15 @@ func importEnergy(tenant string, data *model.MqttEnergyResponse) error {
 		}
 	}
 	// Update RawDataStructure
-	glog.Infof("Len Loaded Resources %d", len(resources))
-
-	meterCodeMeta := map[string]*model.MeterCodeMeta{}
-	for i, d := range data.Message.Energy.Data {
-		if meterMeta := utils.DecodeMeterCode(d.MeterCode, i); meterMeta != nil {
-			meterCodeMeta[meterMeta.Type] = meterMeta
-		}
-
-	}
+	//glog.Infof("Len Loaded Resources %d", len(resources))
 
 	///
 	var updated []*model.RawSourceLine
 	for _, v := range meterCodeMeta {
-		updated, err = importEnergyValues(v, data.Message.Energy, metaCP, &year, consumerCount, producerCount, determineMeta)
+		updated, err = importEnergyValues(v, data.Message.Energy, metaCP, &year, consumerCount, producerCount, resources, determineMeta)
+		for _, sl := range updated {
+			glog.V(3).Infof("Update Source Line %+v", sl)
+		}
 		// Store updated RawDataStructure
 		glog.Infof("Update CP %s energy values (%d) from %s to %s",
 			data.Message.Meter.MeteringPoint,
@@ -130,6 +157,10 @@ func importEnergy(tenant string, data *model.MqttEnergyResponse) error {
 		}
 	}
 	///
+
+	if c := updateMetaCP(metaCP, time.UnixMilli(data.Message.Energy.Start), time.UnixMilli(data.Message.Energy.End)); c {
+		err = updateMeta(db, metaCP, data.Message.Meter.MeteringPoint)
+	}
 
 	for _, y := range years {
 		if err = CalculateMonthlyDash(db, fmt.Sprintf("%d", y), CalculateEEG); err != nil {
@@ -145,6 +176,7 @@ func importEnergyValues(
 	metaCP *model.CounterPointMeta,
 	year *int,
 	consumerCount, producerCount int,
+	resources map[string]*model.RawSourceLine,
 	determineMeta func() error) ([]*model.RawSourceLine, error) {
 
 	var err error
@@ -156,7 +188,7 @@ func importEnergyValues(
 	})
 
 	var tablePrefix = fmt.Sprintf("CP-%s/", meterCode.Code)
-	var resources = map[string]*model.RawSourceLine{}
+	//var resources = map[string]*model.RawSourceLine{}
 	updated := []*model.RawSourceLine{}
 	for _, v := range data.Data[meterCode.SourceInData].Value {
 		t := time.UnixMilli(v.From)
@@ -185,4 +217,60 @@ func importEnergyValues(
 		updated = append(updated, resources[id])
 	}
 	return updated, nil
+}
+
+func fetchSource(db *store.BowStorage, key string, resources map[string]*model.RawSourceLine) {
+	var _line model.RawSourceLine
+	iter := db.GetLinePrefix(key)
+	for iter.Next(&_line) {
+		l := _line.Copy(len(_line.Consumers))
+		resources[_line.Id] = &l
+	}
+}
+
+func updateMetaCP(metaCP *model.CounterPointMeta, begin, end time.Time) bool {
+
+	changed := false
+	metaBegin := stringToTime(metaCP.PeriodStart)
+	metaEnd := stringToTime(metaCP.PeriodEnd)
+
+	if begin.Before(metaBegin) {
+		metaCP.PeriodStart = dateToString(begin)
+		changed = true
+	}
+	if end.After(metaEnd) {
+		metaCP.PeriodEnd = dateToString(end)
+		changed = true
+	}
+
+	return changed
+}
+
+func updateMeta(db *store.BowStorage, metaCP *model.CounterPointMeta, cp string) error {
+	var err error
+	var meta *model.RawSourceMeta
+	if meta, err = db.GetMeta(fmt.Sprintf("cpmeta/%s", "0")); err == nil {
+		for _, m := range meta.CounterPoints {
+			if m.Name == cp {
+				m.PeriodStart = metaCP.PeriodStart
+				m.PeriodEnd = metaCP.PeriodEnd
+				m.Count = metaCP.Count
+
+				return db.SetMeta(meta)
+			}
+		}
+	}
+	return err
+}
+
+func dateToString(date time.Time) string {
+	return fmt.Sprintf("%.2d.%.2d.%.4d %.2d:%.2d:%.4d", date.Day(), date.Month(), date.Year(), date.Hour(), date.Minute(), date.Second())
+}
+
+func stringToTime(date string) time.Time {
+	var d, m, y, hh, mm, ss int
+	if _, err := fmt.Sscanf(date, "%d.%d.%d %d:%d:%d", &d, &m, &y, &hh, &mm, &ss); err == nil {
+		return time.Date(y, time.Month(m), d, hh, mm, ss, 0, time.UTC)
+	}
+	return time.Now()
 }

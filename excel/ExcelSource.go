@@ -16,6 +16,7 @@ import (
 )
 
 var dateLine = regexp.MustCompile(`^[0-9]{2}.[0-9]{2}.[0-9]{4}\s[0-9]{2}:[0-9]{2}:[0-9]{2}$`)
+var numberPattern = regexp.MustCompile(`^[0-9\\.,]+$`)
 
 func OpenExceFile(path string) (*excelize.File, error) {
 	f, err := excelize.OpenFile(path)
@@ -32,6 +33,8 @@ func OpenReader(r io.Reader, filename string, opt ...excelize.Options) (*exceliz
 		return nil, err
 	}
 	f.Path = filename
+
+	glog.V(3).Infof("Read Excel File with Sheets %+v", f.GetSheetList())
 	return f, nil
 }
 
@@ -61,12 +64,21 @@ type excelCounterPointMeta struct {
 }
 
 func ImportExcelEnergyFile(f *excelize.File, sheet string, db *store.BowStorage) ([]int, error) {
+	s, e := f.GetCellStyle(sheet, "A2")
+	fmt.Printf("Style: %d %v\n", s, e)
+	s1, e1 := f.GetCellStyle(sheet, "A12")
+	fmt.Printf("Style: %d %v\n", s1, e1)
+
+	exp := "DD.MM.YYYY HH:MM:SS"
+	style, err := f.NewStyle(&excelize.Style{CustomNumFmt: &exp})
+	err = f.SetCellStyle("Sheet1", "A12", "A15", style)
+
 	rows, err := f.Rows(sheet)
 	if err != nil {
 		fmt.Println(err)
 		return []int{}, err
 	}
-	fmt.Printf("Rows: %+v\n", rows.Error())
+	glog.Infof("Rows Error: %+v", rows.Error())
 
 	var rIdx int = 1
 	var rawDatas []*model.RawSourceLine = []*model.RawSourceLine{}
@@ -81,14 +93,18 @@ func ImportExcelEnergyFile(f *excelize.File, sheet string, db *store.BowStorage)
 	var yearSet map[int]bool = make(map[int]bool)
 
 	t := time.Now()
+	totalRowCols := 0
 	for rows.Next() {
-		if cols, err := rows.Columns(excelize.Options{RawCellValue: false}); err == nil && len(cols) > 0 {
+		totalRowCols = totalRowCols + 1
+		if cols, err := rows.Columns(excelize.Options{RawCellValue: true}); err == nil && len(cols) > 0 {
 			switch cols[0] {
 			case "MeteringpointID":
 				excelHeader.meteringPointId = make(map[int]string, len(cols)-1)
 				for i, c := range cols[1:] {
 					excelHeader.meteringPointId[i] = c
 				}
+			case "Spaltensumme", "Metering Interval", "Name", "MeteringReason", "Number of Metering Intervals":
+				continue
 			case "Energy direction":
 				excelHeader.energyDirection = make(map[int]string, len(cols)-1)
 				for i, c := range cols[1:] {
@@ -97,12 +113,13 @@ func ImportExcelEnergyFile(f *excelize.File, sheet string, db *store.BowStorage)
 			case "Period end":
 				excelHeader.periodEnd = make(map[int]string, len(cols)-1)
 				for i, c := range cols[1:] {
-					excelHeader.periodEnd[i] = c
+					fmt.Printf("Period end: (%s) %s\n", c, excelDateToString(c))
+					excelHeader.periodEnd[i] = excelDateToString(c)
 				}
 			case "Period start":
 				excelHeader.periodStart = make(map[int]string, len(cols)-1)
 				for i, c := range cols[1:] {
-					excelHeader.periodStart[i] = c
+					excelHeader.periodStart[i] = excelDateToString(c)
 				}
 			case "Metercode":
 				excelHeader.meterCode = make(map[int]MeterCodeType, len(cols)-1)
@@ -110,29 +127,18 @@ func ImportExcelEnergyFile(f *excelize.File, sheet string, db *store.BowStorage)
 					excelHeader.meterCode[i] = returnMeterCode(strings.ToUpper(c))
 				}
 			default:
-				switch {
-				case dateLine.MatchString(cols[0]):
+				if isDate(cols[0]) {
+					d, m, y, hh, mm, ss := getExcelDate(cols[0])
+					yearSet[y] = true
 					if !excelHeaderInitialized {
 						excelCpMeta, updatedCpMeta, err = buildMatrixMetaStruct(db, excelHeader)
 						excelHeaderInitialized = true
-					}
-					var y, m, d, hh, mm, ss int
-					rawData := &model.RawSourceLine{Consumers: []float64{}, Producers: []float64{}}
-					if _, err := fmt.Sscanf(cols[0], "%d.%d.%d %d:%d:%d", &d, &m, &y, &hh, &mm, &ss); err == nil {
-						rawData.Id = fmt.Sprintf("CP-G.01/%d/%.2d/%.2d/%.2d/%.2d/%.2d", y, m, d, hh, mm, ss)
-						yearSet[y] = true
-					} else {
-						glog.Infof("Error Time parsing: %s (%s)", err, cols[0])
-						continue
 					}
 
 					//
 					// Insert G1 values
 					//
-					if len(rawDatas) == 4900 {
-						te := 1
-						println(te)
-					}
+					rawData := &model.RawSourceLine{Consumers: []float64{}, Producers: []float64{}}
 					rawData.Id = fmt.Sprintf("CP-G.01/%d/%.2d/%.2d/%.2d/%.2d/%.2d", y, m, d, hh, mm, ss)
 					_ = db.GetLine(rawData)
 					for i := 0; i < len(excelCpMeta); i++ {
@@ -198,11 +204,17 @@ func ImportExcelEnergyFile(f *excelize.File, sheet string, db *store.BowStorage)
 					//
 					//
 					rIdx += 1
+				} else {
+					s, e := f.GetCellStyle(sheet, cols[0])
+					if err != nil {
+						glog.Errorf("Error get cell format %+v", e)
+					}
+					glog.V(3).Infof("Could not handle row format (%d). Cols %+v", s, cols)
 				}
 			}
 		}
 	}
-	fmt.Printf("Time taken via read file: %v\n", time.Since(t))
+	glog.Infof("Time taken via read file: %v (%d Rows)", time.Since(t), totalRowCols)
 	if err := db.SetLines(rawDatas); err != nil {
 		return []int{}, err
 	}
@@ -213,14 +225,20 @@ func ImportExcelEnergyFile(f *excelize.File, sheet string, db *store.BowStorage)
 		return []int{}, err
 	}
 
+	glog.V(3).Infof("Import <%d> G1 lines", len(rawDatas))
+	glog.V(3).Infof("Import <%d> G2 lines", len(rawDatasG2))
+	glog.V(3).Infof("Import <%d> G3 lines", len(rawDatasG3))
+
 	rawMeta := &model.RawSourceMeta{Id: fmt.Sprintf("cpmeta/%d", 0), CounterPoints: updatedCpMeta, NumberOfMetering: rIdx}
 	err = db.SetMeta(rawMeta)
+
+	glog.V(3).Infof("Update Metadata: %+v", rawMeta)
 
 	if err != nil {
 		glog.Error(err.Error())
 		return []int{}, err
 	}
-	fmt.Printf("Time taken via write batch: %v\n", time.Since(t))
+	glog.V(3).Infof("Time taken via write batch: %v", time.Since(t))
 
 	years := []int{}
 	for k, _ := range yearSet {
@@ -230,6 +248,7 @@ func ImportExcelEnergyFile(f *excelize.File, sheet string, db *store.BowStorage)
 }
 
 func buildMatrixMetaStruct(db *store.BowStorage, excelHeader excelHeader) (map[int]*excelCounterPointMeta, []*model.CounterPointMeta, error) {
+	glog.V(3).Info("Build Meta Matrix")
 	type pair struct {
 		key   string
 		value int
@@ -241,10 +260,6 @@ func buildMatrixMetaStruct(db *store.BowStorage, excelHeader excelHeader) (map[i
 	for i := 0; i < len(excelHeader.meteringPointId); i++ {
 		if i < len(excelHeader.meterCode) {
 			v := excelHeader.meteringPointId[i]
-			if v == "AT0030000000000000000000030032764" {
-				pe := 1
-				println(pe)
-			}
 			if excelHeader.meterCode[i] == Total {
 				if _, ok := meteringIdSet[v]; !ok && strings.ToLower(v) != "total" {
 					meteringIdSet[v] = i
@@ -303,6 +318,7 @@ func buildMatrixMetaStruct(db *store.BowStorage, excelHeader excelHeader) (map[i
 					Name:        meterpoint,
 					Dir:         model.CONSUMER_DIRECTION,
 					PeriodStart: excelHeader.periodStart[kv.value],
+					PeriodEnd:   excelHeader.periodEnd[kv.value],
 				}
 			case model.PRODUCER_DIRECTION:
 				metaInfo.ProducerCount += 1
@@ -313,6 +329,7 @@ func buildMatrixMetaStruct(db *store.BowStorage, excelHeader excelHeader) (map[i
 					Name:        meterpoint,
 					Dir:         model.PRODUCER_DIRECTION,
 					PeriodStart: excelHeader.periodStart[kv.value],
+					PeriodEnd:   excelHeader.periodEnd[kv.value],
 				}
 			}
 		}
@@ -350,13 +367,13 @@ func buildMatrixMetaStruct(db *store.BowStorage, excelHeader excelHeader) (map[i
 	sort.Slice(updateCpMeta, func(i, j int) bool {
 		return updateCpMeta[i].SourceIdx < updateCpMeta[j].SourceIdx
 	})
-	fmt.Println("ExcelMeta:")
+	glog.V(3).Info("ExcelMeta:")
 	for k, v := range excelCpMeta {
-		fmt.Printf("Key: %+v Value: %+v\n", k, v)
+		glog.V(3).Infof("Key: %+v Value: %+v\n", k, v)
 	}
-	fmt.Println("UpdateMeta:")
+	glog.V(3).Info("UpdateMeta:")
 	for i, v := range updateCpMeta {
-		fmt.Printf("Idx: %+v Value: %+v\n", i, v)
+		glog.V(3).Infof("Idx: %+v Value: %+v\n", i, v)
 	}
 	return excelCpMeta, updateCpMeta, nil
 }
@@ -412,4 +429,31 @@ func convertExcelMeterCode(code MeterCodeType) string {
 		return "G.02"
 	}
 	return ""
+}
+
+func isDate(cell string) bool {
+	if len(cell) > 0 && numberPattern.MatchString(cell) {
+		return true
+	}
+	println(cell)
+	return false
+}
+
+func getExcelDate(cell string) (int, int, int, int, int, int) {
+	excelTime := parseExcelDate(cell)
+	return excelTime.Day(), int(excelTime.Month()), excelTime.Year(), excelTime.Hour(), excelTime.Minute(), excelTime.Second()
+}
+
+func parseExcelDate(cell string) time.Time {
+	if isDate(cell) {
+		var excelEpoch = time.Date(1899, time.December, 30, 0, 0, 0, 0, time.UTC)
+		var days, _ = strconv.ParseFloat(cell, 64)
+		return excelEpoch.Add(time.Second * time.Duration(days*86400))
+	}
+	return time.Now()
+}
+
+func excelDateToString(cell string) string {
+	d, m, y, hh, mm, ss := getExcelDate(cell)
+	return fmt.Sprintf("%.2d.%.2d.%.4d %.2d:%.2d:%.2d", d, m, y, hh, mm, ss)
 }

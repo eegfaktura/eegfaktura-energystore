@@ -22,5 +22,11 @@ run:
 	$(GOBUILD) -o $(BINARY_NAME) -v ./...
 	./$(BINARY_NAME)
 
-docker: 
-	$(DOCKER) build -t ghcr.io/obpeter/energy-store:latest .
+docker-clean:
+	$(DOCKER) rmi ghcr.io/vfeeg-development/energy-store:latest
+
+docker: docker-clean
+	$(DOCKER) build -t ghcr.io/vfeeg-development/energy-store:latest .
+
+push: docker
+	$(DOCKER) push ghcr.io/vfeeg-development/energy-store:latest

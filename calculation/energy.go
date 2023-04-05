@@ -15,7 +15,7 @@ func EnergyDashboard(tenant, function string, year, month int) (*model.EegEnergy
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = db.Close() }()
+	defer func() { db.Close() }()
 
 	var eegModel *model.EegEnergy
 	var results []*model.EnergyReport

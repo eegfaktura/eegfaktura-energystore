@@ -17,7 +17,7 @@ func ImportFile(tenant, filename, sheet string, file io.Reader) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = db.Close() }()
+	defer func() { db.Close() }()
 
 	return ImportEEG(db, file, filename, sheet, tenant)
 }
@@ -28,7 +28,7 @@ func ImportEEG(db *store.BowStorage, r io.Reader, filename, sheet, tenant string
 		Sheet: "ConsumptionDataReport"
 	*/
 	ext := filepath.Ext(filename)
-	fmt.Printf("Import Raw-Data: %+v Ext: %s\n", filename, ext)
+	glog.Infof("Import Raw-Data: %+v Ext: %s", filename, ext)
 	if ext == ".xlsx" || ext == ".xls" {
 		if f, err := OpenReader(r, filename); err == nil {
 			defer f.Close()

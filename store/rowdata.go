@@ -6,23 +6,59 @@ import (
 	"fmt"
 	"github.com/spf13/viper"
 	"strings"
+	"sync"
 )
 
-type BowStorage struct {
-	db *ebow.DB
+// Prevent multiple goroutines from accessing the same resource at the same time (forces turn taking)
+type Turns struct {
+	mu sync.Mutex
+	m  map[string]*sync.Mutex
 }
+
+func newTurns() *Turns {
+	t := &Turns{
+		m: make(map[string]*sync.Mutex),
+	}
+	return t
+}
+
+// Lock a resource by given name
+func (t *Turns) lock(name string) func() {
+	t.mu.Lock()
+	l, ok := t.m[name]
+	if !ok {
+		l = &sync.Mutex{}
+		t.m[name] = l
+	}
+	t.mu.Unlock()
+
+	l.Lock()
+	return l.Unlock
+}
+
+type BowStorage struct {
+	db     *ebow.DB
+	unlock func()
+}
+
+var turns = newTurns()
 
 func OpenStorage(tenant string) (*BowStorage, error) {
+	t := strings.ToLower(tenant)
 	basePath := viper.GetString("persistence.path")
-	db, err := ebow.Open(fmt.Sprintf("%s/%s", basePath, strings.ToLower(tenant)))
+	unlock := turns.lock(t)
+	db, err := ebow.Open(fmt.Sprintf("%s/%s", basePath, t))
 	if err != nil {
+		unlock()
 		return nil, err
 	}
-	return &BowStorage{db}, nil
+	return &BowStorage{db, unlock}, nil
 }
 
-func (b *BowStorage) Close() error {
-	return b.db.Close()
+func (b *BowStorage) Close() {
+	_ = b.db.Close()
+	b.unlock()
+	return
 }
 
 func (b *BowStorage) SetLines(line []*model.RawSourceLine) error {
@@ -82,4 +118,8 @@ func (b *BowStorage) GetLineG2(line *model.RawSourceLine) error {
 }
 func (b *BowStorage) GetLineG3(line *model.RawSourceLine) error {
 	return b.db.Bucket("rawdata").Get(line.Id, line)
+}
+
+func GenerateCPKey(year int, month int) string {
+	return fmt.Sprintf("CP/%.4d/%.2d", year, month)
 }

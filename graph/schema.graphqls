@@ -6,6 +6,7 @@ scalar EegEnergy
 scalar Upload
 
 type Query {
+  lastEnergyDate(tenant: String!): String!
   eeg(name: String!, year: Int!, month: Int, function: String): EegEnergy!
 }
 

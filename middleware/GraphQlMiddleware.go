@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"context"
-	log "github.com/sirupsen/logrus"
 	"net/http"
 	"strings"
 )
@@ -14,40 +13,40 @@ type contextKey struct {
 }
 
 func GQLMiddleware(publicKeyPath string) func(http.Handler) http.Handler {
-	pub, err := loadEncryptionKey(publicKeyPath)
-	if err != nil {
-		log.Fatal(err)
-	}
-	jwtUtil := &AccessTokenGenJWT{PublicKey: pub.key}
+	//pub, err := loadEncryptionKey(publicKeyPath)
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//jwtUtil := &AccessTokenGenJWT{PublicKey: pub.key}
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			jwtToken := r.Header.Get("Authorization")
-			if len(jwtToken) == 0 {
-				log.Printf("No Access_token in request!\n")
-				w.WriteHeader(http.StatusForbidden)
-				return
-			}
-
-			if strings.HasPrefix(jwtToken, BEARER_SCHEMA) {
-				jwtToken = jwtToken[len(BEARER_SCHEMA):]
-			} else {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-
-			claims, err := jwtUtil.ExtractClaims(jwtToken)
-			if err != nil {
-				log.Printf("Error while parsing token: %s\n", err)
-				w.WriteHeader(http.StatusForbidden)
-				return
-			}
+			//jwtToken := r.Header.Get("Authorization")
+			//if len(jwtToken) == 0 {
+			//	log.Printf("No Access_token in request!\n")
+			//	w.WriteHeader(http.StatusForbidden)
+			//	return
+			//}
+			//
+			//if strings.HasPrefix(jwtToken, BEARER_SCHEMA) {
+			//	jwtToken = jwtToken[len(BEARER_SCHEMA):]
+			//} else {
+			//	w.WriteHeader(http.StatusBadRequest)
+			//	return
+			//}
+			//
+			//claims, err := jwtUtil.ExtractClaims(jwtToken)
+			//if err != nil {
+			//	log.Printf("Error while parsing token: %s\n", err)
+			//	w.WriteHeader(http.StatusForbidden)
+			//	return
+			//}
 
 			tenant := r.Header.Get("tenant")
-			if contains(claims.Tenants, tenant) == false {
-				w.WriteHeader(http.StatusForbidden)
-				return
-			}
+			//if contains(claims.Tenants, tenant) == false {
+			//	w.WriteHeader(http.StatusForbidden)
+			//	return
+			//}
 
 			// put it in context
 			ctx := context.WithValue(r.Context(), tenantCtxKey, strings.ToUpper(tenant))

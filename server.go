@@ -10,6 +10,7 @@ import (
 	"context"
 	"flag"
 	"github.com/99designs/gqlgen/graphql/handler"
+	"github.com/gorilla/handlers"
 	"log"
 	"net/http"
 	"os"
@@ -41,8 +42,20 @@ func main() {
 	//r.Handle("/", playground.Handler("GraphQL playground", "/query"))
 	r.Handle("/query", srv)
 
+	allowedOrigins := handlers.AllowedOrigins([]string{"*"})
+	allowedHeaders := handlers.AllowedHeaders(
+		[]string{"X-Requested-With",
+			"Accept",
+			"authorization",
+			"content-type",
+			"Content-Length",
+			"tenant"})
+	allowedMethods := handlers.AllowedMethods([]string{"GET", "HEAD", "POST", "PUT", "OPTIONS", "DELETE"})
+	allowedCredentials := handlers.AllowCredentials()
+
 	log.Printf("connect to http://localhost:%s/ for GraphQL playground", port)
-	log.Fatal(http.ListenAndServe(":"+port, r))
+
+	log.Fatal(http.ListenAndServe(":"+port, handlers.CORS(allowedOrigins, allowedHeaders, allowedMethods, allowedCredentials)(r)))
 }
 
 func SetupMqttDispatcher(ctx context.Context) {
@@ -53,7 +66,7 @@ func SetupMqttDispatcher(ctx context.Context) {
 
 	worker := map[string]mqttclient.Executor{}
 	energyTopicPrefix := viper.GetString("mqtt.energySubscriptionTopic")
-	worker[energyTopicPrefix] = calculation.NewMqttEnergyImporter()
+	worker[energyTopicPrefix] = calculation.NewMqttEnergyImporter(ctx)
 
 	dispatcher := mqttclient.NewDispatcher(ctx, streamer, worker)
 	_ = dispatcher

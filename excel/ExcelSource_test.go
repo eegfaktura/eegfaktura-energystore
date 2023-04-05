@@ -44,7 +44,7 @@ func TestImportExcelEnergyFile(t *testing.T) {
 	db, err := store.OpenStorageTest("dashboard", "../test/rawdata")
 	require.Nil(t, err)
 	defer func() {
-		_ = db.Close()
+		db.Close()
 		os.RemoveAll("../test/rawdata/dashboard")
 	}()
 

@@ -58,7 +58,27 @@ func ConvertUnixTimeToRowId(prefix string, time time.Time) (string, error) {
 		time.Second()), nil
 }
 
+func ConvertRowIdToTimeString(prefix, rawId string) (string, error) {
+	var y, m, d, hh, mm, ss int
+	if _, err := fmt.Sscanf(rawId, fmt.Sprintf("%s/%%d/%%d/%%d/%%d/%%d/%%d", prefix), &y, &m, &d, &hh, &mm, &ss); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%.2d.%.2d.%.4d %.2d:%.2d:00", d, m, y, hh, mm), nil
+}
+
 func ConvertDate(time time.Time) string {
 	year, month, day := time.Date()
 	return fmt.Sprintf("%.4d-%.2d-%.2d", year, int(month), day)
+}
+
+func DateToString(date time.Time) string {
+	return fmt.Sprintf("%.2d.%.2d.%.4d %.2d:%.2d:%.4d", date.Day(), date.Month(), date.Year(), date.Hour(), date.Minute(), date.Second())
+}
+
+func StringToTime(date string) time.Time {
+	var d, m, y, hh, mm, ss int
+	if _, err := fmt.Sscanf(date, "%d.%d.%d %d:%d:%d", &d, &m, &y, &hh, &mm, &ss); err == nil {
+		return time.Date(y, time.Month(m), d, hh, mm, ss, 0, time.UTC)
+	}
+	return time.Now()
 }

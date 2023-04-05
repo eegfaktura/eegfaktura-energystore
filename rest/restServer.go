@@ -4,6 +4,7 @@ import (
 	"at.ourproject/energystore/calculation"
 	"at.ourproject/energystore/middleware"
 	"at.ourproject/energystore/model"
+	"at.ourproject/energystore/services"
 	"fmt"
 	"github.com/gorilla/mux"
 	"github.com/spf13/viper"
@@ -16,6 +17,7 @@ func NewRestServer() *mux.Router {
 	r := mux.NewRouter()
 	//s := r.PathPrefix("/rest").Subrouter()
 	r.HandleFunc("/eeg/{year}/{month}", jwtWrapper(fetchEnergy())).Methods("GET")
+	r.HandleFunc("/eeg/lastRecordDate", jwtWrapper(lastRecordDate())).Methods("GET")
 	r.HandleFunc("/eeg/hello", getHello).Methods("GET")
 	return r
 }
@@ -47,5 +49,15 @@ func fetchEnergy() middleware.JWTHandlerFunc {
 		}{Eeg: energy}
 
 		respondWithJSON(w, http.StatusOK, &resp)
+	}
+}
+
+func lastRecordDate() middleware.JWTHandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request, claims *middleware.PlatformClaims, tenant string) {
+		lastRecord, err := services.GetLastEnergyEntry(tenant)
+		if err != nil {
+			respondWithError(w, http.StatusNotFound, "No entry found")
+		}
+		respondWithJSON(w, http.StatusOK, map[string]interface{}{"periodEnd": lastRecord})
 	}
 }
