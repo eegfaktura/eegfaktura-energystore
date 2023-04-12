@@ -11,3 +11,6 @@ mqtt:
   id: "edash-energystore-1"
   qos: 1
   energySubscriptionTopic: "eda/response/energy/+"
+
+services:
+  mail-server: "localhost:9090"

@@ -30,3 +30,6 @@ docker: docker-clean
 
 push: docker
 	$(DOCKER) push ghcr.io/vfeeg-development/energy-store:latest
+
+protoc:
+	protoc --proto_path=. --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative ./protoc/*.proto

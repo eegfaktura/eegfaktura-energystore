@@ -2,17 +2,51 @@ package excel
 
 import (
 	"at.ourproject/energystore/model"
+	protobuf "at.ourproject/energystore/protoc"
 	"at.ourproject/energystore/store"
 	"at.ourproject/energystore/utils"
+	"bytes"
+	"context"
 	"fmt"
+	"github.com/golang/glog"
+	"github.com/spf13/viper"
 	"github.com/xuri/excelize/v2"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"time"
 )
 
-func ExportExcel(tenant string, year, month int) error {
+func ExportEnergyDataToMail(tenant, to string, year, month int) error {
+
+	buf, err := ExportExcel(tenant, year, month)
+	if err != nil {
+		return err
+	}
+
+	conn, err := grpc.Dial(viper.GetString("services.mail-server"), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	c := protobuf.NewExcelAdminServiceClient(conn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	r, err := c.SendExcel(ctx, &protobuf.SendExcelRequest{
+		Tenant:    tenant,
+		Recipient: to,
+		Filename:  fmt.Sprintf("%s-Energie Report-%d%.2d.xlsx", tenant, year, month),
+		Content:   buf.Bytes()})
+
+	glog.Infof("Response from MAIL-SERVER: %v", r)
+	return nil
+}
+
+func ExportExcel(tenant string, year, month int) (*bytes.Buffer, error) {
 
 	db, err := store.OpenStorage(tenant)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	f := excelize.NewFile()
 	defer func() {
@@ -21,12 +55,12 @@ func ExportExcel(tenant string, year, month int) error {
 		}
 	}()
 	// Create a new sheet.
-	index := f.NewSheet("Sheet1")
+	index := f.NewSheet("Energiedaten")
 	f.SetActiveSheet(index)
 
 	if err != nil {
 		fmt.Println(err)
-		return err
+		return nil, err
 	}
 	defer func() { db.Close() }()
 
@@ -46,33 +80,37 @@ func ExportExcel(tenant string, year, month int) error {
 	g3Ok := iterG3.Next(&_lineG3)
 	_ = g3Ok
 
-	sw, err := f.NewStreamWriter("Sheet1")
+	sw, err := f.NewStreamWriter("Energiedaten")
+	if err != nil {
+		return nil, err
+	}
 
 	meta, _ := db.GetMeta(fmt.Sprintf("cpmeta/%s", "0"))
+	countCons, countProd := utils.CountConsumerProducer(meta)
 
 	sw.SetRow("A2",
 		append([]interface{}{excelize.Cell{Value: "MeteringpointID"}},
-			addHeader(meta, func(m *model.CounterPointMeta) interface{} { return m.Name })...))
+			addHeader(meta, countCons, countProd, func(m *model.CounterPointMeta) interface{} { return m.Name })...))
 
 	sw.SetRow("A4",
 		append([]interface{}{excelize.Cell{Value: "Energy direction"}},
-			addHeader(meta, func(m *model.CounterPointMeta) interface{} { return m.Dir })...))
+			addHeader(meta, countCons, countProd, func(m *model.CounterPointMeta) interface{} { return m.Dir })...))
 
 	sw.SetRow("A5",
 		append([]interface{}{excelize.Cell{Value: "Period start"}},
-			addHeader(meta, func(m *model.CounterPointMeta) interface{} {
+			addHeader(meta, countCons, countProd, func(m *model.CounterPointMeta) interface{} {
 				return fmt.Sprintf("01.%.2d.%.4d 00:00:00", month, year)
 			})...))
 
 	sw.SetRow("A6",
 		append([]interface{}{excelize.Cell{Value: "Period end"}},
-			addHeader(meta, func(m *model.CounterPointMeta) interface{} {
+			addHeader(meta, countCons, countProd, func(m *model.CounterPointMeta) interface{} {
 				return fmt.Sprintf("01.%.2d.%.4d 00:00:00", month+1, year)
 			})...))
 
 	sw.SetRow("A7",
 		append([]interface{}{excelize.Cell{Value: "Metercode"}},
-			addHeaderMeterCode(meta, func(m MeterCodeType) interface{} {
+			addHeaderMeterCode(meta, countCons, countProd, func(m MeterCodeType) interface{} {
 				switch m {
 				case Total:
 					return "Gesamtverbrauch lt. Messung (bei Teilnahme gem. Erzeugung) [KWH]"
@@ -80,6 +118,10 @@ func ExportExcel(tenant string, year, month int) error {
 					return "Anteil gemeinschaftliche Erzeugung [KWH]"
 				case Coverage:
 					return "Eigendeckung gemeinschaftliche Erzeugung [KWH]"
+				case TotalProd:
+					return "Gesamte gemeinschaftliche Erzeugung [KWH]"
+				case Profit:
+					return "Gesamt/Überschusserzeugung, Gemeinschaftsüberschuss [KWH]"
 				default:
 					return "No Data"
 				}
@@ -90,13 +132,13 @@ func ExportExcel(tenant string, year, month int) error {
 		lineNum = lineNum + 1
 		lineDate, err := utils.ConvertRowIdToTimeString("CP-G.01", _lineG1.Id)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		//line[lineDate] = addLine(&_lineG1, &_lineG2, &_lineG3, meta)
 
 		sw.SetRow(fmt.Sprintf("A%d", lineNum+10),
-			append([]interface{}{excelize.Cell{Value: lineDate}}, addLine(&_lineG1, &_lineG2, &_lineG3, meta)...))
+			append([]interface{}{excelize.Cell{Value: lineDate}}, addLine(&_lineG1, &_lineG2, &_lineG3, countCons, countProd, meta)...))
 
 		g1Ok = iterG1.Next(&_lineG1)
 		g2Ok = iterG2.Next(&_lineG2)
@@ -104,26 +146,38 @@ func ExportExcel(tenant string, year, month int) error {
 	}
 
 	sw.Flush()
-	return f.SaveAs("TestOutput.xlsx")
+	return f.WriteToBuffer()
 }
 
-func addLine(g1, g2, g3 *model.RawSourceLine, meta *model.RawSourceMeta) []interface{} {
+func addLine(g1, g2, g3 *model.RawSourceLine, countCon, countProd int, meta *model.RawSourceMeta) []interface{} {
 
 	lineData := make([]interface{}, len(meta.CounterPoints)*3)
 	//line := map[string][]float64{}
 
+	setCellValue := func(length, sourceIdx int, raw []float64) excelize.Cell {
+		if length > sourceIdx {
+			return excelize.Cell{Value: raw[sourceIdx]}
+		} else {
+			return excelize.Cell{Value: 0}
+		}
+	}
+
 	for _, m := range meta.CounterPoints {
 		if m.Dir == model.CONSUMER_DIRECTION {
 			baseIdx := m.SourceIdx * 3
-			lineData[baseIdx] = excelize.Cell{Value: g1.Consumers[m.SourceIdx]}
-			lineData[baseIdx+1] = excelize.Cell{Value: g2.Consumers[m.SourceIdx]}
-			lineData[baseIdx+2] = excelize.Cell{Value: g3.Consumers[m.SourceIdx]}
+			lineData[baseIdx] = setCellValue(len(g1.Consumers), m.SourceIdx, g1.Consumers) //excelize.Cell{Value: g1.Consumers[m.SourceIdx]}
+			lineData[baseIdx+1] = setCellValue(len(g2.Consumers), m.SourceIdx, g2.Consumers)
+			lineData[baseIdx+2] = setCellValue(len(g3.Consumers), m.SourceIdx, g3.Consumers)
+		} else if m.Dir == model.PRODUCER_DIRECTION {
+			baseIdx := (countCon * 3) + (m.SourceIdx * 2)
+			lineData[baseIdx] = setCellValue(len(g1.Producers), m.SourceIdx, g1.Producers) //excelize.Cell{Value: g1.Producers[m.SourceIdx]}
+			lineData[baseIdx+1] = setCellValue(len(g2.Producers), m.SourceIdx, g2.Producers)
 		}
 	}
 	return lineData
 }
 
-func addHeader(meta *model.RawSourceMeta, value func(meta *model.CounterPointMeta) interface{}) []interface{} {
+func addHeader(meta *model.RawSourceMeta, countCon, countProd int, value func(meta *model.CounterPointMeta) interface{}) []interface{} {
 	lineData := make([]interface{}, len(meta.CounterPoints)*3)
 	for _, m := range meta.CounterPoints {
 		if m.Dir == model.CONSUMER_DIRECTION {
@@ -131,12 +185,16 @@ func addHeader(meta *model.RawSourceMeta, value func(meta *model.CounterPointMet
 			lineData[baseIdx] = excelize.Cell{Value: value(m)}
 			lineData[baseIdx+1] = excelize.Cell{Value: value(m)}
 			lineData[baseIdx+2] = excelize.Cell{Value: value(m)}
+		} else if m.Dir == model.PRODUCER_DIRECTION {
+			baseIdx := (countCon * 3) + (m.SourceIdx * 2)
+			lineData[baseIdx] = excelize.Cell{Value: value(m)}
+			lineData[baseIdx+1] = excelize.Cell{Value: value(m)}
 		}
 	}
 	return lineData
 }
 
-func addHeaderMeterCode(meta *model.RawSourceMeta, value func(code MeterCodeType) interface{}) []interface{} {
+func addHeaderMeterCode(meta *model.RawSourceMeta, countCon, countProd int, value func(code MeterCodeType) interface{}) []interface{} {
 	lineData := make([]interface{}, len(meta.CounterPoints)*3)
 	for _, m := range meta.CounterPoints {
 		if m.Dir == model.CONSUMER_DIRECTION {
@@ -144,6 +202,10 @@ func addHeaderMeterCode(meta *model.RawSourceMeta, value func(code MeterCodeType
 			lineData[baseIdx] = excelize.Cell{Value: value(Total)}
 			lineData[baseIdx+1] = excelize.Cell{Value: value(Share)}
 			lineData[baseIdx+2] = excelize.Cell{Value: value(Coverage)}
+		} else if m.Dir == model.PRODUCER_DIRECTION {
+			baseIdx := (countCon * 3) + (m.SourceIdx * 2)
+			lineData[baseIdx] = excelize.Cell{Value: value(Total)}
+			lineData[baseIdx+1] = excelize.Cell{Value: value(Profit)}
 		}
 	}
 	return lineData

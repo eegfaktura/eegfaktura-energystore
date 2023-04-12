@@ -12,6 +12,7 @@ import (
 type PlatformClaims struct {
 	Tenants  []string `json:"tenant"`
 	Username string   `json:"preferred_username"`
+	Email    string   `json:"email"`
 	jwt.StandardClaims
 }
 

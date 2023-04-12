@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "at.energydash.admin.excel";
+option java_outer_classname = "ExcelAdminProto";
+option go_package = "at.ourproject/energystore/protobuf";
+
+package at.energydash;
+// The greeting service definition.
+service ExcelAdminService {
+  // Sends a greeting
+  rpc SendExcel (SendExcelRequest) returns (SendExcelReply) {}
+}
+
+// The request message containing the user's name.
+message SendExcelRequest {
+  string tenant = 1;
+  string recipient = 2;
+  string filename = 3;
+  bytes content = 4;
+}
+
+// The response message containing the greetings
+message SendExcelReply {
+  string status = 1;
+}

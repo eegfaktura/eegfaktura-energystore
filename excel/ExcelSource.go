@@ -45,6 +45,7 @@ const (
 	Share
 	Coverage
 	Profit
+	TotalProd
 	Bad
 )
 

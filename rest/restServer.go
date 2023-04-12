@@ -2,6 +2,7 @@ package rest
 
 import (
 	"at.ourproject/energystore/calculation"
+	"at.ourproject/energystore/excel"
 	"at.ourproject/energystore/middleware"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/services"
@@ -18,6 +19,7 @@ func NewRestServer() *mux.Router {
 	//s := r.PathPrefix("/rest").Subrouter()
 	r.HandleFunc("/eeg/{year}/{month}", jwtWrapper(fetchEnergy())).Methods("GET")
 	r.HandleFunc("/eeg/lastRecordDate", jwtWrapper(lastRecordDate())).Methods("GET")
+	r.HandleFunc("/eeg/excel/export/{year}/{month}", jwtWrapper(exportMeteringData())).Methods("POST")
 	r.HandleFunc("/eeg/hello", getHello).Methods("GET")
 	return r
 }
@@ -59,5 +61,33 @@ func lastRecordDate() middleware.JWTHandlerFunc {
 			respondWithError(w, http.StatusNotFound, "No entry found")
 		}
 		respondWithJSON(w, http.StatusOK, map[string]interface{}{"periodEnd": lastRecord})
+	}
+}
+
+func exportMeteringData() middleware.JWTHandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request, claims *middleware.PlatformClaims, tenant string) {
+		email := claims.Email
+		vars := mux.Vars(r)
+		var year, month int
+		var err error
+		year, err = strconv.Atoi(vars["year"])
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, "Year not defined")
+			return
+		}
+		month, err = strconv.Atoi(vars["month"])
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, "Month not defined")
+			return
+		}
+
+		fmt.Printf("Send Mail to %s\n", email)
+
+		err = excel.ExportEnergyDataToMail(tenant, email, year, month)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		w.WriteHeader(http.StatusOK)
 	}
 }
