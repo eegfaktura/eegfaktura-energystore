@@ -48,6 +48,7 @@ func (mw *MqttEnergyImporter) Execute(msg mqtt.Message) {
 }
 
 func (mw *MqttEnergyImporter) process() {
+	glog.Info("Start MQTT Queue")
 	for {
 		select {
 		case msg := <-mw.msgChan:

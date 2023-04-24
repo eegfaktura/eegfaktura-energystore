@@ -14,7 +14,7 @@ type TopicType string
 func (t TopicType) Tenant() string {
 	elems := strings.Split(string(t), "/")
 	if len(elems) > 3 {
-		return elems[3]
+		return strings.ToUpper(elems[3])
 	}
 	return ""
 }

@@ -30,7 +30,7 @@ func CalculateEEG(db *store.BowStorage, period string) (*model.Matrix, *model.Ma
 	for iter.Next(&_line) {
 		//line := transformConsumer(&_line)
 		line := _line.Copy(defaultConsumerLen)
-		m := AllocDynamic1(&line)
+		m := AllocDynamic2(&line)
 
 		if rCons == nil {
 			rCons = model.MakeMatrix(line.Consumers, len(line.Consumers), 1)

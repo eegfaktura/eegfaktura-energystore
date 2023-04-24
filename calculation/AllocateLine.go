@@ -74,3 +74,29 @@ func AllocDynamic1(line *model.RawSourceLine) *model.Matrix {
 	}
 	return model.Multiply(lineResult, model.NewUniformMatrix(lineResult.Cols, 1))
 }
+
+func AllocDynamic2(line *model.RawSourceLine) *model.Matrix {
+
+	lenConsumers := int(math.Max(float64(len(line.Consumers)), 1))
+	//lenProducers := int(math.Max(float64(len(line.Producers)), 1))
+
+	resultArray := make([]float64, lenConsumers)
+	lineResult := model.MakeMatrix(resultArray, lenConsumers, 1)
+
+	consumerSum := utils.Sum(line.Consumers)
+	producerSum := utils.Sum(line.Producers)
+
+	var alloc_prod_to_cons_factor = float64(0)
+	if producerSum > float64(0) && consumerSum > float64(0) {
+		alloc_prod_to_cons_factor = producerSum / consumerSum
+	}
+
+	for i, l := range line.Consumers {
+		greenValue := float64(0)
+		if alloc_prod_to_cons_factor > float64(0) {
+			greenValue = l * alloc_prod_to_cons_factor
+		}
+		lineResult.SetElm(i, 0, math.Min(greenValue, l))
+	}
+	return lineResult
+}
