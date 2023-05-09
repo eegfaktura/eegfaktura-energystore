@@ -73,5 +73,7 @@ type EnergyReport struct {
 	Allocated     []float64 `bow:"values" json:"allocated"`
 	Consumed      []float64 `bow:"consumed" json:"consumed"`
 	Produced      []float64 `bow:"produced" json:"produced"`
+	Distributed   []float64 `bow:"distributed" json:"distributed"`
+	Shared        []float64 `bow:"shared" json:"shared"`
 	TotalProduced float64   `bow:"totalProduced" json:"total_produced"`
 }

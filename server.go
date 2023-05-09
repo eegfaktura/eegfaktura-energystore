@@ -4,7 +4,6 @@ import (
 	"at.ourproject/energystore/calculation"
 	"at.ourproject/energystore/graph"
 	"at.ourproject/energystore/graph/generated"
-	"at.ourproject/energystore/middleware"
 	"at.ourproject/energystore/mqttclient"
 	"at.ourproject/energystore/rest"
 	"context"
@@ -37,7 +36,7 @@ func main() {
 	SetupMqttDispatcher(ctx)
 
 	r := rest.NewRestServer()
-	r.Use(middleware.GQLMiddleware(viper.GetString("jwt.pubKeyFile")))
+	//r.Use(middleware.GQLMiddleware(viper.GetString("jwt.pubKeyFile")))
 	srv := handler.NewDefaultServer(generated.NewExecutableSchema(generated.Config{Resolvers: &graph.Resolver{}}))
 	//r.Handle("/", playground.Handler("GraphQL playground", "/query"))
 	r.Handle("/query", srv)
@@ -46,9 +45,21 @@ func main() {
 	allowedHeaders := handlers.AllowedHeaders(
 		[]string{"X-Requested-With",
 			"Accept",
+			"Accept-Encoding",
+			"Accept-Language",
+			"Host",
 			"authorization",
-			"content-type",
+			"Content-Type",
 			"Content-Length",
+			"X-Content-Type-Options",
+			"Origin",
+			"Connection",
+			"Referer",
+			"User-Agent",
+			"Sec-Fetch-Dest",
+			"Sec-Fetch-Mode",
+			"Sec-Fetch-Site",
+			"Cache-Control",
 			"tenant"})
 	allowedMethods := handlers.AllowedMethods([]string{"GET", "HEAD", "POST", "PUT", "OPTIONS", "DELETE"})
 	allowedCredentials := handlers.AllowCredentials()

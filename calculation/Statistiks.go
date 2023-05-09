@@ -15,7 +15,7 @@ func GetCalcFunc(id string) CalcHandler {
 	return nil
 }
 
-func CalcWhenProduced(db *store.BowStorage, period string) (*model.Matrix, *model.Matrix, *model.Matrix, float64) {
+func CalcWhenProduced(db *store.BowStorage, period string) (*model.Matrix, *model.Matrix, *model.Matrix, *model.Matrix, *model.Matrix, float64) {
 	iter := db.GetLinePrefix(fmt.Sprintf("CP/%s", period))
 	defer iter.Close()
 
@@ -24,6 +24,8 @@ func CalcWhenProduced(db *store.BowStorage, period string) (*model.Matrix, *mode
 	var rAlloc *model.Matrix
 	var rCons *model.Matrix
 	var rProd *model.Matrix
+	var rDist *model.Matrix
+	var rShar *model.Matrix
 	var pSum float64 = 0.0
 
 	for iter.Next(&_line) {
@@ -33,7 +35,7 @@ func CalcWhenProduced(db *store.BowStorage, period string) (*model.Matrix, *mode
 			continue
 		}
 		line := _line.Copy(len(_line.Consumers))
-		m := AllocDynamic1(&line)
+		m, s, p := AllocDynamic2(&line)
 
 		if rCons == nil {
 			rCons = model.MakeMatrix(line.Consumers, len(line.Consumers), 1)
@@ -52,7 +54,20 @@ func CalcWhenProduced(db *store.BowStorage, period string) (*model.Matrix, *mode
 		} else {
 			rAlloc.Add(m)
 		}
+
+		if rDist == nil {
+			rDist = model.MakeMatrix(p.Elements, p.CountRows(), p.CountCols())
+		} else {
+			rDist.Add(p)
+		}
+
+		if rShar == nil {
+			rShar = model.MakeMatrix(s.Elements, s.CountRows(), s.CountCols())
+		} else {
+			rShar.Add(s)
+		}
+
 		pSum += utils.Sum(line.Producers)
 	}
-	return rAlloc, rCons, rProd, pSum
+	return rAlloc, rCons, rProd, rDist, rShar, pSum
 }

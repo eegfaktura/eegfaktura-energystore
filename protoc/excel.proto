@@ -3,7 +3,7 @@ syntax = "proto3";
 option java_multiple_files = true;
 option java_package = "at.energydash.admin.excel";
 option java_outer_classname = "ExcelAdminProto";
-option go_package = "at.ourproject/energystore/protobuf";
+option go_package = "at.ourproject/vfeeg-backend/protobuf";
 
 package at.energydash;
 // The greeting service definition.
@@ -16,8 +16,10 @@ service ExcelAdminService {
 message SendExcelRequest {
   string tenant = 1;
   string recipient = 2;
-  string filename = 3;
-  bytes content = 4;
+  string subject = 3;
+  optional string filename = 4;
+  optional bytes content = 5;
+  optional bytes body = 6;
 }
 
 // The response message containing the greetings

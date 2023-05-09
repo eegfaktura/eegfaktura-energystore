@@ -9,12 +9,23 @@ import (
 	"time"
 )
 
-type CalcHandler func(*store.BowStorage, string) (*model.Matrix, *model.Matrix, *model.Matrix, float64)
+/*
+Calculate allocation for.
+Return:
 
-func CalculateEEG(db *store.BowStorage, period string) (*model.Matrix, *model.Matrix, *model.Matrix, float64) {
+	Allocation, Consumption, Produced, Distributed, Share
+
+	Allocation: Energy value allocated for consumer
+	Consumption: Energy value consumed by consumer
+	Produced: Energy value Produced by generator
+	Share: produced value divided to consumers.
+*/
+type CalcHandler func(*store.BowStorage, string) (*model.Matrix, *model.Matrix, *model.Matrix, *model.Matrix, *model.Matrix, float64)
+
+func CalculateEEG(db *store.BowStorage, period string) (*model.Matrix, *model.Matrix, *model.Matrix, *model.Matrix, *model.Matrix, float64) {
 	metaMap, err := store.GetConsumerMetaMap(db)
 	if err != nil {
-		return nil, nil, nil, 0
+		return nil, nil, nil, nil, nil, 0
 	}
 	iter := db.GetLinePrefix(fmt.Sprintf("CP-G.01/%s", period))
 	defer iter.Close()
@@ -24,13 +35,15 @@ func CalculateEEG(db *store.BowStorage, period string) (*model.Matrix, *model.Ma
 	var rAlloc *model.Matrix
 	var rCons *model.Matrix
 	var rProd *model.Matrix
+	var rDist *model.Matrix
+	var rShar *model.Matrix
 	var pSum float64 = 0.0
 	defaultConsumerLen := len(metaMap)
 
 	for iter.Next(&_line) {
 		//line := transformConsumer(&_line)
 		line := _line.Copy(defaultConsumerLen)
-		m := AllocDynamic2(&line)
+		m, s, p := AllocDynamic2(&line)
 
 		if rCons == nil {
 			rCons = model.MakeMatrix(line.Consumers, len(line.Consumers), 1)
@@ -50,9 +63,20 @@ func CalculateEEG(db *store.BowStorage, period string) (*model.Matrix, *model.Ma
 			rAlloc.Add(m)
 		}
 
+		if rDist == nil {
+			rDist = model.MakeMatrix(p.Elements, p.CountRows(), p.CountCols())
+		} else {
+			rDist.Add(p)
+		}
+
+		if rShar == nil {
+			rShar = model.MakeMatrix(s.Elements, s.CountRows(), s.CountCols())
+		} else {
+			rShar.Add(p)
+		}
 		pSum += utils.Sum(line.Producers)
 	}
-	return rAlloc, rCons, rProd, pSum
+	return rAlloc, rCons, rProd, rDist, rShar, pSum
 }
 
 func CalculateMonthlyDash(db *store.BowStorage, year string, calc CalcHandler) error {
@@ -62,7 +86,7 @@ func CalculateMonthlyDash(db *store.BowStorage, year string, calc CalcHandler) e
 	if err != nil {
 		return nil
 	}
-	var annual_am, annual_cm, annual_pm *model.Matrix = &model.Matrix{}, &model.Matrix{}, &model.Matrix{}
+	var annual_am, annual_cm, annual_pm, annual_dm, annual_sm *model.Matrix = &model.Matrix{}, &model.Matrix{}, &model.Matrix{}, &model.Matrix{}, &model.Matrix{}
 	var annual_ps float64 = 0.0
 
 	defaultMatrix := model.NewMatrix(len(metaMap), 1)
@@ -74,10 +98,12 @@ func CalculateMonthlyDash(db *store.BowStorage, year string, calc CalcHandler) e
 		}
 	}
 	for _, m := range mounth {
-		am, cm, pm, ps := calc(db, fmt.Sprintf("%s/%.2d/", year, m))
+		am, cm, pm, dm, sm, ps := calc(db, fmt.Sprintf("%s/%.2d/", year, m))
 		am = verifyResult(am)
 		cm = verifyResult(cm)
 		pm = verifyResult(pm)
+		dm = verifyResult(dm)
+		sm = verifyResult(sm)
 
 		if err := db.SetReport(
 			&model.EnergyReport{
@@ -85,6 +111,8 @@ func CalculateMonthlyDash(db *store.BowStorage, year string, calc CalcHandler) e
 				Consumed:      cm.Elements,
 				Allocated:     am.Elements,
 				Produced:      pm.Elements,
+				Distributed:   dm.Elements,
+				Shared:        sm.Elements,
 				TotalProduced: ps}); err != nil {
 			return err
 		}
@@ -92,6 +120,8 @@ func CalculateMonthlyDash(db *store.BowStorage, year string, calc CalcHandler) e
 		_ = annual_am.Add(am)
 		_ = annual_cm.Add(cm)
 		_ = annual_pm.Add(pm)
+		_ = annual_dm.Add(dm)
+		_ = annual_sm.Add(sm)
 
 		annual_ps += ps
 		fmt.Printf("AllocMonth (%d) %f - %+v\n", m, ps, am)
@@ -105,6 +135,8 @@ func CalculateMonthlyDash(db *store.BowStorage, year string, calc CalcHandler) e
 			Consumed:      annual_cm.Elements,
 			Allocated:     annual_am.Elements,
 			Produced:      annual_pm.Elements,
+			Distributed:   annual_dm.Elements,
+			Shared:        annual_sm.Elements,
 			TotalProduced: annual_ps}); err != nil {
 		return err
 	}
@@ -113,7 +145,7 @@ func CalculateMonthlyDash(db *store.BowStorage, year string, calc CalcHandler) e
 }
 
 func CalculateWeeklyReport(db *store.BowStorage, year, month int, calc CalcHandler) ([]*model.EnergyReport, *model.EnergyReport, error) {
-	var report_am, report_cm, report_pm *model.Matrix = &model.Matrix{}, &model.Matrix{}, &model.Matrix{}
+	var report_am, report_cm, report_pm, report_dm, report_sm *model.Matrix = &model.Matrix{}, &model.Matrix{}, &model.Matrix{}, &model.Matrix{}, &model.Matrix{}
 	var report_ps float64 = 0.0
 
 	metaMap, err := store.GetConsumerMetaMap(db)
@@ -132,7 +164,7 @@ func CalculateWeeklyReport(db *store.BowStorage, year, month int, calc CalcHandl
 
 	t := time.Date(year, time.Month(month)+1, 0, 0, 0, 0, 0, time.UTC)
 	for day := 1; day <= t.Day(); day++ {
-		am, cm, pm, ps := calc(db, fmt.Sprintf("%d/%.2d/%.2d", year, month, day))
+		am, cm, pm, dm, sm, ps := calc(db, fmt.Sprintf("%d/%.2d/%.2d", year, month, day))
 		//if am == nil || cm == nil {
 		//	continue
 		//}
@@ -140,18 +172,24 @@ func CalculateWeeklyReport(db *store.BowStorage, year, month int, calc CalcHandl
 		am = verifyResult(am)
 		cm = verifyResult(cm)
 		pm = verifyResult(pm)
+		dm = verifyResult(dm)
+		sm = verifyResult(sm)
 
 		dayReports = append(dayReports, &model.EnergyReport{
 			Id:            fmt.Sprintf("WRP/%d/%.2d/%.2d", year, month, day),
 			Consumed:      cm.Elements,
 			Allocated:     am.Elements,
 			Produced:      pm.Elements,
+			Distributed:   dm.Elements,
+			Shared:        sm.Elements,
 			TotalProduced: ps,
 		})
 
 		_ = report_am.Add(am)
 		_ = report_cm.Add(cm)
 		_ = report_pm.Add(pm)
+		_ = report_dm.Add(dm)
+		_ = report_sm.Add(sm)
 
 		report_ps += ps
 	}
@@ -161,6 +199,8 @@ func CalculateWeeklyReport(db *store.BowStorage, year, month int, calc CalcHandl
 		Consumed:      report_cm.Elements,
 		Allocated:     report_am.Elements,
 		Produced:      report_pm.Elements,
+		Distributed:   report_dm.Elements,
+		Shared:        report_sm.Elements,
 		TotalProduced: report_ps}, nil
 }
 
@@ -177,6 +217,7 @@ func CalculateYearlyReport(db *store.BowStorage, year int, calc CalcHandler) ([]
 			Consumed:      line.Consumed,
 			Allocated:     line.Allocated,
 			Produced:      line.Produced,
+			Distributed:   line.Distributed,
 			TotalProduced: line.TotalProduced,
 		})
 		line = model.EnergyReport{}
@@ -202,7 +243,7 @@ func transformConsumer(line *model.RawSourceLine) *model.RawSourceLine {
 
 func CalculatePeriodReport(db *store.BowStorage, from, to time.Time, calc CalcHandler) (*model.EnergyReport, map[string]*model.CounterPointMeta, error) {
 
-	var report_am, report_cm, report_pm *model.Matrix = &model.Matrix{}, &model.Matrix{}, &model.Matrix{}
+	var report_am, report_cm, report_pm, report_dm, report_sm *model.Matrix = &model.Matrix{}, &model.Matrix{}, &model.Matrix{}, &model.Matrix{}, &model.Matrix{}
 	var report_ps float64 = 0
 
 	year, months := utils.GetMonthDuration(from, to)
@@ -225,7 +266,7 @@ func CalculatePeriodReport(db *store.BowStorage, from, to time.Time, calc CalcHa
 			periodTo = totalMonth
 		}
 
-		cm, am, pm, prodSum, meta, err := CalculatePeriodWithinYearReport(db, year, periodFrom, periodTo, calc)
+		cm, am, pm, dm, sm, prodSum, meta, err := CalculatePeriodWithinYearReport(db, year, periodFrom, periodTo, calc)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -237,6 +278,8 @@ func CalculatePeriodReport(db *store.BowStorage, from, to time.Time, calc CalcHa
 			am = verifyResult(am, defaultMatrix)
 			cm = verifyResult(cm, defaultMatrix)
 			pm = verifyResult(pm, defaultMatrix)
+			dm = verifyResult(dm, defaultMatrix)
+			sm = verifyResult(sm, defaultMatrix)
 
 			if am.Rows > 0 && am.Cols == defaultMatrix.Cols {
 				_ = report_am.Add(am)
@@ -246,6 +289,12 @@ func CalculatePeriodReport(db *store.BowStorage, from, to time.Time, calc CalcHa
 			}
 			if pm.Rows > 0 && pm.Cols == defaultMatrix.Cols {
 				_ = report_pm.Add(pm)
+			}
+			if dm.Rows > 0 && dm.Cols == defaultMatrix.Cols {
+				_ = report_dm.Add(dm)
+			}
+			if sm.Rows > 0 && sm.Cols == defaultMatrix.Cols {
+				_ = report_sm.Add(sm)
 			}
 
 			report_ps += prodSum
@@ -265,16 +314,17 @@ func CalculatePeriodReport(db *store.BowStorage, from, to time.Time, calc CalcHa
 		Id:            fmt.Sprintf("PRP/%d/%.2d", year, int(from.Month())),
 		Consumed:      report_cm.Elements,
 		Allocated:     report_am.Elements,
+		Distributed:   report_dm.Elements,
 		TotalProduced: report_ps}, metaMap, nil
 }
 
-func CalculatePeriodWithinYearReport(db *store.BowStorage, year, from, to int, calc CalcHandler) (*model.Matrix, *model.Matrix, *model.Matrix, float64, map[string]*model.CounterPointMeta, error) {
-	var report_am, report_cm, report_pm *model.Matrix = &model.Matrix{}, &model.Matrix{}, &model.Matrix{}
+func CalculatePeriodWithinYearReport(db *store.BowStorage, year, from, to int, calc CalcHandler) (*model.Matrix, *model.Matrix, *model.Matrix, *model.Matrix, *model.Matrix, float64, map[string]*model.CounterPointMeta, error) {
+	var report_am, report_cm, report_pm, report_dm, report_sm *model.Matrix = &model.Matrix{}, &model.Matrix{}, &model.Matrix{}, &model.Matrix{}, &model.Matrix{}
 	var report_ps float64 = 0.0
 
 	metaMap, err := store.GetConsumerMetaMap(db)
 	if err != nil {
-		return nil, nil, nil, 0, nil, err
+		return nil, nil, nil, nil, nil, 0, nil, err
 	}
 	defaultMatrix := model.NewMatrix(len(metaMap), 1)
 	verifyResult := func(matrix *model.Matrix) *model.Matrix {
@@ -286,18 +336,22 @@ func CalculatePeriodWithinYearReport(db *store.BowStorage, year, from, to int, c
 	}
 
 	for m := from; m <= to; m++ {
-		am, cm, pm, ps := calc(db, fmt.Sprintf("%d/%.2d/", year, m))
+		am, cm, pm, dm, sm, ps := calc(db, fmt.Sprintf("%d/%.2d/", year, m))
 
 		am = verifyResult(am)
 		cm = verifyResult(cm)
-		cm = verifyResult(pm)
+		pm = verifyResult(pm)
+		dm = verifyResult(dm)
+		sm = verifyResult(sm)
 
 		_ = report_am.Add(am)
 		_ = report_cm.Add(cm)
-		_ = report_cm.Add(pm)
+		_ = report_pm.Add(pm)
+		_ = report_dm.Add(dm)
+		_ = report_sm.Add(sm)
 
 		report_ps += ps
 	}
 
-	return report_cm, report_am, report_pm, report_ps, metaMap, nil
+	return report_cm, report_am, report_pm, report_dm, report_sm, report_ps, metaMap, nil
 }

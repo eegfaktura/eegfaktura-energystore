@@ -83,7 +83,7 @@ func exportMeteringData() middleware.JWTHandlerFunc {
 
 		fmt.Printf("Send Mail to %s\n", email)
 
-		err = excel.ExportEnergyDataToMail(tenant, email, year, month)
+		err = excel.ExportEnergyDataToMail(tenant, email, year, month, nil)
 		if err != nil {
 			respondWithError(w, http.StatusBadRequest, err.Error())
 			return
