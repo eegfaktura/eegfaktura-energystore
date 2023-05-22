@@ -6,11 +6,13 @@ import (
 	"at.ourproject/energystore/middleware"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/services"
+	"encoding/json"
 	"fmt"
 	"github.com/gorilla/mux"
 	"github.com/spf13/viper"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 func NewRestServer() *mux.Router {
@@ -20,6 +22,7 @@ func NewRestServer() *mux.Router {
 	r.HandleFunc("/eeg/{year}/{month}", jwtWrapper(fetchEnergy())).Methods("GET")
 	r.HandleFunc("/eeg/lastRecordDate", jwtWrapper(lastRecordDate())).Methods("GET")
 	r.HandleFunc("/eeg/excel/export/{year}/{month}", jwtWrapper(exportMeteringData())).Methods("POST")
+	r.HandleFunc("/eeg/excel/report/download", jwtWrapper(exportReport())).Methods("POST")
 	r.HandleFunc("/eeg/hello", getHello).Methods("GET")
 	return r
 }
@@ -89,5 +92,29 @@ func exportMeteringData() middleware.JWTHandlerFunc {
 			return
 		}
 		w.WriteHeader(http.StatusOK)
+	}
+}
+
+func exportReport() middleware.JWTHandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request, claims *middleware.PlatformClaims, tenant string) {
+
+		var cps excel.ExportCPs
+		err := json.NewDecoder(r.Body).Decode(&cps)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		b, err := excel.CreateExcelFile(tenant, time.UnixMilli(cps.Start), time.UnixMilli(cps.End), &cps)
+		w.Header().Set("Content-type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+		w.Header().Set("Content-Disposition", `attachment; filename="myfile.xlsx"`)
+		w.Header().Set("filename", fmt.Sprintf("%s-Energy-Report-%s_%s",
+			tenant,
+			time.UnixMilli(cps.Start).Format("20060102"),
+			time.UnixMilli(cps.End).Format("20060102")))
+
+		if _, err := b.WriteTo(w); err != nil {
+			fmt.Fprintf(w, "%s", err)
+		}
 	}
 }

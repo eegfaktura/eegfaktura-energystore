@@ -13,6 +13,8 @@ import (
 )
 
 type ExportCPs struct {
+	Start       int64            `json:"start"`
+	End         int64            `json:"end"`
 	CommunityId string           `json:"communityId"`
 	Cps         []InvestigatorCP `json:"cps"`
 }
@@ -51,6 +53,13 @@ func ExportEnergyDataToMail(tenant, to string, year, month int, cps *ExportCPs) 
 }
 
 func ExportExcel(tenant string, year, month int, cps *ExportCPs) (*bytes.Buffer, error) {
+	start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(year, time.Month(month)+1, 0, 0, 0, 0, 0, time.UTC)
+
+	return CreateExcelFile(tenant, start, end, cps)
+}
+
+func CreateExcelFile(tenant string, start, end time.Time, cps *ExportCPs) (*bytes.Buffer, error) {
 
 	db, err := store.OpenStorage(tenant)
 	if err != nil {
@@ -65,60 +74,21 @@ func ExportExcel(tenant string, year, month int, cps *ExportCPs) (*bytes.Buffer,
 		}
 	}()
 
-	if err = generateSummeryDataSheet(db, f, year, month, cps); err != nil {
+	if err = generateSummeryDataSheet(db, f, start, end, cps); err != nil {
 		return nil, err
 	}
-	if err := generateEnergyDataSheet(db, f, year, month); err != nil {
-		return nil, err
-	}
-
-	err = f.SetColWidth("Sheet1", "A", "B", float64(25.0))
-	if err != nil {
+	if err := generateEnergyDataSheet(db, f, start, end, cps.Cps); err != nil {
 		return nil, err
 	}
 
-	err = f.SetRowHeight("Sheet1", 1, float64(25.0))
-	if err != nil {
-		return nil, err
-	}
-
-	generateTEstDataSheet(f, year, month, cps)
-	f.SetCellValue("Test", "A1", "Test")
+	_ = f.DeleteSheet("Sheet1")
 	return f.WriteToBuffer()
 }
 
-func generateTEstDataSheet(f *excelize.File, year, month int, cps *ExportCPs) error {
-	f.NewSheet("Test")
-	//err := f.SetColWidth("Test", "A", "B", float64(25.0))
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//f.SetCellValue("Test", "A1", "Test")
-
-	sw, err := f.NewStreamWriter("Test")
-	if err != nil {
-		return err
-	}
-
-	beginDate := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
-	endDate := beginDate.AddDate(0, 1, 0).Add(-1 * time.Minute)
-
-	sw.SetColWidth(1, 1, float64(30))
-	err = sw.SetRow("A2",
-		[]interface{}{excelize.Cell{Value: "Gemeinschafts-ID"}, excelize.Cell{Value: cps.CommunityId}})
-	err = sw.SetRow("A3",
-		[]interface{}{excelize.Cell{Value: "Zeitraum von"}, excelize.Cell{Value: utils.DateToString(beginDate)}})
-	err = sw.SetRow("A4",
-		[]interface{}{excelize.Cell{Value: "Zeitraum bis"}, excelize.Cell{Value: utils.DateToString(endDate)}})
-
-	return sw.Flush()
-}
-
-func generateSummeryDataSheet(db *store.BowStorage, f *excelize.File, year, month int, cps *ExportCPs) error {
+func generateSummeryDataSheet(db *store.BowStorage, f *excelize.File, start, end time.Time, cps *ExportCPs) error {
 
 	sheet := "Summery"
-	counterpoints, err := summaryCounterPoints(db, year, month, cps)
+	counterpoints, err := summaryCounterPoints(db, start, end, cps)
 	if err != nil {
 		return err
 	}
@@ -146,8 +116,8 @@ func generateSummeryDataSheet(db *store.BowStorage, f *excelize.File, year, mont
 		return err
 	}
 
-	beginDate := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
-	endDate := beginDate.AddDate(0, 1, 0).Add(-1 * time.Minute)
+	beginDate := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, time.UTC)
+	endDate := time.Date(end.Year(), end.Month(), end.Day(), 0, 0, 0, 0, time.UTC)
 
 	sw.SetColWidth(1, 1, float64(40))
 	sw.SetColWidth(2, 2, float64(35))
@@ -164,17 +134,24 @@ func generateSummeryDataSheet(db *store.BowStorage, f *excelize.File, year, mont
 		[]interface{}{excelize.Cell{Value: "Zeitraum bis", StyleID: styleIdBold}, excelize.Cell{Value: utils.DateToString(endDate)}}, rowOpts)
 	err = sw.SetRow("A5",
 		[]interface{}{excelize.Cell{Value: "Gesamtverbrauch lt. Messung (bei Teilnahme gem. Erzeugung) [KWH]", StyleID: styleIdBold},
-			excelize.Cell{Value: "ATxxxeeffaadfafertterwesfafsaf"}}, excelize.RowOpts{StyleID: styleIdRowSummery, Height: 0.34 * 72})
+			excelize.Cell{Value: sumMeterResult(counterpoints.Consumer, func(e *SummeryMeterResult) float64 { return e.Total })}},
+		excelize.RowOpts{StyleID: styleIdRowSummery, Height: 0.34 * 72})
 	err = sw.SetRow("A6",
-		[]interface{}{excelize.Cell{Value: "Anteil gemeinschaftliche Erzeugung [KWH]", StyleID: styleIdBold}, excelize.Cell{Value: "ATxxxeeffaadfafertterwesfafsaf"}}, rowOpts)
+		[]interface{}{excelize.Cell{Value: "Anteil gemeinschaftliche Erzeugung [KWH]", StyleID: styleIdBold},
+			excelize.Cell{Value: sumMeterResult(counterpoints.Consumer, func(e *SummeryMeterResult) float64 { return e.Coverage })}},
+		rowOpts)
 	err = sw.SetRow("A7",
 		[]interface{}{excelize.Cell{Value: "Eigendeckung gemeinschaftliche Erzeugung [KWH]", StyleID: styleIdBold},
-			excelize.Cell{Value: "ATxxxeeffaadfafertterwesfafsaf"}}, excelize.RowOpts{StyleID: styleIdRowSummery, Height: 0.34 * 72})
+			excelize.Cell{Value: sumMeterResult(counterpoints.Consumer, func(e *SummeryMeterResult) float64 { return e.Share })}},
+		excelize.RowOpts{StyleID: styleIdRowSummery, Height: 0.34 * 72})
 	err = sw.SetRow("A8",
 		[]interface{}{excelize.Cell{Value: "Gesamt/Überschusserzeugung, Gemeinschaftsüberschuss [KWH]", StyleID: styleIdBold},
-			excelize.Cell{Value: "ATxxxeeffaadfafertterwesfafsaf"}}, excelize.RowOpts{StyleID: styleIdRowSummery, Height: 0.34 * 72})
+			excelize.Cell{Value: sumMeterResult(counterpoints.Producer, func(e *SummeryMeterResult) float64 { return e.Coverage })}},
+		excelize.RowOpts{StyleID: styleIdRowSummery, Height: 0.34 * 72})
 	err = sw.SetRow("A9",
-		[]interface{}{excelize.Cell{Value: "Gesamte gemeinschaftliche Erzeugung [KWH]", StyleID: styleIdBold}, excelize.Cell{Value: "ATxxxeeffaadfafertterwesfafsaf"}}, rowOpts)
+		[]interface{}{excelize.Cell{Value: "Gesamte gemeinschaftliche Erzeugung [KWH]", StyleID: styleIdBold},
+			excelize.Cell{Value: sumMeterResult(counterpoints.Producer, func(e *SummeryMeterResult) float64 { return e.Total })}},
+		rowOpts)
 
 	line := 12
 	err = sw.SetRow(fmt.Sprintf("A%d", line),
@@ -202,7 +179,7 @@ func generateSummeryDataSheet(db *store.BowStorage, f *excelize.File, year, mont
 
 	}
 
-	line = line + 2
+	line = line + 3
 	err = sw.SetRow(fmt.Sprintf("A%d", line),
 		[]interface{}{excelize.Cell{Value: "Einspeisezählpunkt"},
 			excelize.Cell{Value: "Name"},
@@ -230,18 +207,34 @@ func generateSummeryDataSheet(db *store.BowStorage, f *excelize.File, year, mont
 	return sw.Flush()
 }
 
-func generateEnergyDataSheet(db *store.BowStorage, f *excelize.File, year, month int) error {
+func generateEnergyDataSheet(db *store.BowStorage, f *excelize.File, start, end time.Time, meters []InvestigatorCP) error {
+
+	participantMeterMap := map[string]string{}
+	for _, m := range meters {
+		participantMeterMap[m.MeteringPoint] = m.Name
+	}
+
 	// Create a new sheet.
 	_, err := f.NewSheet("Energiedaten")
 	if err != nil {
 		return err
 	}
 
-	iterG1 := db.GetLinePrefix(fmt.Sprintf("CP-G.01/%.4d/%.2d/", year, month))
+	//iterG1 := db.GetLinePrefix(fmt.Sprintf("CP-G.01/%.4d/%.2d/", year, month))
+	//defer iterG1.Close()
+	//iterG2 := db.GetLinePrefix(fmt.Sprintf("CP-G.02/%.4d/%.2d/", year, month))
+	//defer iterG2.Close()
+	//iterG3 := db.GetLinePrefix(fmt.Sprintf("CP-G.03/%.4d/%.2d/", year, month))
+	//defer iterG3.Close()
+
+	sYear, sMonth, sDay := start.Year(), int(start.Month()), start.Day()
+	eYear, eMonth, eDay := end.Year(), int(end.Month()), end.Day()
+
+	iterG1 := db.GetLineRange("CP-G.01", fmt.Sprintf("%.4d/%.2d/%.2d/", sYear, sMonth, sDay), fmt.Sprintf("%.4d/%.2d/%.2d/", eYear, eMonth, eDay))
 	defer iterG1.Close()
-	iterG2 := db.GetLinePrefix(fmt.Sprintf("CP-G.02/%.4d/%.2d/", year, month))
+	iterG2 := db.GetLineRange("CP-G.02", fmt.Sprintf("%.4d/%.2d/%.2d/", sYear, sMonth, sDay), fmt.Sprintf("%.4d/%.2d/%.2d/", eYear, eMonth, eDay))
 	defer iterG2.Close()
-	iterG3 := db.GetLinePrefix(fmt.Sprintf("CP-G.03/%.4d/%.2d/", year, month))
+	iterG3 := db.GetLineRange("CP-G.03", fmt.Sprintf("%.4d/%.2d/%.2d/", sYear, sMonth, sDay), fmt.Sprintf("%.4d/%.2d/%.2d/", eYear, eMonth, eDay))
 	defer iterG3.Close()
 
 	var _lineG1 model.RawSourceLine
@@ -268,6 +261,15 @@ func generateEnergyDataSheet(db *store.BowStorage, f *excelize.File, year, month
 		append([]interface{}{excelize.Cell{Value: "MeteringpointID"}},
 			addHeader(meta, countCons, countProd, func(m *model.CounterPointMeta) interface{} { return m.Name })...))
 
+	sw.SetRow("A3",
+		append([]interface{}{excelize.Cell{Value: "Name"}},
+			addHeader(meta, countCons, countProd, func(m *model.CounterPointMeta) interface{} {
+				if p, ok := participantMeterMap[m.Name]; ok {
+					return p
+				}
+				return "unknown"
+			})...))
+
 	sw.SetRow("A4",
 		append([]interface{}{excelize.Cell{Value: "Energy direction"}},
 			addHeader(meta, countCons, countProd, func(m *model.CounterPointMeta) interface{} { return m.Dir })...))
@@ -275,13 +277,13 @@ func generateEnergyDataSheet(db *store.BowStorage, f *excelize.File, year, month
 	sw.SetRow("A5",
 		append([]interface{}{excelize.Cell{Value: "Period start"}},
 			addHeader(meta, countCons, countProd, func(m *model.CounterPointMeta) interface{} {
-				return fmt.Sprintf("01.%.2d.%.4d 00:00:00", month, year)
+				return fmt.Sprintf("%.2d.%.2d.%.4d 00:00:00", sDay, sMonth, sYear)
 			})...))
 
 	sw.SetRow("A6",
 		append([]interface{}{excelize.Cell{Value: "Period end"}},
 			addHeader(meta, countCons, countProd, func(m *model.CounterPointMeta) interface{} {
-				return fmt.Sprintf("01.%.2d.%.4d 00:00:00", month+1, year)
+				return fmt.Sprintf("%.2d.%.2d.%.4d 00:00:00", eDay, eMonth, eYear)
 			})...))
 
 	sw.SetRow("A7",
@@ -393,9 +395,9 @@ func addHeaderMeterCode(meta *model.RawSourceMeta, countCon, countProd int, valu
 	return lineData
 }
 
-func summaryCounterPoints(db *store.BowStorage, year, month int, cps *ExportCPs) (*SummeryResult, error) {
+func summaryCounterPoints(db *store.BowStorage, start, end time.Time, cps *ExportCPs) (*SummeryResult, error) {
 
-	results, report, err := calculation.CalculateWeeklyReport(db, year, month, calculation.CalculateEEG)
+	results, report, err := calculation.CalculateReport(db, start, end, calculation.CalculateEEG)
 	if err != nil {
 		return nil, err
 	}
@@ -455,4 +457,12 @@ func findMeterMeta(meta []*model.CounterPointMeta, meterId string) (*model.Count
 		}
 	}
 	return nil, errors.New("metering Point not found in Metadata")
+}
+
+func sumMeterResult(s []SummeryMeterResult, elem func(e *SummeryMeterResult) float64) float64 {
+	sum := 0.0
+	for _, e := range s {
+		sum = sum + elem(&e)
+	}
+	return sum
 }

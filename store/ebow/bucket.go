@@ -218,6 +218,20 @@ func (b *Bucket) Prefix(prefix interface{}) *Iter {
 	return iter
 }
 
+func (b *Bucket) Range(seek, until interface{}) *Range {
+	if b.err != nil {
+		return &Range{err: b.err}
+	}
+	keySeek, err := keyCodec.Marshal(seek, nil)
+	keyUntil, err := keyCodec.Marshal(until, nil)
+	if err != nil {
+		return &Range{err: err}
+	}
+	ra := newRange(b, keySeek, keyUntil)
+	return ra
+
+}
+
 // internalKey returns key prefixed with the bucket's id.
 func (b *Bucket) internalKey(key []byte) []byte {
 	buf := make([]byte, len(key)+bucketIdSize)

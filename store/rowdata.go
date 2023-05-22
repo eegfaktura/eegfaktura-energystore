@@ -110,6 +110,10 @@ func (b *BowStorage) GetLinePrefix(key string) *ebow.Iter {
 	return b.db.Bucket("rawdata").Prefix(key)
 }
 
+func (b *BowStorage) GetLineRange(bucket, key, until string) *ebow.Range {
+	return b.db.Bucket("rawdata").Range(fmt.Sprintf("%s/%s", bucket, key), fmt.Sprintf("%s/%s", bucket, until))
+}
+
 func (b *BowStorage) GetLine(line *model.RawSourceLine) error {
 	return b.db.Bucket("rawdata").Get(line.Id, line)
 }

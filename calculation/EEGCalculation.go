@@ -72,7 +72,7 @@ func CalculateEEG(db *store.BowStorage, period string) (*model.Matrix, *model.Ma
 		if rShar == nil {
 			rShar = model.MakeMatrix(s.Elements, s.CountRows(), s.CountCols())
 		} else {
-			rShar.Add(p)
+			rShar.Add(s)
 		}
 		pSum += utils.Sum(line.Producers)
 	}
@@ -145,6 +145,12 @@ func CalculateMonthlyDash(db *store.BowStorage, year string, calc CalcHandler) e
 }
 
 func CalculateWeeklyReport(db *store.BowStorage, year, month int, calc CalcHandler) ([]*model.EnergyReport, *model.EnergyReport, error) {
+	start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(year, time.Month(month)+1, 0, 0, 0, 0, 0, time.UTC)
+	return CalculateReport(db, start, end, calc)
+}
+
+func CalculateReport(db *store.BowStorage, start, end time.Time, calc CalcHandler) ([]*model.EnergyReport, *model.EnergyReport, error) {
 	var report_am, report_cm, report_pm, report_dm, report_sm *model.Matrix = &model.Matrix{}, &model.Matrix{}, &model.Matrix{}, &model.Matrix{}, &model.Matrix{}
 	var report_ps float64 = 0.0
 
@@ -162,12 +168,9 @@ func CalculateWeeklyReport(db *store.BowStorage, year, month int, calc CalcHandl
 	}
 	dayReports := []*model.EnergyReport{}
 
-	t := time.Date(year, time.Month(month)+1, 0, 0, 0, 0, 0, time.UTC)
-	for day := 1; day <= t.Day(); day++ {
+	for d := start; d.After(end) == false; d = d.AddDate(0, 0, 1) {
+		year, month, day := d.Year(), d.Month(), d.Day()
 		am, cm, pm, dm, sm, ps := calc(db, fmt.Sprintf("%d/%.2d/%.2d", year, month, day))
-		//if am == nil || cm == nil {
-		//	continue
-		//}
 
 		am = verifyResult(am)
 		cm = verifyResult(cm)
@@ -195,7 +198,7 @@ func CalculateWeeklyReport(db *store.BowStorage, year, month int, calc CalcHandl
 	}
 
 	return dayReports, &model.EnergyReport{
-		Id:            fmt.Sprintf("MRP/%d/%.2d", year, month),
+		Id:            fmt.Sprintf("MRP/%d/%.2d", start.Year(), start.Month()),
 		Consumed:      report_cm.Elements,
 		Allocated:     report_am.Elements,
 		Produced:      report_pm.Elements,

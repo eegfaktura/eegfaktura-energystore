@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"os"
 	"testing"
+	"time"
 )
 
 func TestExportExcel(t *testing.T) {
@@ -43,7 +44,12 @@ func TestExportExcel(t *testing.T) {
 		},
 	}
 
-	buf, err := ExportExcel("RC100181", 2023, 4, cps)
+	//buf, err := ExportExcel("RC100181", 2023, 2, cps)
+
+	start := time.Date(2023, time.Month(1), 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2023, time.Month(4)+1, 0, 0, 0, 0, 0, time.UTC)
+	buf, err := CreateExcelFile("RC100181", start, end, cps)
+
 	//conn, err := grpc.Dial("127.0.0.1:9090", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	//require.NoError(t, err)
 	//defer conn.Close()
@@ -52,7 +58,7 @@ func TestExportExcel(t *testing.T) {
 	//ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	//defer cancel()
 
-	filename := fmt.Sprintf("1-RC100181-Energie Report-%d%.2d.xlsx", 2023, 4)
+	filename := fmt.Sprintf("1-RC100181-Energie Report-%d%.2d.xlsx", 2023, 2)
 	err = os.WriteFile(fmt.Sprintf("./%s", filename), buf.Bytes(), 0644)
 	require.NoError(t, err)
 	//r, err := c.SendExcel(ctx, &protobuf.SendExcelRequest{Tenant: "ADMIN", Recipient: "obermueller.peter@gmail.com", Filename: &filename, Content: buf.Bytes()})

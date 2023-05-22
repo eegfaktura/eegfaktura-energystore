@@ -80,9 +80,9 @@ func AllocDynamic2(line *model.RawSourceLine) (*model.Matrix, *model.Matrix, *mo
 	lenConsumers := int(math.Max(float64(len(line.Consumers)), 1))
 	lenProducers := int(math.Max(float64(len(line.Producers)), 1))
 
-	resultArray := make([]float64, lenConsumers)
-	allocResult := model.MakeMatrix(resultArray, lenConsumers, 1)
-	shareResult := model.MakeMatrix(resultArray, lenConsumers, 1)
+	//resultArray := make([]float64, lenConsumers)
+	allocResult := model.MakeMatrix(make([]float64, lenConsumers), lenConsumers, 1)
+	shareResult := model.MakeMatrix(make([]float64, lenConsumers), lenConsumers, 1)
 	prodResult := model.MakeMatrix(make([]float64, lenProducers), lenProducers, 1)
 
 	consumerSum := utils.Sum(line.Consumers)
@@ -104,7 +104,7 @@ func AllocDynamic2(line *model.RawSourceLine) (*model.Matrix, *model.Matrix, *mo
 
 	var alloc_producer_factor = float64(0)
 	if producerSum > float64(0) && consumerSum > float64(0) {
-		alloc_producer_factor = math.Min(consumerSum/producerSum, 1)
+		alloc_producer_factor = consumerSum / producerSum
 	}
 	for i, l := range line.Producers {
 		greenValue := l * alloc_producer_factor
