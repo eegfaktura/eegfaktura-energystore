@@ -39,6 +39,14 @@ func ParseTime(strTime string) (time.Time, error) {
 	return time.Date(y, time.Month(m), d, hh, mm, ss, 0, time.Local), nil
 }
 
+func ConvertRowIdToTime(prefix, rowId string) (time.Time, error) {
+	var y, m, d, hh, mm, ss int
+	if _, err := fmt.Sscanf(rowId, fmt.Sprintf("%s/%%d/%%d/%%d/%%d/%%d/%%d", prefix), &y, &m, &d, &hh, &mm, &ss); err != nil {
+		return time.Now(), err
+	}
+	return time.Date(y, time.Month(m), d, hh, mm, ss, 0, time.Local), nil
+}
+
 func ConvertTimeToRowId(prefix, strTime string) (string, error) {
 	var y, m, d, hh, mm, ss int
 	if _, err := fmt.Sscanf(strTime, "%d.%d.%d %d:%d:%d", &d, &m, &y, &hh, &mm, &ss); err != nil {

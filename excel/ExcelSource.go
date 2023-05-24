@@ -65,10 +65,6 @@ type excelCounterPointMeta struct {
 }
 
 func ImportExcelEnergyFile(f *excelize.File, sheet string, db *store.BowStorage) ([]int, error) {
-	s, e := f.GetCellStyle(sheet, "A2")
-	fmt.Printf("Style: %d %v\n", s, e)
-	s1, e1 := f.GetCellStyle(sheet, "A12")
-	fmt.Printf("Style: %d %v\n", s1, e1)
 
 	exp := "DD.MM.YYYY HH:MM:SS"
 	style, err := f.NewStyle(&excelize.Style{CustomNumFmt: &exp})
@@ -76,7 +72,7 @@ func ImportExcelEnergyFile(f *excelize.File, sheet string, db *store.BowStorage)
 
 	rows, err := f.Rows(sheet)
 	if err != nil {
-		fmt.Println(err)
+		glog.Error(err)
 		return []int{}, err
 	}
 	glog.Infof("Rows Error: %+v", rows.Error())
@@ -114,7 +110,6 @@ func ImportExcelEnergyFile(f *excelize.File, sheet string, db *store.BowStorage)
 			case "Period end":
 				excelHeader.periodEnd = make(map[int]string, len(cols)-1)
 				for i, c := range cols[1:] {
-					fmt.Printf("Period end: (%s) %s\n", c, excelDateToString(c))
 					excelHeader.periodEnd[i] = excelDateToString(c)
 				}
 			case "Period start":

@@ -36,12 +36,18 @@ func MakeMatrix(Elements []float64, rows, cols int) *Matrix {
 	A.Cols = cols
 	A.step = cols
 	A.Elements = Elements
-
 	return A
 }
 
 func NewUniformMatrix(rows, cols int) *Matrix {
 	return MakeMatrix(oneArray[:rows*cols], rows, cols)
+}
+
+func NewCopiedMatrixFromElements(Elements []float64, rows, cols int) *Matrix {
+	A := NewMatrix(rows, cols)
+	copy(A.Elements, Elements)
+
+	return A
 }
 
 func (A *Matrix) CountRows() int {
@@ -141,7 +147,7 @@ func (A *Matrix) Add(B *Matrix) error {
 		B.Cols, B.Rows = maxCol, maxRow
 		A.Cols, A.Rows = maxCol, maxRow
 	}
-	
+
 	for i := 0; i < A.Rows; i++ {
 		for j := 0; j < A.Cols; j++ {
 			A.SetElm(i, j, A.GetElm(i, j)+B.GetElm(i, j))
@@ -164,12 +170,22 @@ func (A *Matrix) substract(B *Matrix) error {
 	return nil
 }
 
-func (A *Matrix) scale(a float64) {
+func (A *Matrix) Scale(a float64) {
 	for i := 0; i < A.Rows; i++ {
 		for j := 0; j < A.Cols; j++ {
 			A.SetElm(i, j, a*A.GetElm(i, j))
 		}
 	}
+}
+
+func (A *Matrix) RoundToFixed(precision uint) *Matrix {
+	ratio := math.Pow(10, float64(precision))
+	for i := 0; i < A.Rows; i++ {
+		for j := 0; j < A.Cols; j++ {
+			A.SetElm(i, j, math.Round(A.GetElm(i, j)*ratio)/ratio)
+		}
+	}
+	return A
 }
 
 func Add(A *Matrix, B *Matrix) *Matrix {
