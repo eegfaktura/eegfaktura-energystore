@@ -6,6 +6,7 @@ import (
 	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
 	"fmt"
+	"github.com/golang/glog"
 	"time"
 )
 
@@ -23,6 +24,10 @@ Return:
 type CalcHandler func(*store.BowStorage, string) (*model.Matrix, *model.Matrix, *model.Matrix, *model.Matrix, *model.Matrix, float64)
 type AllocationHandler func(*model.RawSourceLine) (*model.Matrix, *model.Matrix, *model.Matrix)
 
+type ValueIterator interface {
+	Next(result interface{}) bool
+}
+
 type calcResults struct {
 	rAlloc *model.Matrix
 	rCons  *model.Matrix
@@ -30,6 +35,17 @@ type calcResults struct {
 	rDist  *model.Matrix
 	rShar  *model.Matrix
 	pSum   float64
+}
+
+func newCalcResult(metaInfo *model.CounterPointMetaInfo) *calcResults {
+	return &calcResults{
+		rCons:  model.NewMatrix(metaInfo.ConsumerCount, 1),
+		rAlloc: model.NewMatrix(metaInfo.ConsumerCount, 1),
+		rProd:  model.NewMatrix(metaInfo.ProducerCount, 1),
+		rDist:  model.NewMatrix(metaInfo.ProducerCount, 1),
+		rShar:  model.NewMatrix(metaInfo.ConsumerCount, 1),
+		pSum:   0,
+	}
 }
 
 func CalculateEEG(db *store.BowStorage, period string) (*model.Matrix, *model.Matrix, *model.Matrix, *model.Matrix, *model.Matrix, float64) {
@@ -172,27 +188,28 @@ func sumIntermediate(
 	return nil
 }
 
-func calculateReport(iter *ebow.Iter,
+func calculateReport(iter ValueIterator,
 	metaInfo *model.CounterPointMetaInfo,
 	allocFunc AllocationHandler,
 	reportId string,
-	switchIntermediate func(rowId string) bool,
-	intermediateId func() string) ([]*model.EnergyReport, *model.EnergyReport, error) {
+	switchIntermediate func(string) bool,
+	intermediateId func(string) string) ([]*model.EnergyReport, *model.EnergyReport, error) {
 
-	results := calcResults{}
-	intermediate := calcResults{}
+	results := newCalcResult(metaInfo)
+	intermediate := newCalcResult(metaInfo)
 	defaultConsumerLen := metaInfo.ConsumerCount
 
 	dayReports := []*model.EnergyReport{}
 
 	var err error
+	lastLineId := "" //ToDo: Rethink Report ID generation. Or consider a new iteration strategy
 	var _line model.RawSourceLine
 	for iter.Next(&_line) {
 		line := _line.Copy(defaultConsumerLen)
 
 		if switchIntermediate(line.Id) {
 			dayReports = append(dayReports, &model.EnergyReport{
-				Id:            intermediateId(),
+				Id:            intermediateId(lastLineId),
 				Consumed:      intermediate.rCons.RoundToFixed(6).Elements,
 				Allocated:     intermediate.rAlloc.RoundToFixed(6).Elements,
 				Produced:      intermediate.rProd.RoundToFixed(6).Elements,
@@ -201,46 +218,23 @@ func calculateReport(iter *ebow.Iter,
 				TotalProduced: intermediate.pSum,
 			})
 
-			if err = sumIntermediate(intermediate, &results); err != nil {
+			if err = sumIntermediate(*intermediate, results); err != nil {
 				return []*model.EnergyReport{}, nil, err
 			}
 
-			intermediate = calcResults{}
+			intermediate = newCalcResult(metaInfo)
 
 		}
 
-		//lineTime, err := utils.ConvertRowIdToTime(rowPrefix, line.Id)
-		//if err != nil {
-		//	return []*model.EnergyReport{}, nil, err
-		//}
-		//
-		//if lineTime.Day() > cDay {
-		//	dayReports = append(dayReports, &model.EnergyReport{
-		//		Id:            fmt.Sprintf("WRP/%d/%.2d/%.2d", year, month, cDay),
-		//		Consumed:      intermediate.rCons.RoundToFixed(6).Elements,
-		//		Allocated:     intermediate.rAlloc.RoundToFixed(6).Elements,
-		//		Produced:      intermediate.rProd.RoundToFixed(6).Elements,
-		//		Distributed:   intermediate.rDist.RoundToFixed(6).Elements,
-		//		Shared:        intermediate.rShar.RoundToFixed(6).Elements,
-		//		TotalProduced: intermediate.pSum,
-		//	})
-		//	cDay = lineTime.Day()
-		//
-		//	if err = sumIntermediate(intermediate, &results); err != nil {
-		//		return []*model.EnergyReport{}, nil, err
-		//	}
-		//
-		//	intermediate = calcResults{}
-		//}
-
-		if err := appendResults(&line, allocFunc, &intermediate); err != nil {
+		if err := appendResults(&line, allocFunc, intermediate); err != nil {
 			return []*model.EnergyReport{}, nil, err
 		}
 
+		lastLineId = line.Id
 	}
 
 	dayReports = append(dayReports, &model.EnergyReport{
-		Id:            intermediateId(),
+		Id:            intermediateId(lastLineId),
 		Consumed:      intermediate.rCons.RoundToFixed(6).Elements,
 		Allocated:     intermediate.rAlloc.RoundToFixed(6).Elements,
 		Produced:      intermediate.rProd.RoundToFixed(6).Elements,
@@ -249,7 +243,7 @@ func calculateReport(iter *ebow.Iter,
 		TotalProduced: intermediate.pSum,
 	})
 
-	if err = sumIntermediate(intermediate, &results); err != nil {
+	if err = sumIntermediate(*intermediate, results); err != nil {
 		return []*model.EnergyReport{}, nil, err
 	}
 
@@ -272,157 +266,120 @@ func CalculateMonthlyPeriod(db *store.BowStorage, allocFunc AllocationHandler, y
 	iter := db.GetLinePrefix(fmt.Sprintf("%s/%d/%.2d/", rowPrefix, year, month))
 	defer iter.Close()
 
-	cDay := 1
-	return calculateReport(iter, metaInfo, allocFunc, fmt.Sprintf("MRP/%d/%.2d", year, month),
+	cDay := 0
+	return calculateReport(iter, metaInfo, allocFunc, fmt.Sprintf("YM/%d/%.2d", year, month),
 		func(rowId string) bool {
 			lineTime, _ := utils.ConvertRowIdToTime(rowPrefix, rowId)
+			if cDay == 0 {
+				cDay = lineTime.Day()
+				return false
+			}
 			shouldSwitch := lineTime.Day() > cDay
 			cDay = lineTime.Day()
 			return shouldSwitch
 		},
-		func() string {
-			return fmt.Sprintf("WRP/%d/%.2d/%.2d", year, month, cDay-1)
+		func(rowId string) string {
+			lineTime, _ := utils.ConvertRowIdToTime(rowPrefix, rowId)
+			return fmt.Sprintf("WRP/%d/%.2d/%.2d", year, month, lineTime.Day())
 		},
 	)
-
-	//results := calcResults{}
-	//intermediate := calcResults{}
-	//defaultConsumerLen := metaInfo.ConsumerCount
-	//
-	//dayReports := []*model.EnergyReport{}
-	//
-	//var _line model.RawSourceLine
-	//cDay := 1
-	//for iter.Next(&_line) {
-	//	line := _line.Copy(defaultConsumerLen)
-	//
-	//	lineTime, err := utils.ConvertRowIdToTime(rowPrefix, line.Id)
-	//	if err != nil {
-	//		return []*model.EnergyReport{}, nil, err
-	//	}
-	//
-	//	if lineTime.Day() > cDay {
-	//		dayReports = append(dayReports, &model.EnergyReport{
-	//			Id:            fmt.Sprintf("WRP/%d/%.2d/%.2d", year, month, cDay),
-	//			Consumed:      intermediate.rCons.RoundToFixed(6).Elements,
-	//			Allocated:     intermediate.rAlloc.RoundToFixed(6).Elements,
-	//			Produced:      intermediate.rProd.RoundToFixed(6).Elements,
-	//			Distributed:   intermediate.rDist.RoundToFixed(6).Elements,
-	//			Shared:        intermediate.rShar.RoundToFixed(6).Elements,
-	//			TotalProduced: intermediate.pSum,
-	//		})
-	//		cDay = lineTime.Day()
-	//
-	//		if err = sumIntermediate(intermediate, &results); err != nil {
-	//			return []*model.EnergyReport{}, nil, err
-	//		}
-	//
-	//		intermediate = calcResults{}
-	//	}
-	//
-	//	if err := appendResults(&line, allocFunc, &intermediate); err != nil {
-	//		return []*model.EnergyReport{}, nil, err
-	//	}
-	//
-	//}
-	//
-	//dayReports = append(dayReports, &model.EnergyReport{
-	//	Id:            fmt.Sprintf("WRP/%d/%.2d/%.2d", year, month, cDay),
-	//	Consumed:      intermediate.rCons.RoundToFixed(6).Elements,
-	//	Allocated:     intermediate.rAlloc.RoundToFixed(6).Elements,
-	//	Produced:      intermediate.rProd.RoundToFixed(6).Elements,
-	//	Distributed:   intermediate.rDist.RoundToFixed(6).Elements,
-	//	Shared:        intermediate.rShar.RoundToFixed(6).Elements,
-	//	TotalProduced: intermediate.pSum,
-	//})
-	//
-	//if err = sumIntermediate(intermediate, &results); err != nil {
-	//	return []*model.EnergyReport{}, nil, err
-	//}
-	//
-	//return dayReports, &model.EnergyReport{
-	//	Id:            fmt.Sprintf("MRP/%d/%.2d", year, month),
-	//	Consumed:      ensureMatrix(results.rCons, metaInfo.ConsumerCount).RoundToFixed(6).Elements,
-	//	Allocated:     ensureMatrix(results.rAlloc, metaInfo.ConsumerCount).RoundToFixed(6).Elements,
-	//	Produced:      ensureMatrix(results.rProd, metaInfo.ProducerCount).RoundToFixed(6).Elements,
-	//	Distributed:   ensureMatrix(results.rDist, metaInfo.ProducerCount).RoundToFixed(6).Elements,
-	//	Shared:        ensureMatrix(results.rShar, metaInfo.ConsumerCount).RoundToFixed(6).Elements,
-	//	TotalProduced: results.pSum}, nil
 }
 
-//func CalculateMonthlyPeriod(db *store.BowStorage, allocFunc AllocationHandler, year, month int) ([]*model.EnergyReport, *model.EnergyReport, error) {
-//	rowPrefix := "CP-G.01"
-//	_, metaInfo, err := store.GetMetaInfo(db)
-//	if err != nil {
-//		return []*model.EnergyReport{}, nil, err
-//	}
-//	iter := db.GetLinePrefix(fmt.Sprintf("%s/%d/%.2d/", rowPrefix, year, month))
-//	defer iter.Close()
-//
-//	results := calcResults{}
-//	intermediate := calcResults{}
-//	defaultConsumerLen := metaInfo.ConsumerCount
-//
-//	dayReports := []*model.EnergyReport{}
-//
-//	var _line model.RawSourceLine
-//	cDay := 1
-//	for iter.Next(&_line) {
-//		line := _line.Copy(defaultConsumerLen)
-//
-//		lineTime, err := utils.ConvertRowIdToTime(rowPrefix, line.Id)
-//		if err != nil {
-//			return []*model.EnergyReport{}, nil, err
-//		}
-//
-//		if lineTime.Day() > cDay {
-//			dayReports = append(dayReports, &model.EnergyReport{
-//				Id:            fmt.Sprintf("WRP/%d/%.2d/%.2d", year, month, cDay),
-//				Consumed:      intermediate.rCons.RoundToFixed(6).Elements,
-//				Allocated:     intermediate.rAlloc.RoundToFixed(6).Elements,
-//				Produced:      intermediate.rProd.RoundToFixed(6).Elements,
-//				Distributed:   intermediate.rDist.RoundToFixed(6).Elements,
-//				Shared:        intermediate.rShar.RoundToFixed(6).Elements,
-//				TotalProduced: intermediate.pSum,
-//			})
-//			cDay = lineTime.Day()
-//
-//			if err = sumIntermediate(intermediate, &results); err != nil {
-//				return []*model.EnergyReport{}, nil, err
-//			}
-//
-//			intermediate = calcResults{}
-//		}
-//
-//		if err := appendResults(&line, allocFunc, &intermediate); err != nil {
-//			return []*model.EnergyReport{}, nil, err
-//		}
-//
-//	}
-//
-//	dayReports = append(dayReports, &model.EnergyReport{
-//		Id:            fmt.Sprintf("WRP/%d/%.2d/%.2d", year, month, cDay),
-//		Consumed:      intermediate.rCons.RoundToFixed(6).Elements,
-//		Allocated:     intermediate.rAlloc.RoundToFixed(6).Elements,
-//		Produced:      intermediate.rProd.RoundToFixed(6).Elements,
-//		Distributed:   intermediate.rDist.RoundToFixed(6).Elements,
-//		Shared:        intermediate.rShar.RoundToFixed(6).Elements,
-//		TotalProduced: intermediate.pSum,
-//	})
-//
-//	if err = sumIntermediate(intermediate, &results); err != nil {
-//		return []*model.EnergyReport{}, nil, err
-//	}
-//
-//	return dayReports, &model.EnergyReport{
-//		Id:            fmt.Sprintf("MRP/%d/%.2d", year, month),
-//		Consumed:      ensureMatrix(results.rCons, metaInfo.ConsumerCount).RoundToFixed(6).Elements,
-//		Allocated:     ensureMatrix(results.rAlloc, metaInfo.ConsumerCount).RoundToFixed(6).Elements,
-//		Produced:      ensureMatrix(results.rProd, metaInfo.ProducerCount).RoundToFixed(6).Elements,
-//		Distributed:   ensureMatrix(results.rDist, metaInfo.ProducerCount).RoundToFixed(6).Elements,
-//		Shared:        ensureMatrix(results.rShar, metaInfo.ConsumerCount).RoundToFixed(6).Elements,
-//		TotalProduced: results.pSum}, nil
-//}
+func CalculateAnnualPeriod(db *store.BowStorage, allocFunc AllocationHandler, year int) ([]*model.EnergyReport, *model.EnergyReport, error) {
+	rowPrefix := "CP-G.01"
+	_, metaInfo, err := store.GetMetaInfo(db)
+	if err != nil {
+		return []*model.EnergyReport{}, nil, err
+	}
+	iter := db.GetLinePrefix(fmt.Sprintf("%s/%d/", rowPrefix, year))
+	defer iter.Close()
+
+	cMonth := 0
+	return calculateReport(iter, metaInfo, allocFunc, fmt.Sprintf("Y/%d/0", year),
+		func(rowId string) bool {
+			lineTime, _ := utils.ConvertRowIdToTime(rowPrefix, rowId)
+			if cMonth == 0 {
+				cMonth = int(lineTime.Month())
+				return false
+			}
+			shouldSwitch := int(lineTime.Month()) > cMonth
+			cMonth = int(lineTime.Month())
+			return shouldSwitch
+		},
+		func(rowId string) string {
+			lineTime, _ := utils.ConvertRowIdToTime(rowPrefix, rowId)
+			return fmt.Sprintf("IRP/%d/%.2d", year, lineTime.Month())
+		},
+	)
+}
+
+func CalculateBiAnnualPeriod(db *store.BowStorage, allocFunc AllocationHandler, year, segment int) ([]*model.EnergyReport, *model.EnergyReport, error) {
+	rowPrefix := "CP-G.01"
+	_, metaInfo, err := store.GetMetaInfo(db)
+	if err != nil {
+		return []*model.EnergyReport{}, nil, err
+	}
+
+	iter := db.GetLineRange(rowPrefix,
+		fmt.Sprintf("%.4d/%.2d/", year, ((segment-1)*6)+1),
+		fmt.Sprintf("%.4d/%.2d/", year, segment*6),
+	)
+	defer iter.Close()
+
+	cMonth := 0
+	return calculateReport(iter, metaInfo, allocFunc, fmt.Sprintf("YH/%d/%d", year, segment),
+		func(rowId string) bool {
+			lineTime, _ := utils.ConvertRowIdToTime(rowPrefix, rowId)
+			if cMonth == 0 {
+				cMonth = int(lineTime.Month())
+				return false
+			}
+			shouldSwitch := int(lineTime.Month()) > cMonth
+			if shouldSwitch {
+				cMonth = cMonth + 1
+			}
+			return shouldSwitch
+		},
+		func(rowId string) string {
+			lineTime, _ := utils.ConvertRowIdToTime(rowPrefix, rowId)
+			return fmt.Sprintf("IRP/%d/%.2d", year, lineTime.Month())
+		},
+	)
+}
+
+func CalculateQuarterlyPeriod(db *store.BowStorage, allocFunc AllocationHandler, year, segment int) ([]*model.EnergyReport, *model.EnergyReport, error) {
+	rowPrefix := "CP-G.01"
+	_, metaInfo, err := store.GetMetaInfo(db)
+	if err != nil {
+		return []*model.EnergyReport{}, nil, err
+	}
+
+	iter := db.GetLineRange(rowPrefix,
+		fmt.Sprintf("%.4d/%.2d/", year, ((segment-1)*3)+1),
+		fmt.Sprintf("%.4d/%.2d/", year, segment*3),
+	)
+	defer iter.Close()
+
+	cMonth := 0
+	return calculateReport(iter, metaInfo, allocFunc, fmt.Sprintf("YQ/%d/%d", year, segment),
+		func(rowId string) bool {
+			lineTime, _ := utils.ConvertRowIdToTime(rowPrefix, rowId)
+			if cMonth == 0 {
+				cMonth = int(lineTime.Month())
+				return false
+			}
+			shouldSwitch := int(lineTime.Month()) > cMonth
+			if shouldSwitch {
+				cMonth = cMonth + 1
+			}
+			return shouldSwitch
+		},
+		func(rowId string) string {
+			lineTime, _ := utils.ConvertRowIdToTime(rowPrefix, rowId)
+			return fmt.Sprintf("IRP/%d/%.2d", year, lineTime.Month())
+		},
+	)
+}
 
 func CalculateMonthlyDash(db *store.BowStorage, year string, calc CalcHandler) error {
 	mounth := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}
@@ -469,7 +426,7 @@ func CalculateMonthlyDash(db *store.BowStorage, year string, calc CalcHandler) e
 		_ = annual_sm.Add(sm)
 
 		annual_ps += ps
-		fmt.Printf("AllocMonth (%d) %f - %+v\n", m, ps, am)
+		glog.V(4).Infof("AllocMonth (%d) %f - %+v", m, ps, am)
 	}
 
 	//fmt.Printf("Annual Alloc-Report: %+v\n", annual_am)

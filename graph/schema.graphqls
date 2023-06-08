@@ -8,6 +8,7 @@ scalar Upload
 type Query {
   lastEnergyDate(tenant: String!): String!
   eeg(name: String!, year: Int!, month: Int, function: String): EegEnergy!
+  report(tenant: String!, year: Int!, segment: Int!, period: String!): EegEnergy!
 }
 
 "The `Mutation` type, represents all updates we can make to our data."

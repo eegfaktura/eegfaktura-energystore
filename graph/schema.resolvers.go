@@ -53,6 +53,18 @@ func (r *queryResolver) Eeg(ctx context.Context, name string, year int, month *i
 	return energy, nil
 }
 
+// Report is the resolver for the report field.
+func (r *queryResolver) Report(ctx context.Context, tenant string, year int, segment int, period string) (*model.EegEnergy, error) {
+	var err error
+	energy := &model.EegEnergy{}
+
+	if energy, err = calculation.EnergyReport(tenant, year, segment, period); err != nil {
+		return energy, err
+	}
+
+	return energy, nil
+}
+
 // Mutation returns generated.MutationResolver implementation.
 func (r *Resolver) Mutation() generated.MutationResolver { return &mutationResolver{r} }
 

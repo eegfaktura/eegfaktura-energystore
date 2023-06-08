@@ -205,7 +205,7 @@ func ImportExcelEnergyFile(f *excelize.File, sheet string, db *store.BowStorage)
 					if err != nil {
 						glog.Errorf("Error get cell format %+v", e)
 					}
-					glog.V(3).Infof("Could not handle row format (%d). Cols %+v", s, cols)
+					glog.V(3).Infof("Could not handle row format (%d). Cols %+v <%v>", s, cols, cols[0])
 				}
 			}
 		}
@@ -428,8 +428,10 @@ func convertExcelMeterCode(code MeterCodeType) string {
 }
 
 func isDate(cell string) bool {
-	if len(cell) > 0 && numberPattern.MatchString(cell) {
-		return true
+	if len(cell) > 0 {
+		if numberPattern.MatchString(cell) {
+			return true
+		}
 	}
 	println(cell)
 	return false

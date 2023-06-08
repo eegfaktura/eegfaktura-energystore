@@ -232,8 +232,8 @@ func fetchSource(db *store.BowStorage, key string, resources map[string]*model.R
 func updateMetaCP(metaCP *model.CounterPointMeta, begin, end time.Time) bool {
 
 	changed := false
-	metaBegin := stringToTime(metaCP.PeriodStart)
-	metaEnd := stringToTime(metaCP.PeriodEnd)
+	metaBegin := stringToTime(metaCP.PeriodStart, time.Now())
+	metaEnd := stringToTime(metaCP.PeriodEnd, time.Unix(1, 0))
 
 	if begin.Before(metaBegin) {
 		metaCP.PeriodStart = dateToString(begin)
@@ -268,10 +268,10 @@ func dateToString(date time.Time) string {
 	return fmt.Sprintf("%.2d.%.2d.%.4d %.2d:%.2d:%.4d", date.Day(), date.Month(), date.Year(), date.Hour(), date.Minute(), date.Second())
 }
 
-func stringToTime(date string) time.Time {
+func stringToTime(date string, defaultValue time.Time) time.Time {
 	var d, m, y, hh, mm, ss int
 	if _, err := fmt.Sscanf(date, "%d.%d.%d %d:%d:%d", &d, &m, &y, &hh, &mm, &ss); err == nil {
 		return time.Date(y, time.Month(m), d, hh, mm, ss, 0, time.UTC)
 	}
-	return time.Now()
+	return defaultValue
 }

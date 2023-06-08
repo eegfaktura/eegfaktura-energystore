@@ -8,6 +8,7 @@ import (
 	"at.ourproject/energystore/services"
 	"encoding/json"
 	"fmt"
+	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 	"github.com/spf13/viper"
 	"net/http"
@@ -20,11 +21,18 @@ func NewRestServer() *mux.Router {
 	r := mux.NewRouter()
 	//s := r.PathPrefix("/rest").Subrouter()
 	r.HandleFunc("/eeg/{year}/{month}", jwtWrapper(fetchEnergy())).Methods("GET")
+	r.HandleFunc("/eeg/report", jwtWrapper(fetchEnergyReport())).Methods("POST")
 	r.HandleFunc("/eeg/lastRecordDate", jwtWrapper(lastRecordDate())).Methods("GET")
 	r.HandleFunc("/eeg/excel/export/{year}/{month}", jwtWrapper(exportMeteringData())).Methods("POST")
 	r.HandleFunc("/eeg/excel/report/download", jwtWrapper(exportReport())).Methods("POST")
 	r.HandleFunc("/eeg/hello", getHello).Methods("GET")
 	return r
+}
+
+type energyReportRequest struct {
+	Year    int    `json:"year"`
+	Period  string `json:"type"`
+	Segment int    `json:"segment"`
 }
 
 func getHello(w http.ResponseWriter, r *http.Request) {
@@ -42,9 +50,33 @@ func fetchEnergy() middleware.JWTHandlerFunc {
 		year, err = strconv.Atoi(vars["year"])
 		month, err = strconv.Atoi(vars["month"])
 
-		fmt.Printf("FETCH DASHBOARD: %+v %+v (%v/%v) \n", tenant, claims, year, month)
+		glog.V(4).Infof("FETCH DASHBOARD: %+v %+v (%v/%v)", tenant, claims, year, month)
 
 		if energy, err = calculation.EnergyDashboard(tenant, fc, year, month); err != nil {
+			respondWithError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		resp := struct {
+			Eeg *model.EegEnergy `json:"eeg"`
+		}{Eeg: energy}
+
+		respondWithJSON(w, http.StatusOK, &resp)
+	}
+}
+
+func fetchEnergyReport() middleware.JWTHandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request, claims *middleware.PlatformClaims, tenant string) {
+		energy := &model.EegEnergy{}
+
+		var request energyReportRequest
+		err := json.NewDecoder(r.Body).Decode(&request)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if energy, err = calculation.EnergyReport(tenant, request.Year, request.Segment, request.Period); err != nil {
 			respondWithError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -84,7 +116,7 @@ func exportMeteringData() middleware.JWTHandlerFunc {
 			return
 		}
 
-		fmt.Printf("Send Mail to %s\n", email)
+		glog.V(3).Infof("Send Mail to %s", email)
 
 		err = excel.ExportEnergyDataToMail(tenant, email, year, month, nil)
 		if err != nil {
