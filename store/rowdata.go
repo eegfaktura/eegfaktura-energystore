@@ -4,10 +4,31 @@ import (
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store/ebow"
 	"fmt"
+	"github.com/golang/glog"
 	"github.com/spf13/viper"
 	"strings"
 	"sync"
 )
+
+type ebowLogger struct {
+	level glog.Level
+}
+
+func (el ebowLogger) Infof(format string, args ...interface{}) {
+	glog.V(el.level).Infof(format, args...)
+}
+
+func (el ebowLogger) Warningf(format string, args ...interface{}) {
+	glog.Warningf(format, args...)
+}
+
+func (el ebowLogger) Errorf(format string, args ...interface{}) {
+	glog.Errorf(format, args...)
+}
+
+func (el ebowLogger) Debugf(format string, args ...interface{}) {
+	glog.V(el.level).Infof(format, args...)
+}
 
 // Prevent multiple goroutines from accessing the same resource at the same time (forces turn taking)
 type Turns struct {
@@ -47,7 +68,7 @@ func OpenStorage(tenant string) (*BowStorage, error) {
 	t := strings.ToLower(tenant)
 	basePath := viper.GetString("persistence.path")
 	unlock := turns.lock(t)
-	db, err := ebow.Open(fmt.Sprintf("%s/%s", basePath, t))
+	db, err := ebow.Open(fmt.Sprintf("%s/%s", basePath, t), ebow.SetLogger(ebowLogger{5}))
 	if err != nil {
 		unlock()
 		return nil, err

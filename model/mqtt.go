@@ -8,7 +8,7 @@ type MqttEnergyValue struct {
 }
 
 type MqttEnergyData struct {
-	MeterCode string            `json:"meterCode"`
+	MeterCode MeterCodeValue    `json:"meterCode"`
 	Value     []MqttEnergyValue `json:"value"`
 }
 

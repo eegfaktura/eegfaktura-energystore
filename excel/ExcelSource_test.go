@@ -1,7 +1,6 @@
 package excel
 
 import (
-	"at.ourproject/energystore/calculation"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
 	"fmt"
@@ -52,25 +51,25 @@ func TestImportExcelEnergyFile(t *testing.T) {
 	require.NoError(t, err)
 	defer excelFile.Close()
 
-	yearSet, err := ImportExcelEnergyFile(excelFile, "Energiedaten", db)
+	_, err = ImportExcelEnergyFile(excelFile, "Energiedaten", db)
 	require.NoError(t, err)
-	for _, k := range yearSet {
-		err = calculation.CalculateMonthlyDash(db, fmt.Sprintf("%d", k), calculation.CalculateEEG)
-		require.NoError(t, err)
-	}
+	//for _, k := range yearSet {
+	//	err = calculation.CalculateMonthlyDash(db, fmt.Sprintf("%d", k), calculation.CalculateEEG)
+	//	require.NoError(t, err)
+	//}
 
 }
 
 func TestBuildMatixMetaStruct(t *testing.T) {
 
-	db, err := store.OpenStorageTest("excelsource", "../test/rawdata")
-	require.NoError(t, err)
-	defer func() {
-		db.Close()
-		os.RemoveAll("../test/rawdata/excelsource")
-	}()
+	t.Run("Initiate Meta Struct", func(t *testing.T) {
+		db, err := store.OpenStorageTest("excelsource1", "../test/rawdata")
+		require.NoError(t, err)
+		defer func() {
+			db.Close()
+			os.RemoveAll("../test/rawdata/excelsource1")
+		}()
 
-	t.Run("Initiate Meta Struckt", func(t *testing.T) {
 		header := excelHeader{
 			meteringPointId: map[int]string{
 				0:  "AT0030000000000000000000000000001",
@@ -96,7 +95,7 @@ func TestBuildMatixMetaStruct(t *testing.T) {
 				20: "TOTAL",
 				21: "TOTAL",
 			},
-			energyDirection: map[int]string{
+			energyDirection: map[int]model.MeterDirection{
 				0:  "CONSUMPTION",
 				1:  "CONSUMPTION",
 				2:  "CONSUMPTION",
@@ -222,8 +221,13 @@ func TestBuildMatixMetaStruct(t *testing.T) {
 		err = db.SetMeta(rawMeta)
 	})
 
-	t.Run("Initiate Meta Struckt", func(t *testing.T) {
-
+	t.Run("Check MetaStruct", func(t *testing.T) {
+		db, err := store.OpenStorageTest("excelsource2", "../test/rawdata")
+		require.NoError(t, err)
+		defer func() {
+			db.Close()
+			os.RemoveAll("../test/rawdata/excelsource2")
+		}()
 		header := excelHeader{
 			meteringPointId: map[int]string{
 				0:  "AT0030000000000000000000000000015", // 0
@@ -250,7 +254,7 @@ func TestBuildMatixMetaStruct(t *testing.T) {
 				21: "TOTAL",
 				22: "TOTAL",
 			},
-			energyDirection: map[int]string{
+			energyDirection: map[int]model.MeterDirection{
 				0:  "CONSUMPTION",
 				1:  "CONSUMPTION",
 				2:  "CONSUMPTION",
@@ -342,7 +346,7 @@ func TestBuildMatixMetaStruct(t *testing.T) {
 		excelCpMeta, cpMeta, err := buildMatrixMetaStruct(db, header)
 		require.NoError(t, err)
 		require.NotNil(t, cpMeta)
-		require.Equal(t, 15, len(cpMeta))
+		require.Equal(t, 13, len(cpMeta))
 		require.NotNil(t, excelCpMeta)
 		require.Equal(t, 13, len(excelCpMeta))
 
@@ -375,11 +379,17 @@ func TestBuildMatixMetaStruct(t *testing.T) {
 
 		expectedIdx := []int{0, 3, 6, 9, 10, 11, 12, 13, 14, 15, 16, 17, 19}
 		require.ElementsMatch(t, expectedIdx, currentIdx)
-		expectedSourceIdx := []int{12, 13, 1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0}
+		expectedSourceIdx := []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0}
 		require.ElementsMatch(t, expectedSourceIdx, currentSourceIdx)
 	})
 
 	t.Run("Initiate Metadata with 32 consumers and 1 producer", func(t *testing.T) {
+		db, err := store.OpenStorageTest("excelsource3", "../test/rawdata")
+		require.NoError(t, err)
+		defer func() {
+			db.Close()
+			os.RemoveAll("../test/rawdata/excelsource3")
+		}()
 		header := excelHeader{
 			meteringPointId: map[int]string{
 				0:  "AT003000000000000000000Zaehlpkt01",
@@ -483,7 +493,7 @@ func TestBuildMatixMetaStruct(t *testing.T) {
 				98: "TOTAL",
 				99: "TOTAL",
 			},
-			energyDirection: map[int]string{
+			energyDirection: map[int]model.MeterDirection{
 				0: "CONSUMPTION", 1: "CONSUMPTION",
 				2: "CONSUMPTION", 3: "CONSUMPTION", 4: "CONSUMPTION", 5: "CONSUMPTION", 6: "CONSUMPTION", 7: "CONSUMPTION",
 				8: "CONSUMPTION", 9: "CONSUMPTION", 10: "CONSUMPTION", 11: "CONSUMPTION", 12: "CONSUMPTION", 13: "CONSUMPTION",

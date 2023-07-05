@@ -45,14 +45,13 @@ func (rsm RawSourceMeta) Copy() RawSourceMeta {
 CounterPointMeta describe the raw data source in db. Be aware, the meta data are just applicable for one year.
 */
 type CounterPointMeta struct {
-	ID   string `bow:"key" json:"id"`    // Usually, the Id represents Table-Type and Year (e.g. cpmeta/2021)
-	Name string `bow:"name" json:"name"` // Counterpoint name (e.g. ZPxxxxxxxxZaehlpunktxx)
-	//	Idx         int    `bow:"idx" json:"idx"`                  // Index of rawdata array in excel (Just needed for manual excel/csv import)
-	SourceIdx   int    `bow:"srcIdx" json:"sourceIdx"`         // Index of rawdata array in db
-	Dir         string `bow:"dir" json:"dir"`                  // Direction of consumption (GENERATOR or. CONSUMER)
-	Count       uint16 `bow:"count" json:"count"`              // Number of measurements
-	PeriodStart string `bow:"periodstart" json:"period_start"` // Period Start
-	PeriodEnd   string `bow:"periodend" json:"period_end"`     // Period End
+	ID          string         `bow:"key" json:"id"`                   // Usually, the Id represents Table-Type and Year (e.g. cpmeta/2021)
+	Name        string         `bow:"name" json:"name"`                // Counterpoint name (e.g. ZPxxxxxxxxZaehlpunktxx)
+	SourceIdx   int            `bow:"srcIdx" json:"sourceIdx"`         // Index of rawdata array in db
+	Dir         MeterDirection `bow:"dir" json:"dir"`                  // Direction of consumption (GENERATOR or. CONSUMER)
+	Count       uint16         `bow:"count" json:"count"`              // Number of measurements
+	PeriodStart string         `bow:"periodstart" json:"period_start"` // Period Start
+	PeriodEnd   string         `bow:"periodend" json:"period_end"`     // Period End
 }
 
 type CounterPointMetaInfo struct {

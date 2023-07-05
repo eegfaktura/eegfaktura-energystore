@@ -40,7 +40,7 @@ func GetConsumerMetaMap(db *BowStorage) (map[string]*model.CounterPointMeta, err
 	return metaMap, nil
 }
 
-func GetMetaInfoMap(db *BowStorage, meterpoint, direction string) (map[string]*model.CounterPointMeta, *model.CounterPointMetaInfo, error) {
+func GetMetaInfoMap(db *BowStorage, meterpoint string, direction model.MeterDirection) (map[string]*model.CounterPointMeta, *model.CounterPointMetaInfo, error) {
 	modified := false
 	meta, err := GetMetaMap(db)
 	if err != nil {

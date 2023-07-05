@@ -27,32 +27,6 @@ func (r *queryResolver) LastEnergyDate(ctx context.Context, tenant string) (stri
 	return services.GetLastEnergyEntry(tenant)
 }
 
-// Eeg is the resolver for the eeg field.
-func (r *queryResolver) Eeg(ctx context.Context, name string, year int, month *int, function *string) (*model.EegEnergy, error) {
-	var err error
-	energy := &model.EegEnergy{}
-
-	var fc string
-	if function == nil {
-		fc = ""
-	} else {
-		fc = *function
-	}
-
-	var m int
-	if month == nil {
-		m = 0
-	} else {
-		m = *month
-	}
-
-	if energy, err = calculation.EnergyDashboard(name, fc, year, m); err != nil {
-		return energy, err
-	}
-
-	return energy, nil
-}
-
 // Report is the resolver for the report field.
 func (r *queryResolver) Report(ctx context.Context, tenant string, year int, segment int, period string) (*model.EegEnergy, error) {
 	var err error

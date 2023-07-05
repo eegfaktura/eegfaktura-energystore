@@ -1,7 +1,6 @@
 package excel
 
 import (
-	"at.ourproject/energystore/calculation"
 	"at.ourproject/energystore/store"
 	"errors"
 	"fmt"
@@ -33,16 +32,9 @@ func ImportEEG(db *store.BowStorage, r io.Reader, filename, sheet, tenant string
 		if f, err := OpenReader(r, filename); err == nil {
 			defer f.Close()
 			var err error
-			var yearSet []int
-			if yearSet, err = ImportExcelEnergyFile(f, sheet, db); err != nil {
+			if _, err = ImportExcelEnergyFile(f, sheet, db); err != nil {
 				glog.Infof("Import Execl Error: %v\n", err)
 				return err
-			}
-			for _, k := range yearSet {
-				err = calculation.CalculateMonthlyDash(db, fmt.Sprintf("%d", k), calculation.CalculateEEG)
-				if err != nil {
-					return err
-				}
 			}
 			return nil
 		}

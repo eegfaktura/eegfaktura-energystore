@@ -51,7 +51,7 @@ const (
 
 type excelHeader struct {
 	meteringPointId map[int]string
-	energyDirection map[int]string
+	energyDirection map[int]model.MeterDirection
 	periodStart     map[int]string
 	periodEnd       map[int]string
 	meterCode       map[int]MeterCodeType
@@ -103,9 +103,9 @@ func ImportExcelEnergyFile(f *excelize.File, sheet string, db *store.BowStorage)
 			case "Spaltensumme", "Metering Interval", "Name", "MeteringReason", "Number of Metering Intervals":
 				continue
 			case "Energy direction":
-				excelHeader.energyDirection = make(map[int]string, len(cols)-1)
+				excelHeader.energyDirection = make(map[int]model.MeterDirection, len(cols)-1)
 				for i, c := range cols[1:] {
-					excelHeader.energyDirection[i] = c
+					excelHeader.energyDirection[i] = model.MeterDirection(c)
 				}
 			case "Period end":
 				excelHeader.periodEnd = make(map[int]string, len(cols)-1)
@@ -430,6 +430,10 @@ func convertExcelMeterCode(code MeterCodeType) string {
 func isDate(cell string) bool {
 	if len(cell) > 0 {
 		if numberPattern.MatchString(cell) {
+			return true
+		}
+
+		if dateLine.MatchString(cell) {
 			return true
 		}
 	}

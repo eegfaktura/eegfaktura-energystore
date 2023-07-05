@@ -125,6 +125,17 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 						End:   timeV2.UnixMilli(),
 						Data: []model.MqttEnergyData{
 							model.MqttEnergyData{
+								MeterCode: "1-1:2.9.0 P.01",
+								Value: []model.MqttEnergyValue{
+									model.MqttEnergyValue{
+										From:   timeV1.UnixMilli(),
+										To:     timeV2.UnixMilli(),
+										Method: "",
+										Value:  0.11,
+									},
+								},
+							},
+							model.MqttEnergyData{
 								MeterCode: "1-1:1.9.0 G.01",
 								Value: []model.MqttEnergyValue{
 									model.MqttEnergyValue{
@@ -157,7 +168,18 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 						End:   timeV2.UnixMilli(),
 						Data: []model.MqttEnergyData{
 							model.MqttEnergyData{
-								MeterCode: "1-1:2.9.0 G.01",
+								MeterCode: "1-1:2.9.0 P.01",
+								Value: []model.MqttEnergyValue{
+									model.MqttEnergyValue{
+										From:   timeV1.UnixMilli(),
+										To:     timeV2.UnixMilli(),
+										Method: "",
+										Value:  20.1,
+									},
+								},
+							},
+							model.MqttEnergyData{
+								MeterCode: "1-1:1.9.0 G.01",
 								Value: []model.MqttEnergyValue{
 									model.MqttEnergyValue{
 										From:   timeV1.UnixMilli(),
@@ -217,17 +239,17 @@ func TestImportRawdataStore(t *testing.T) {
 	err = importEnergy("rc100190", rawData)
 	require.NoError(t, err)
 
-	db, err := store.OpenStorageTest("rc100190", "../test/rawdata")
-	require.NoError(t, err)
-	defer db.Close()
+	//db, err := store.OpenStorageTest("rc100190", "../test/rawdata")
+	//require.NoError(t, err)
+	//defer db.Close()
+	//
+	//it, err := db.GetMeta("cpmeta/0")
+	//for i, v := range it.CounterPoints {
+	//	fmt.Printf("[%d]: %+v\n", i, v)
+	//}
+	//db.Close()
 
-	it, err := db.GetMeta("cpmeta/0")
-	for i, v := range it.CounterPoints {
-		fmt.Printf("[%d]: %+v\n", i, v)
-	}
-	db.Close()
-
-	energy, err := EnergyDashboard("rc100190", "", 2023, 3)
+	energy, err := EnergyReport("rc100190", 2023, 3, "YM")
 	require.NoError(t, err)
 
 	response, err := json.Marshal(energy)
@@ -251,17 +273,17 @@ func TestRCRawdataStore(t *testing.T) {
 	err = importEnergy("rc100181", rawData)
 	require.NoError(t, err)
 
-	db, err := store.OpenStorageTest("rc100181", "../../../rawdata")
-	require.NoError(t, err)
-	defer db.Close()
+	//db, err := store.OpenStorageTest("rc100181", "../../../rawdata")
+	//require.NoError(t, err)
+	//defer db.Close()
+	//
+	//it, err := db.GetMeta("cpmeta/0")
+	//for i, v := range it.CounterPoints {
+	//	fmt.Printf("[%d]: %+v\n", i, v)
+	//}
+	//db.Close()
 
-	it, err := db.GetMeta("cpmeta/0")
-	for i, v := range it.CounterPoints {
-		fmt.Printf("[%d]: %+v\n", i, v)
-	}
-	db.Close()
-
-	energy, err := EnergyDashboard("rc100181", "", 2023, 3)
+	energy, err := EnergyReport("rc100181", 2023, 3, "YM")
 	require.NoError(t, err)
 
 	response, err := json.Marshal(energy)

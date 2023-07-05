@@ -51,6 +51,9 @@ func (ra *Range) Next(result interface{}) bool {
 	}
 	item := ra.it.Item()
 	ik := item.Key()
+	if len(ik) < len(ra.until) {
+		return false
+	}
 	if bytes.Compare(ra.until, ik[:len(ra.until)]) < 0 {
 		ra.Close()
 		return false

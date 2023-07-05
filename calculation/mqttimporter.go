@@ -69,7 +69,7 @@ func decodeMessage(msg []byte) *model.MqttEnergyResponse {
 	m := model.MqttEnergyResponse{}
 	err := json.Unmarshal(msg, &m)
 	if err != nil {
-		println(err.Error())
+		glog.Errorf("Error decoding MQTT message. %s", err.Error())
 		return nil
 	}
 	return &m
@@ -84,7 +84,7 @@ func importEnergy(tenant string, data *model.MqttEnergyResponse) error {
 	}
 	defer func() { db.Close() }()
 
-	defaultDirection := utils.DetermineDirection(data.Message.Meter.MeteringPoint)
+	defaultDirection := utils.ExamineDirection(data.Message.Energy.Data)
 
 	var consumerCount int
 	var producerCount int
@@ -144,7 +144,7 @@ func importEnergy(tenant string, data *model.MqttEnergyResponse) error {
 	for _, v := range meterCodeMeta {
 		updated, err = importEnergyValues(v, data.Message.Energy, metaCP, &year, consumerCount, producerCount, resources, determineMeta)
 		for _, sl := range updated {
-			glog.V(3).Infof("Update Source Line %+v", sl)
+			glog.V(4).Infof("Update Source Line %+v", sl)
 		}
 		// Store updated RawDataStructure
 		glog.Infof("Update CP %s energy values (%d) from %s to %s",
@@ -163,11 +163,11 @@ func importEnergy(tenant string, data *model.MqttEnergyResponse) error {
 		err = updateMeta(db, metaCP, data.Message.Meter.MeteringPoint)
 	}
 
-	for _, y := range years {
-		if err = CalculateMonthlyDash(db, fmt.Sprintf("%d", y), CalculateEEG); err != nil {
-			return err
-		}
-	}
+	//for _, y := range years {
+	//	if err = CalculateMonthlyDash(db, fmt.Sprintf("%d", y), CalculateEEG); err != nil {
+	//		return err
+	//	}
+	//}
 	return nil
 }
 

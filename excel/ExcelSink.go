@@ -306,7 +306,7 @@ func generateEnergyDataSheet(db *store.BowStorage, f *excelize.File, start, end 
 			})...))
 	//line := map[string][]float64{}
 	lineNum := 0
-	for g1Ok && g2Ok {
+	for g1Ok && g2Ok && g3Ok {
 		lineNum = lineNum + 1
 		lineDate, err := utils.ConvertRowIdToTimeString("CP-G.01", _lineG1.Id)
 		if err != nil {

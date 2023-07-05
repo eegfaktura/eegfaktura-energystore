@@ -20,7 +20,7 @@ func NewRestServer() *mux.Router {
 	jwtWrapper := middleware.JWTMiddleware(viper.GetString("jwt.pubKeyFile"))
 	r := mux.NewRouter()
 	//s := r.PathPrefix("/rest").Subrouter()
-	r.HandleFunc("/eeg/{year}/{month}", jwtWrapper(fetchEnergy())).Methods("GET")
+	//r.HandleFunc("/eeg/{year}/{month}", jwtWrapper(fetchEnergy())).Methods("GET")
 	r.HandleFunc("/eeg/report", jwtWrapper(fetchEnergyReport())).Methods("POST")
 	r.HandleFunc("/eeg/lastRecordDate", jwtWrapper(lastRecordDate())).Methods("GET")
 	r.HandleFunc("/eeg/excel/export/{year}/{month}", jwtWrapper(exportMeteringData())).Methods("POST")
@@ -39,32 +39,35 @@ func getHello(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, http.StatusOK, map[string]interface{}{"sepp": "hello"})
 }
 
-func fetchEnergy() middleware.JWTHandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request, claims *middleware.PlatformClaims, tenant string) {
-		var err error
-		var year, month int
-		vars := mux.Vars(r)
-		energy := &model.EegEnergy{}
+// fetchEnergy Rest endpoint retrieve energy values of requested participant and period pattern.
+// Peroid pattern just year and month
+//func fetchEnergy() middleware.JWTHandlerFunc {
+//	return func(w http.ResponseWriter, r *http.Request, claims *middleware.PlatformClaims, tenant string) {
+//		var err error
+//		var year, month int
+//		vars := mux.Vars(r)
+//		energy := &model.EegEnergy{}
+//
+//		fc := ""
+//		year, err = strconv.Atoi(vars["year"])
+//		month, err = strconv.Atoi(vars["month"])
+//
+//		glog.V(4).Infof("FETCH DASHBOARD: %+v %+v (%v/%v)", tenant, claims, year, month)
+//
+//		if energy, err = calculation.EnergyDashboard(tenant, fc, year, month); err != nil {
+//			respondWithError(w, http.StatusInternalServerError, err.Error())
+//			return
+//		}
+//
+//		resp := struct {
+//			Eeg *model.EegEnergy `json:"eeg"`
+//		}{Eeg: energy}
+//
+//		respondWithJSON(w, http.StatusOK, &resp)
+//	}
+//}
 
-		fc := ""
-		year, err = strconv.Atoi(vars["year"])
-		month, err = strconv.Atoi(vars["month"])
-
-		glog.V(4).Infof("FETCH DASHBOARD: %+v %+v (%v/%v)", tenant, claims, year, month)
-
-		if energy, err = calculation.EnergyDashboard(tenant, fc, year, month); err != nil {
-			respondWithError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-
-		resp := struct {
-			Eeg *model.EegEnergy `json:"eeg"`
-		}{Eeg: energy}
-
-		respondWithJSON(w, http.StatusOK, &resp)
-	}
-}
-
+// fetchEnergyReport Rest endpoint retrieve energy values of requested participant and period pattern.
 func fetchEnergyReport() middleware.JWTHandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request, claims *middleware.PlatformClaims, tenant string) {
 		energy := &model.EegEnergy{}
@@ -138,6 +141,10 @@ func exportReport() middleware.JWTHandlerFunc {
 		}
 
 		b, err := excel.CreateExcelFile(tenant, time.UnixMilli(cps.Start), time.UnixMilli(cps.End), &cps)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		w.Header().Set("Content-type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 		w.Header().Set("Content-Disposition", `attachment; filename="myfile.xlsx"`)
 		w.Header().Set("filename", fmt.Sprintf("%s-Energy-Report-%s_%s",

@@ -10,7 +10,7 @@ import (
 func TestCalcHourSum(t *testing.T) {
 	db, err := store.OpenStorageTest("dashboard", "../../../rawdata")
 	require.Nil(t, err)
-	defer func() { _ = db.Close() }()
+	defer db.Close()
 
 	rCons, rProd := CalcHourSum(db, "2021/04/18")
 

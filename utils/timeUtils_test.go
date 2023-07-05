@@ -29,7 +29,7 @@ func TestGetMonthDurationDec(t *testing.T) {
 }
 
 func TestParseTime(t *testing.T) {
-	expectedTime := time.Date(2022, time.April, 18, 0, 0, 0, 0, time.UTC)
+	expectedTime := time.Date(2022, time.April, 18, 0, 0, 0, 0, time.Local)
 	strTime := "18.04.2022 00:00:00"
 	d, err := ParseTime(strTime)
 	assert.NoError(t, err)
