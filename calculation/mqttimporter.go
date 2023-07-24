@@ -53,7 +53,7 @@ func (mw *MqttEnergyImporter) process() {
 		select {
 		case msg := <-mw.msgChan:
 			glog.Infof("Execute Energy Data Message for Topic (%v)\n", msg.tenant)
-			err := importEnergy(msg.tenant, msg.data)
+			err := importEnergyV2(msg.tenant, msg.data)
 			if err != nil {
 				glog.Error(err)
 			}
@@ -73,6 +73,119 @@ func decodeMessage(msg []byte) *model.MqttEnergyResponse {
 		return nil
 	}
 	return &m
+}
+
+func importEnergyV2(tenant string, data *model.MqttEnergyResponse) error {
+	// GetMetaData from tenant
+
+	db, err := store.OpenStorage(tenant)
+	if err != nil {
+		return err
+	}
+	defer func() { db.Close() }()
+
+	defaultDirection := utils.ExamineDirection(data.Message.Energy.Data)
+
+	var consumerCount int
+	var producerCount int
+	var metaCP *model.CounterPointMeta
+
+	determineMeta := func() error {
+		meta, info, err := store.GetMetaInfoMap(db, data.Message.Meter.MeteringPoint, defaultDirection)
+		if err != nil {
+			return err
+		}
+
+		consumerCount = info.ConsumerCount
+		producerCount = info.ProducerCount
+
+		metaCP = meta[data.Message.Meter.MeteringPoint]
+		return nil
+	}
+
+	//// GetRawDataStructur from Period xxxx -> yyyy
+	if err := determineMeta(); err != nil {
+		return err
+	}
+
+	meterCodeMeta := map[string]*model.MeterCodeMeta{}
+	for i, d := range data.Message.Energy.Data {
+		if meterMeta := utils.DecodeMeterCode(d.MeterCode, i); meterMeta != nil {
+			meterCodeMeta[meterMeta.Type] = meterMeta
+		}
+	}
+
+	var resources map[string]*model.RawSourceLine = map[string]*model.RawSourceLine{}
+	begin := time.UnixMilli(data.Message.Energy.Start)
+	end := time.UnixMilli(data.Message.Energy.End)
+	fetchSourceRange(db, "CP", begin, end, resources)
+
+	///
+	for _, v := range meterCodeMeta {
+		resources, err = importEnergyValuesV2(v, data.Message.Energy, metaCP, consumerCount, producerCount, resources)
+		// Store updated RawDataStructure
+		glog.Infof("Update CP %s energy values (%d) from %s to %s",
+			data.Message.Meter.MeteringPoint,
+			len(resources),
+			time.UnixMilli(data.Message.Energy.Start).Format(time.RFC822),
+			time.UnixMilli(data.Message.Energy.End).Format(time.RFC822))
+		if err != nil {
+			return err
+		}
+	}
+	///
+
+	updated := make([]*model.RawSourceLine, len(resources))
+	i := 0
+	for _, v := range resources {
+		updated[i] = v
+		i += 1
+
+		glog.V(4).Infof("Update Source Line %+v", v)
+	}
+
+	err = db.SetLines(updated)
+
+	if c := updateMetaCP(metaCP, time.UnixMilli(data.Message.Energy.Start), time.UnixMilli(data.Message.Energy.End)); c {
+		err = updateMeta(db, metaCP, data.Message.Meter.MeteringPoint)
+	}
+	return nil
+}
+
+func importEnergyValuesV2(
+	meterCode *model.MeterCodeMeta,
+	data model.MqttEnergy,
+	metaCP *model.CounterPointMeta,
+	consumerCount, producerCount int,
+	resources map[string]*model.RawSourceLine) (map[string]*model.RawSourceLine, error) {
+
+	sort.Slice(data.Data[meterCode.SourceInData].Value, func(i, j int) bool {
+		a := time.UnixMilli(data.Data[0].Value[i].From)
+		b := time.UnixMilli(data.Data[0].Value[j].From)
+		return a.Unix() < b.Unix()
+	})
+
+	var tablePrefix = "CP/"
+	for _, v := range data.Data[meterCode.SourceInData].Value {
+		id, err := utils.ConvertUnixTimeToRowId(tablePrefix, time.UnixMilli(v.From))
+		if err != nil {
+			return resources, err
+		}
+		_, ok := resources[id]
+		if !ok {
+			resources[id] = model.MakeRawSourceLine(id, consumerCount, producerCount) //&model.RawSourceLine{Id: id, Consumers: make([]float64, consumerCount), Producers: make([]float64, producerCount)}
+		}
+
+		switch metaCP.Dir {
+		case model.CONSUMER_DIRECTION:
+			resources[id].Consumers = utils.Insert(resources[id].Consumers, (metaCP.SourceIdx*3)+meterCode.SourceDelta, v.Value)
+			resources[id].QoVConsumers = utils.InsertInt(resources[id].QoVConsumers, (metaCP.SourceIdx*3)+meterCode.SourceDelta, utils.CastQoVStringToInt(v.Method))
+		case model.PRODUCER_DIRECTION:
+			resources[id].Producers = utils.Insert(resources[id].Producers, (metaCP.SourceIdx*2)+meterCode.SourceDelta, v.Value)
+			resources[id].QoVProducers = utils.InsertInt(resources[id].QoVProducers, (metaCP.SourceIdx*3)+meterCode.SourceDelta, utils.CastQoVStringToInt(v.Method))
+		}
+	}
+	return resources, nil
 }
 
 func importEnergy(tenant string, data *model.MqttEnergyResponse) error {
@@ -104,7 +217,6 @@ func importEnergy(tenant string, data *model.MqttEnergyResponse) error {
 	}
 
 	//// GetRawDataStructur from Period xxxx -> yyyy
-	var resources map[string]*model.RawSourceLine = map[string]*model.RawSourceLine{}
 
 	begin := time.UnixMilli(data.Message.Energy.Start)
 	end := time.UnixMilli(data.Message.Energy.End)
@@ -124,6 +236,7 @@ func importEnergy(tenant string, data *model.MqttEnergyResponse) error {
 		}
 	}
 
+	var resources map[string]*model.RawSourceLine = map[string]*model.RawSourceLine{}
 	y := year
 	years := []int{year}
 	for i := 0; i < duration; i++ {
@@ -223,6 +336,20 @@ func importEnergyValues(
 func fetchSource(db *store.BowStorage, key string, resources map[string]*model.RawSourceLine) {
 	var _line model.RawSourceLine
 	iter := db.GetLinePrefix(key)
+	for iter.Next(&_line) {
+		l := _line.Copy(len(_line.Consumers))
+		resources[_line.Id] = &l
+	}
+}
+
+func fetchSourceRange(db *store.BowStorage, key string, start, end time.Time, resources map[string]*model.RawSourceLine) {
+	sYear, sMonth, sDay := start.Year(), int(start.Month()), start.Day()
+	eYear, eMonth, eDay := end.Year(), int(end.Month()), end.Day()
+
+	iter := db.GetLineRange(key, fmt.Sprintf("%.4d/%.2d/%.2d/", sYear, sMonth, sDay), fmt.Sprintf("%.4d/%.2d/%.2d/", eYear, eMonth, eDay))
+	defer iter.Close()
+
+	var _line model.RawSourceLine
 	for iter.Next(&_line) {
 		l := _line.Copy(len(_line.Consumers))
 		resources[_line.Id] = &l

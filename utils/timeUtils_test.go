@@ -3,6 +3,7 @@ package utils
 import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"testing"
 	"time"
 )
@@ -38,4 +39,11 @@ func TestParseTime(t *testing.T) {
 	fmt.Printf("Expected-Time: %v\n", expectedTime)
 
 	assert.Equal(t, d, expectedTime)
+}
+
+func TestConvertUnixTimeToRowId(t *testing.T) {
+	rowId, err := ConvertUnixTimeToRowId("CP/", time.UnixMilli(1688680800000).UTC())
+	require.NoError(t, err)
+
+	fmt.Printf("RowID: %v\n", rowId)
 }

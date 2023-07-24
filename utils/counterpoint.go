@@ -3,6 +3,7 @@ package utils
 import (
 	"at.ourproject/energystore/model"
 	"math"
+	"strings"
 )
 
 func DetermineDirection(meteringPoint string) model.MeterDirection {
@@ -55,6 +56,29 @@ var Insert = func(orig []float64, index int, value float64) []float64 {
 	return orig
 }
 
+var InsertInt = func(orig []int, index int, value int) []int {
+	l := len(orig)
+	if index >= l {
+		target := make([]int, index+1)
+		copy(target, orig)
+		orig = target
+	}
+	orig[index] = value
+	return orig
+}
+
+func CastQoVStringToInt(qov string) int {
+	switch strings.ToUpper(qov) {
+	case "L1":
+		return 1
+	case "L2":
+		return 2
+	case "L3":
+		return 3
+	}
+	return 0
+}
+
 func RoundFloat(val float64, precision uint) float64 {
 	ratio := math.Pow(10, float64(precision))
 	return math.Round(val*ratio) / ratio
@@ -91,4 +115,18 @@ func CountConsumerProducer(meta *model.RawSourceMeta) (int, int) {
 		}
 	}
 	return consumer, producer
+}
+
+func ConvertLineToMatrix(line *model.RawSourceLine) (*model.Matrix, *model.Matrix) {
+	lenConsumers := int(math.Max(float64(len(line.Consumers)-1), 1))
+	lenProducers := int(math.Max(float64(len(line.Producers)-1), 1))
+
+	rowConsumers := (lenConsumers + 3 - (lenConsumers % 3)) / 3
+	rowProducers := (lenProducers + 2 - (lenProducers % 2)) / 2
+
+	consumerMatrix := model.MakeMatrix(line.Consumers, rowConsumers, 3)
+	producerMatrix := model.MakeMatrix(line.Producers, rowProducers, 2)
+
+	return consumerMatrix, producerMatrix
+
 }

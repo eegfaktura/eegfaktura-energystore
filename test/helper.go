@@ -12,7 +12,7 @@ func ImportTestContent(t *testing.T, file, sheet string, db *store.BowStorage) (
 	require.NoError(t, err)
 	defer excelFile.Close()
 
-	yearSet, err = excel.ImportExcelEnergyFile(excelFile, sheet, db)
+	err = excel.ImportExcelEnergyFileNew(excelFile, sheet, db)
 	require.NoError(t, err)
 
 	return

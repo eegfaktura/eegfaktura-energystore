@@ -23,6 +23,8 @@ Return:
 type CalcHandler func(*store.BowStorage, string) (*model.Matrix, *model.Matrix, *model.Matrix, *model.Matrix, *model.Matrix, float64)
 type AllocationHandler func(*model.RawSourceLine) (*model.Matrix, *model.Matrix, *model.Matrix)
 
+type AllocationHandlerV2 func(*model.Matrix, *model.Matrix) (*model.Matrix, *model.Matrix, *model.Matrix)
+
 type ValueIterator interface {
 	Next(result interface{}) bool
 }
@@ -104,20 +106,32 @@ func CalculateEEG(db *store.BowStorage, period string) (*model.Matrix, *model.Ma
 	return rAlloc, rCons, rProd, rDist, rShar, pSum
 }
 
-func appendResults(line *model.RawSourceLine, allocFunc AllocationHandler, results *calcResults) error {
+func appendResults(line *model.RawSourceLine, allocFunc AllocationHandlerV2, results *calcResults) error {
 
-	m, s, p := allocFunc(line)
+	consumerMatrix, producerMatrix := utils.ConvertLineToMatrix(line)
+	m, s, p := allocFunc(consumerMatrix, producerMatrix)
+
+	consumerUnitMatix := model.MakeMatrix(make([]float64, 3), 3, 1)
+	consumerUnitMatix.SetElm(0, 0, 1)
+
+	producerUnitMatix := model.MakeMatrix(make([]float64, 2), 2, 1)
+	producerUnitMatix.SetElm(0, 0, 1)
+
+	consumed := model.Multiply(consumerMatrix, consumerUnitMatix)
+	produced := model.Multiply(producerMatrix, producerUnitMatix)
 
 	if results.rCons == nil {
 		results.rCons = model.NewCopiedMatrixFromElements(line.Consumers, len(line.Consumers), 1)
 	} else {
-		results.rCons.Add(model.MakeMatrix(line.Consumers, len(line.Consumers), 1))
+		//results.rCons.Add(model.MakeMatrix(line.Consumers, len(line.Consumers), 1))
+		results.rCons.Add(consumed)
 	}
 
 	if results.rProd == nil {
 		results.rProd = model.NewCopiedMatrixFromElements(line.Producers, len(line.Producers), 1)
 	} else {
-		results.rProd.Add(model.MakeMatrix(line.Producers, len(line.Producers), 1))
+		//results.rProd.Add(model.MakeMatrix(line.Producers, len(line.Producers), 1))
+		results.rProd.Add(produced)
 	}
 
 	if results.rAlloc == nil {
@@ -137,7 +151,7 @@ func appendResults(line *model.RawSourceLine, allocFunc AllocationHandler, resul
 	} else {
 		results.rShar.Add(s)
 	}
-	results.pSum += utils.Sum(line.Producers)
+	results.pSum += utils.Sum(produced.Elements)
 
 	return nil
 
@@ -189,14 +203,14 @@ func sumIntermediate(
 
 func calculateReport(iter ValueIterator,
 	metaInfo *model.CounterPointMetaInfo,
-	allocFunc AllocationHandler,
+	allocFunc AllocationHandlerV2,
 	reportId string,
 	switchIntermediate func(string) bool,
 	intermediateId func(string) string) ([]*model.EnergyReport, *model.EnergyReport, error) {
 
 	results := newCalcResult(metaInfo)
 	intermediate := newCalcResult(metaInfo)
-	defaultConsumerLen := metaInfo.ConsumerCount
+	defaultConsumerLen := metaInfo.ConsumerCount * 3
 
 	reportSeries := []*model.EnergyReport{}
 
@@ -256,8 +270,8 @@ func calculateReport(iter ValueIterator,
 		TotalProduced: results.pSum}, nil
 }
 
-func CalculateMonthlyPeriod(db *store.BowStorage, allocFunc AllocationHandler, year, month int) ([]*model.EnergyReport, *model.EnergyReport, error) {
-	rowPrefix := "CP-G.01"
+func CalculateMonthlyPeriod(db *store.BowStorage, allocFunc AllocationHandlerV2, year, month int) ([]*model.EnergyReport, *model.EnergyReport, error) {
+	rowPrefix := "CP"
 	_, metaInfo, err := store.GetMetaInfo(db)
 	if err != nil {
 		return []*model.EnergyReport{}, nil, err
@@ -284,8 +298,9 @@ func CalculateMonthlyPeriod(db *store.BowStorage, allocFunc AllocationHandler, y
 	)
 }
 
-func CalculateAnnualPeriod(db *store.BowStorage, allocFunc AllocationHandler, year int) ([]*model.EnergyReport, *model.EnergyReport, error) {
-	rowPrefix := "CP-G.01"
+func CalculateAnnualPeriod(db *store.BowStorage, allocFunc AllocationHandlerV2, year int) ([]*model.EnergyReport, *model.EnergyReport, error) {
+	//rowPrefix := "CP-G.01"
+	rowPrefix := "CP"
 	_, metaInfo, err := store.GetMetaInfo(db)
 	if err != nil {
 		return []*model.EnergyReport{}, nil, err
@@ -312,8 +327,8 @@ func CalculateAnnualPeriod(db *store.BowStorage, allocFunc AllocationHandler, ye
 	)
 }
 
-func CalculateBiAnnualPeriod(db *store.BowStorage, allocFunc AllocationHandler, year, segment int) ([]*model.EnergyReport, *model.EnergyReport, error) {
-	rowPrefix := "CP-G.01"
+func CalculateBiAnnualPeriod(db *store.BowStorage, allocFunc AllocationHandlerV2, year, segment int) ([]*model.EnergyReport, *model.EnergyReport, error) {
+	rowPrefix := "CP"
 	_, metaInfo, err := store.GetMetaInfo(db)
 	if err != nil {
 		return []*model.EnergyReport{}, nil, err
@@ -346,8 +361,8 @@ func CalculateBiAnnualPeriod(db *store.BowStorage, allocFunc AllocationHandler, 
 	)
 }
 
-func CalculateQuarterlyPeriod(db *store.BowStorage, allocFunc AllocationHandler, year, segment int) ([]*model.EnergyReport, *model.EnergyReport, error) {
-	rowPrefix := "CP-G.01"
+func CalculateQuarterlyPeriod(db *store.BowStorage, allocFunc AllocationHandlerV2, year, segment int) ([]*model.EnergyReport, *model.EnergyReport, error) {
+	rowPrefix := "CP"
 	_, metaInfo, err := store.GetMetaInfo(db)
 	if err != nil {
 		return []*model.EnergyReport{}, nil, err

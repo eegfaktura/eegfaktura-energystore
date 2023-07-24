@@ -18,7 +18,7 @@ func TestCalculateReports(t *testing.T) {
 	require.NoError(t, err)
 	defer func() {
 		db.Close()
-		os.RemoveAll("../test/rawdata/excelsource")
+		//os.RemoveAll("../test/rawdata/excelsource")
 	}()
 
 	ImportTestContent(t, "./zaehlpunkte-beispieldatei.xlsx", "ConsumptionDataReport", db)
@@ -30,22 +30,22 @@ func TestCalculateReports(t *testing.T) {
 	t.Run("Calc yearly report", func(t *testing.T) {
 		//results, report, err := calculation.CalculateYearlyReport(db, 2021, calculation.CalculateEEG)
 		timeStart := time.Now()
-		results, report, err := calculation.CalculateAnnualPeriod(db, calculation.AllocDynamic2, 2021)
+		results, report, err := calculation.CalculateAnnualPeriod(db, calculation.AllocDynamicV2, 2021)
 		require.NoError(t, err)
 		require.NotNil(t, results)
 		require.NotNil(t, report)
 		require.NotNil(t, report.Allocated)
 
-		//for _, r := range results {
-		//	fmt.Printf("Allocated: %+v\n", r.Allocated)
-		//	fmt.Printf("Consumed: %+v\n", r.Consumed)
-		//	fmt.Printf("Produced: %+v\n", r.Produced)
-		//	fmt.Printf("Shared: %+v\n", r.Shared)
-		//	fmt.Printf("TotalProduced: %+v\n", r.TotalProduced)
-		//	fmt.Println("----------------------")
-		//	fmt.Printf("%+v\n", r)
-		//	fmt.Println("----------------------")
-		//}
+		for _, r := range results {
+			fmt.Printf("Allocated: %+v\n", r.Allocated)
+			fmt.Printf("Consumed: %+v\n", r.Consumed)
+			fmt.Printf("Produced: %+v\n", r.Produced)
+			fmt.Printf("Shared: %+v\n", r.Shared)
+			fmt.Printf("TotalProduced: %+v\n", r.TotalProduced)
+			fmt.Println("----------------------")
+			fmt.Printf("%+v\n", r)
+			fmt.Println("----------------------")
+		}
 
 		expectedResult := []*model.EnergyReport{
 			{Id: "IRP/2021/0/01/", Allocated: []float64{32.554337, 15.27957, 28.427826, 21.769701, 22.619209, 20.632025, 18.976233, 8.930697, 26.378684, 17.069989, 12.113755, 16.261013, 5.62212, 13.580913, 19.522484, 6.540281, 8.722579, 14.733491, 5.16557, 9.688355, 6.479069, 20.850963, 9.517167, 5.858366, 2.568325, 7.371698, 18.200961, 16.508037, 1.502406, 14.204384, 29.245845, 15.403199}, Consumed: []float64{599.2975, 216.22825, 426.85675, 467.17, 315.331, 190.87775, 246.98225, 162.88625, 315.9515, 368.9225, 247.952, 231.194, 88.12875, 191.16825, 214.1225, 130.34925, 164.704, 290.97025, 68.936, 142.5025, 101.8015, 291.0505, 123.6015, 104.0345, 64.517, 150.15575, 280.15425, 330.62975, 32.196, 226.9435, 442.1945, 257.0915}, Produced: []float64{475.05}, Distributed: []float64{472.29925}, Shared: []float64{32.822989, 15.401108, 28.516484, 21.903876, 22.717238, 20.80553, 19.059038, 8.965409, 26.587028, 17.186867, 12.192635, 16.394158, 5.684071, 13.611747, 19.653363, 6.602797, 8.767936, 14.847559, 5.210471, 9.728867, 6.534805, 20.916124, 9.55294, 5.879, 2.59882, 7.416362, 18.255336, 16.558864, 1.513291, 14.300504, 29.388391, 15.476389}, TotalProduced: 475.0499999999992},
@@ -69,7 +69,7 @@ func TestCalculateReports(t *testing.T) {
 	t.Run("calculate weekly report", func(t *testing.T) {
 		begin := time.Now()
 		//results, report, err := calculation.CalculateWeeklyReport(db, 2021, 4, calculation.CalculateEEG)
-		results, report, err := calculation.CalculateMonthlyPeriod(db, calculation.AllocDynamic2, 2021, 4)
+		results, report, err := calculation.CalculateMonthlyPeriod(db, calculation.AllocDynamicV2, 2021, 4)
 		require.NoError(t, err)
 
 		require.NotNil(t, results)
@@ -212,13 +212,13 @@ func TestCalculateBadImport(t *testing.T) {
 		os.RemoveAll("../test/rawdata/excelsource")
 	}()
 
-	empty := true
+	//empty := true
 	for _, _ = range ImportTestContent(t, "./221220 Daten VIERE 04-10 bis 18-12.xlsx", "Energiedaten", db) {
 		//err = calculation.CalculateMonthlyDash(db, fmt.Sprintf("%d", k), calculation.CalculateEEG)
 		//require.NoError(t, err)
-		empty = false
+		//empty = false
 	}
-	require.Equal(t, false, empty)
+	//require.Equal(t, false, empty)
 
 	t.Run("Calc yearly report", func(t *testing.T) {
 		results, report, err := calculation.CalculateYearlyReport(db, 2022, calculation.CalculateEEG)

@@ -1,5 +1,7 @@
 package utils
 
+import "math"
+
 func Index(vs []string, t string) int {
 	for i, v := range vs {
 		if v == t {
@@ -55,4 +57,9 @@ func Sum(sl []float64) float64 {
 		sum += v
 	}
 	return sum
+}
+
+func RoundToFixed(value float64, precision uint) float64 {
+	ratio := math.Pow(10, float64(precision))
+	return math.Round(value*ratio) / ratio
 }

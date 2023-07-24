@@ -36,6 +36,9 @@ func MakeMatrix(Elements []float64, rows, cols int) *Matrix {
 	A.Cols = cols
 	A.step = cols
 	A.Elements = Elements
+
+	size := rows * cols
+	A.ensureSize(size - 1)
 	return A
 }
 
@@ -63,7 +66,9 @@ func (A *Matrix) GetElm(row int, col int) float64 {
 }
 
 func (A *Matrix) SetElm(row int, col int, v float64) {
-	A.Elements[row*A.step+col] = v
+	index := row*A.step + col
+	A.ensureSize(index)
+	A.Elements[index] = v
 }
 
 func (A *Matrix) RowSum() *Matrix {
@@ -84,6 +89,16 @@ func (A *Matrix) RowSum() *Matrix {
 	}
 
 	return result
+}
+
+func (A *Matrix) ensureSize(index int) {
+	if index >= len(A.Elements) {
+		newSize := index - (index % A.step) + A.step
+		target := make([]float64, newSize)
+		copy(target, A.Elements)
+		A.Elements = target
+		A.Rows = newSize / A.step
+	}
 }
 
 func (A *Matrix) diagonalCopy() []float64 {

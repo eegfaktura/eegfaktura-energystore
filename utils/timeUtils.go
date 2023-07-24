@@ -86,7 +86,7 @@ func DateToString(date time.Time) string {
 func StringToTime(date string) time.Time {
 	var d, m, y, hh, mm, ss int
 	if _, err := fmt.Sscanf(date, "%d.%d.%d %d:%d:%d", &d, &m, &y, &hh, &mm, &ss); err == nil {
-		return time.Date(y, time.Month(m), d, hh, mm, ss, 0, time.UTC)
+		return time.Date(y, time.Month(m), d, hh, mm, ss, 0, time.Local)
 	}
 	return time.Now()
 }

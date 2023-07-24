@@ -107,9 +107,9 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 				},
 			},
 			expected: func(t *testing.T, l *model.RawSourceLine) {
-				require.Equal(t, 2, len(l.Consumers))
+				require.Equal(t, 4, len(l.Consumers))
 				assert.Equal(t, 1.11, l.Consumers[0])
-				assert.Equal(t, 0.11, l.Consumers[1])
+				assert.Equal(t, 0.11, l.Consumers[3])
 			},
 		},
 		{
@@ -151,7 +151,7 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 				},
 			},
 			expected: func(t *testing.T, l *model.RawSourceLine) {
-				require.Equal(t, 1, len(l.Producers))
+				require.Equal(t, 2, len(l.Producers))
 				assert.Equal(t, 10.1, l.Producers[0])
 			},
 		},
@@ -194,9 +194,9 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 				},
 			},
 			expected: func(t *testing.T, l *model.RawSourceLine) {
-				require.Equal(t, 2, len(l.Producers))
+				require.Equal(t, 4, len(l.Producers))
 				assert.Equal(t, 10.1, l.Producers[0])
-				assert.Equal(t, 20.1, l.Producers[1])
+				assert.Equal(t, 20.1, l.Producers[2])
 			},
 		},
 	}
@@ -205,12 +205,12 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err = importEnergy("importer", tt.energy)
+			err = importEnergyV2("importer", tt.energy)
 			require.NoError(t, err)
 
 			db, err := store.OpenStorageTest("importer", "../test/rawdata")
 			require.NoError(t, err)
-			it := db.GetLinePrefix(fmt.Sprintf("CP-G.01/%s", "2022/10/24"))
+			it := db.GetLinePrefix(fmt.Sprintf("CP/%s", "2022/10/24"))
 			defer it.Close()
 			defer db.Close()
 
@@ -218,7 +218,7 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 
 			r := it.Next(&_line)
 			assert.Equal(t, true, r)
-			assert.Equal(t, "CP-G.01/2022/10/24/00/00/00", _line.Id)
+			assert.Equal(t, "CP/2022/10/24/00/00/00", _line.Id)
 			tt.expected(t, &_line)
 		})
 	}
@@ -230,64 +230,52 @@ func TestImportRawdataStore(t *testing.T) {
 
 	viper.Set("persistence.path", "../test/rawdata")
 
-	jsonRaw, err := os.ReadFile("../test/energy-respons-text.json")
+	jsonRaw, err := os.ReadFile("../test/energy-response-text.json")
 	require.NoError(t, err)
 
 	rawData := decodeMessage(jsonRaw)
 	require.NotNil(t, rawData)
 
-	err = importEnergy("rc100190", rawData)
+	err = importEnergyV2("te100190", rawData)
 	require.NoError(t, err)
 
-	//db, err := store.OpenStorageTest("rc100190", "../test/rawdata")
-	//require.NoError(t, err)
-	//defer db.Close()
-	//
-	//it, err := db.GetMeta("cpmeta/0")
-	//for i, v := range it.CounterPoints {
-	//	fmt.Printf("[%d]: %+v\n", i, v)
-	//}
-	//db.Close()
+	rawData.Message.Meter.MeteringPoint = "AT0030000000000000000000000381702"
+	err = importEnergyV2("te100190", rawData)
+	require.NoError(t, err)
 
-	energy, err := EnergyReport("rc100190", 2023, 3, "YM")
+	db, err := store.OpenStorageTest("te100190", "../test/rawdata")
+	require.NoError(t, err)
+
+	meta, err := db.GetMeta("cpmeta/0")
+	for i, v := range meta.CounterPoints {
+		fmt.Printf("[%d]: %+v\n", i, v)
+	}
+
+	it := db.GetLinePrefix("CP/")
+
+	line := model.RawSourceLine{}
+	lines := []*model.RawSourceLine{}
+	for it.Next(&line) {
+		_line := line.Copy(len(line.Consumers))
+		lines = append(lines, &_line)
+	}
+	it.Close()
+	db.Close()
+
+	require.Equal(t, 23*4, len(lines)) // one hour is missing from the test source file
+
+	energy, err := EnergyReport("te100190", 2023, 3, "YM")
 	require.NoError(t, err)
 
 	response, err := json.Marshal(energy)
 	require.NoError(t, err)
+
+	require.Equal(t, 2, len(energy.Report.Allocated))
+	require.Equal(t, 1.088021, energy.Report.Allocated[0])
+	require.Equal(t, 2, len(energy.Report.Consumed))
+	require.Equal(t, 5.388, energy.Report.Consumed[0])
 
 	fmt.Printf("META_DATA: %+v\n", string(response))
 
 	os.RemoveAll("../test/rawdata/rc100190")
-}
-
-func TestRCRawdataStore(t *testing.T) {
-
-	viper.Set("persistence.path", "../../../rawdata")
-
-	jsonRaw, err := os.ReadFile("../test/energy-respons-text.json")
-	require.NoError(t, err)
-
-	rawData := decodeMessage(jsonRaw)
-	require.NotNil(t, rawData)
-
-	err = importEnergy("rc100181", rawData)
-	require.NoError(t, err)
-
-	//db, err := store.OpenStorageTest("rc100181", "../../../rawdata")
-	//require.NoError(t, err)
-	//defer db.Close()
-	//
-	//it, err := db.GetMeta("cpmeta/0")
-	//for i, v := range it.CounterPoints {
-	//	fmt.Printf("[%d]: %+v\n", i, v)
-	//}
-	//db.Close()
-
-	energy, err := EnergyReport("rc100181", 2023, 3, "YM")
-	require.NoError(t, err)
-
-	response, err := json.Marshal(energy)
-	require.NoError(t, err)
-
-	fmt.Printf("META_DATA: %+v\n", string(response))
 }

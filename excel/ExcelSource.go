@@ -396,18 +396,25 @@ func returnFloat(c string) float64 {
 	return f
 }
 
+func returnMeterValue(cols []string, idx int) float64 {
+	if idx < 0 {
+		return 0
+	}
+	return returnFloat(cols[idx+1])
+}
+
 func returnMeterCode(c string) MeterCodeType {
 	switch {
 	case strings.Contains(c, "GESAMTVERBRAUCH"):
-		return Total
+		return Total // G1
 	case strings.Contains(c, "GESAMTE"):
-		return Total
+		return Total // G1
 	case strings.Contains(c, "ANTEIL"):
-		return Share
+		return Share // G2
 	case strings.Contains(c, "EIGENDECKUNG"):
-		return Coverage
+		return Coverage // G3
 	case strings.Contains(c, "ÜBERSCHUSSERZEUGUNG"):
-		return Profit
+		return Profit // G2
 	default:
 		return Bad
 	}

@@ -37,25 +37,25 @@ func EnergyReport(tenant string, year, segment int, periodCode string) (*model.E
 
 	switch code[1] {
 	case 'M':
-		results, report, err = CalculateMonthlyPeriod(db, AllocDynamic2, year, segment)
+		results, report, err = CalculateMonthlyPeriod(db, AllocDynamicV2, year, segment)
 		if err != nil {
 			return nil, err
 		}
 		break
 	case 'H':
-		results, report, err = CalculateBiAnnualPeriod(db, AllocDynamic2, year, segment)
+		results, report, err = CalculateBiAnnualPeriod(db, AllocDynamicV2, year, segment)
 		if err != nil {
 			return nil, err
 		}
 		break
 	case 'Q':
-		results, report, err = CalculateQuarterlyPeriod(db, AllocDynamic2, year, segment)
+		results, report, err = CalculateQuarterlyPeriod(db, AllocDynamicV2, year, segment)
 		if err != nil {
 			return nil, err
 		}
 		break
 	default:
-		results, report, err = CalculateAnnualPeriod(db, AllocDynamic2, year)
+		results, report, err = CalculateAnnualPeriod(db, AllocDynamicV2, year)
 		if err != nil {
 			return nil, err
 		}

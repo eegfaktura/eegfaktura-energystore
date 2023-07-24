@@ -51,8 +51,25 @@ func TestImportExcelEnergyFile(t *testing.T) {
 	require.NoError(t, err)
 	defer excelFile.Close()
 
-	_, err = ImportExcelEnergyFile(excelFile, "Energiedaten", db)
+	err = ImportExcelEnergyFileNew(excelFile, "Energiedaten", db)
 	require.NoError(t, err)
+
+	iter := db.GetLinePrefix("CP")
+	defer iter.Close()
+
+	var _line model.RawSourceLine
+	ok := iter.Next(&_line)
+	require.Equal(t, true, ok)
+
+	require.Equal(t, 84, len(_line.Consumers))
+	require.Equal(t, 12, len(_line.Producers))
+
+	fmt.Printf("Line Id: %s\n", _line.Id)
+	fmt.Printf("Consumer Len: %d\n", len(_line.Consumers))
+	fmt.Printf("Producer Len: %d\n", len(_line.Producers))
+	fmt.Printf("Consumer: %v\n", _line.Consumers)
+	fmt.Printf("Producer: %v\n", _line.Producers)
+
 	//for _, k := range yearSet {
 	//	err = calculation.CalculateMonthlyDash(db, fmt.Sprintf("%d", k), calculation.CalculateEEG)
 	//	require.NoError(t, err)

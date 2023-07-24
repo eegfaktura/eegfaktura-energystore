@@ -1,9 +1,11 @@
 package model
 
 type RawSourceLine struct {
-	Id        string    `bow:"key"`
-	Consumers []float64 `bow:"consumers"`
-	Producers []float64 `bow:"producers"`
+	Id           string    `bow:"key"`
+	Consumers    []float64 `bow:"consumers"`
+	Producers    []float64 `bow:"producers"`
+	QoVConsumers []int     `bow:"qovconsumers"`
+	QoVProducers []int     `bow:"qovproducers"`
 }
 
 func (c RawSourceLine) Copy(cLength int) RawSourceLine {
@@ -11,6 +13,21 @@ func (c RawSourceLine) Copy(cLength int) RawSourceLine {
 	copy(r.Consumers[:], c.Consumers[:])
 	copy(r.Producers[:], c.Producers[:])
 	return r
+}
+
+func MakeRawSourceLine(id string, consumerSize, producerSize int) *RawSourceLine {
+	return &RawSourceLine{Id: id,
+		Consumers: make([]float64, consumerSize), Producers: make([]float64, producerSize),
+		QoVConsumers: make([]int, consumerSize), QoVProducers: make([]int, consumerSize),
+	}
+}
+
+func CreateInitializedIntSlice(size int, initVal int) []int {
+	intSlice := make([]int, size)
+	for i, _ := range intSlice {
+		intSlice[i] = initVal
+	}
+	return intSlice
 }
 
 type EegEnergy struct {

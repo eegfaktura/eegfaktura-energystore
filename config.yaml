@@ -1,6 +1,6 @@
 
 persistence:
-  path: "../../rawdata"
+  path: "../../rawdata/converted"
 
 jwt:
   privKeyFile: "./zertifikat-key.pem"
