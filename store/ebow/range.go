@@ -6,6 +6,12 @@ import (
 	"runtime"
 )
 
+type IRange interface {
+	Next(result interface{}) bool
+	Close()
+	Err() error
+}
+
 type Range struct {
 	until      []byte
 	bucket     *Bucket

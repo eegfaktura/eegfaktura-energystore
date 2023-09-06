@@ -9,9 +9,17 @@ type RawSourceLine struct {
 }
 
 func (c RawSourceLine) Copy(cLength int) RawSourceLine {
-	r := RawSourceLine{Id: c.Id, Consumers: make([]float64, cLength), Producers: make([]float64, len(c.Producers))}
+	r := RawSourceLine{
+		Id:           c.Id,
+		Consumers:    make([]float64, cLength),
+		Producers:    make([]float64, len(c.Producers)),
+		QoVConsumers: make([]int, cLength),
+		QoVProducers: make([]int, len(c.Producers)),
+	}
 	copy(r.Consumers[:], c.Consumers[:])
 	copy(r.Producers[:], c.Producers[:])
+	copy(r.QoVConsumers[:], c.QoVConsumers[:])
+	copy(r.QoVProducers[:], c.QoVProducers[:])
 	return r
 }
 
@@ -28,6 +36,14 @@ func CreateInitializedIntSlice(size int, initVal int) []int {
 		intSlice[i] = initVal
 	}
 	return intSlice
+}
+
+func CreateInitializedBoolSlice(size int, initVal bool) []bool {
+	boolSlice := make([]bool, size)
+	for i, _ := range boolSlice {
+		boolSlice[i] = initVal
+	}
+	return boolSlice
 }
 
 type EegEnergy struct {

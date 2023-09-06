@@ -134,7 +134,7 @@ func ImportExcelEnergyFile(f *excelize.File, sheet string, db *store.BowStorage)
 					//
 					// Insert G1 values
 					//
-					rawData := &model.RawSourceLine{Consumers: []float64{}, Producers: []float64{}}
+					rawData := &model.RawSourceLine{Consumers: []float64{}, Producers: []float64{}, QoVConsumers: []int{}, QoVProducers: []int{}}
 					rawData.Id = fmt.Sprintf("CP-G.01/%d/%.2d/%.2d/%.2d/%.2d/%.2d", y, m, d, hh, mm, ss)
 					_ = db.GetLine(rawData)
 					for i := 0; i < len(excelCpMeta); i++ {
@@ -397,7 +397,7 @@ func returnFloat(c string) float64 {
 }
 
 func returnMeterValue(cols []string, idx int) float64 {
-	if idx < 0 {
+	if idx < 0 || len(cols) <= (idx+1) {
 		return 0
 	}
 	return returnFloat(cols[idx+1])

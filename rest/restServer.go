@@ -142,6 +142,7 @@ func exportReport() middleware.JWTHandlerFunc {
 
 		b, err := excel.CreateExcelFile(tenant, time.UnixMilli(cps.Start), time.UnixMilli(cps.End), &cps)
 		if err != nil {
+			glog.Errorf("Create Energy Export: %v", err.Error())
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

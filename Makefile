@@ -10,7 +10,7 @@ DOCKER=docker
 GOPATH := ${PWD}/..:${GOPATH}
 export GOPATH
 
-DOCKER_TAG=v0.2.0
+DOCKER_TAG=v0.1.0
 
 all: test build
 build:
@@ -27,7 +27,7 @@ run:
 docker-clean:
 	$(DOCKER) rmi ghcr.io/vfeeg-development/energy-store:$(DOCKER_TAG)
 
-docker: docker-clean
+docker:
 	$(DOCKER) build -t ghcr.io/vfeeg-development/energy-store:$(DOCKER_TAG) .
 
 push: docker

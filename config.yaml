@@ -10,7 +10,7 @@ mqtt:
   host: "localhost:1883"
   id: "edash-energystore-1"
   qos: 1
-  energySubscriptionTopic: "eda/response/energy/+"
-
+#  energySubscriptionTopic: "eda/response/energy/+"
+  energySubscriptionTopic: "eda/response/+/protocol/cr_msg"
 services:
   mail-server: "localhost:9090"

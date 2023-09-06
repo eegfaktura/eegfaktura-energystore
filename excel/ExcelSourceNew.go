@@ -3,6 +3,7 @@ package excel
 import (
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
+	"at.ourproject/energystore/utils"
 	"fmt"
 	"github.com/golang/glog"
 	"github.com/xuri/excelize/v2"
@@ -87,7 +88,7 @@ func ImportExcelEnergyFileNew(f *excelize.File, sheet string, db *store.BowStora
 					//
 					// Insert G1 values
 					//
-					rawData := &model.RawSourceLine{Consumers: []float64{}, Producers: []float64{}}
+					rawData := &model.RawSourceLine{Consumers: []float64{}, Producers: []float64{}, QoVConsumers: []int{}, QoVProducers: []int{}}
 					rawData.Id = fmt.Sprintf("CP/%d/%.2d/%.2d/%.2d/%.2d/%.2d", y, m, d, hh, mm, ss)
 					_ = db.GetLine(rawData)
 
@@ -100,14 +101,21 @@ func ImportExcelEnergyFileNew(f *excelize.File, sheet string, db *store.BowStora
 							consumerMatrix.SetElm(v.SourceIdx, 0, returnMeterValue(cols, v.Idx))
 							consumerMatrix.SetElm(v.SourceIdx, 1, returnMeterValue(cols, v.IdxG2))
 							consumerMatrix.SetElm(v.SourceIdx, 2, returnMeterValue(cols, v.IdxG3))
+							rawData.QoVConsumers = utils.InsertInt(rawData.QoVConsumers, v.SourceIdx*3, 1)
+							rawData.QoVConsumers = utils.InsertInt(rawData.QoVConsumers, (v.SourceIdx*3)+1, 1)
+							rawData.QoVConsumers = utils.InsertInt(rawData.QoVConsumers, (v.SourceIdx*3)+2, 1)
 							v.Count += 1
 						case "GENERATION":
 							producerMatrix.SetElm(v.SourceIdx, 0, returnMeterValue(cols, v.Idx))
 							producerMatrix.SetElm(v.SourceIdx, 1, returnMeterValue(cols, v.IdxG2))
+							rawData.QoVProducers = utils.InsertInt(rawData.QoVProducers, v.SourceIdx*2, 1)
+							rawData.QoVProducers = utils.InsertInt(rawData.QoVProducers, (v.SourceIdx*2)+1, 1)
 							v.Count += 1
 						}
 					}
-					rawDatas = append(rawDatas, &model.RawSourceLine{Id: rawData.Id, Consumers: consumerMatrix.Elements, Producers: producerMatrix.Elements})
+					rawDatas = append(rawDatas,
+						&model.RawSourceLine{Id: rawData.Id, Consumers: consumerMatrix.Elements, Producers: producerMatrix.Elements,
+							QoVConsumers: rawData.QoVConsumers, QoVProducers: rawData.QoVProducers})
 					rIdx += 1
 				} else {
 					s, e := f.GetCellStyle(sheet, cols[0])

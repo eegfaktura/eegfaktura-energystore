@@ -7,10 +7,12 @@ import (
 	"math"
 )
 
-func GetMetaMap(db *BowStorage) (map[string]*model.CounterPointMeta, error) {
+type MetaMapType map[string]*model.CounterPointMeta
+
+func GetMetaMap(db IBowStorage) (map[string]*model.CounterPointMeta, error) {
 	var err error
 	var meta *model.RawSourceMeta
-	if meta, err = db.GetMeta(fmt.Sprintf("cpmeta/%s", "0")); err != nil {
+	if meta, err = db.GetMeta("cpmeta/0"); err != nil {
 		if err != ebow.ErrNotFound {
 			return nil, err
 		}
@@ -97,7 +99,7 @@ func GetMetaInfoMap(db *BowStorage, meterpoint string, direction model.MeterDire
 	return meta, info, nil
 }
 
-func GetMetaInfo(db *BowStorage) (map[string]*model.CounterPointMeta, *model.CounterPointMetaInfo, error) {
+func GetMetaInfo(db IBowStorage) (map[string]*model.CounterPointMeta, *model.CounterPointMetaInfo, error) {
 	meta, err := GetMetaMap(db)
 	if err != nil {
 		return nil, nil, err

@@ -103,11 +103,11 @@ func DecodeMeterCode(meterCode model.MeterCodeValue, sourceIdx int) *model.Meter
 	return nil
 }
 
-func CountConsumerProducer(meta *model.RawSourceMeta) (int, int) {
+func CountConsumerProducer(meta []*model.CounterPointMeta) (int, int) {
 	consumer := 0
 	producer := 0
 
-	for _, m := range meta.CounterPoints {
+	for _, m := range meta {
 		if m.Dir == model.CONSUMER_DIRECTION {
 			consumer = consumer + 1
 		} else {

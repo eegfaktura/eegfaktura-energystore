@@ -44,30 +44,28 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 	require.NoError(t, err)
 	tests := []struct {
 		name     string
-		energy   *model.MqttEnergyResponse
+		energy   *model.MqttEnergyMessage
 		expected func(t *testing.T, l *model.RawSourceLine)
 	}{
 		{
 			name: "Insert New Energy Allocated",
-			energy: &model.MqttEnergyResponse{
-				Message: model.MqttEnergyMessage{
-					Meter: model.EnergyMeter{
-						MeteringPoint: "AT0030000000000000000000000000001",
-						Direction:     "",
-					},
-					Energy: model.MqttEnergy{
-						Start: timeV1.UnixMilli(),
-						End:   timeV2.UnixMilli(),
-						Data: []model.MqttEnergyData{
-							model.MqttEnergyData{
-								MeterCode: "1-1:1.9.0 G.01",
-								Value: []model.MqttEnergyValue{
-									model.MqttEnergyValue{
-										From:   timeV1.UnixMilli(),
-										To:     timeV2.UnixMilli(),
-										Method: "",
-										Value:  1.11,
-									},
+			energy: &model.MqttEnergyMessage{
+				Meter: model.EnergyMeter{
+					MeteringPoint: "AT0030000000000000000000000000001",
+					Direction:     "",
+				},
+				Energy: model.MqttEnergy{
+					Start: timeV1.UnixMilli(),
+					End:   timeV2.UnixMilli(),
+					Data: []model.MqttEnergyData{
+						model.MqttEnergyData{
+							MeterCode: "1-1:1.9.0 G.01",
+							Value: []model.MqttEnergyValue{
+								model.MqttEnergyValue{
+									From:   timeV1.UnixMilli(),
+									To:     timeV2.UnixMilli(),
+									Method: "",
+									Value:  1.11,
 								},
 							},
 						},
@@ -81,25 +79,23 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 		},
 		{
 			name: "Second Energy Consumer",
-			energy: &model.MqttEnergyResponse{
-				Message: model.MqttEnergyMessage{
-					Meter: model.EnergyMeter{
-						MeteringPoint: "AT0030000000000000000000000000002",
-						Direction:     "",
-					},
-					Energy: model.MqttEnergy{
-						Start: timeV1.UnixMilli(),
-						End:   timeV2.UnixMilli(),
-						Data: []model.MqttEnergyData{
-							model.MqttEnergyData{
-								MeterCode: "1-1:1.9.0 G.01",
-								Value: []model.MqttEnergyValue{
-									model.MqttEnergyValue{
-										From:   timeV1.UnixMilli(),
-										To:     timeV2.UnixMilli(),
-										Method: "",
-										Value:  0.11,
-									},
+			energy: &model.MqttEnergyMessage{
+				Meter: model.EnergyMeter{
+					MeteringPoint: "AT0030000000000000000000000000002",
+					Direction:     "",
+				},
+				Energy: model.MqttEnergy{
+					Start: timeV1.UnixMilli(),
+					End:   timeV2.UnixMilli(),
+					Data: []model.MqttEnergyData{
+						model.MqttEnergyData{
+							MeterCode: "1-1:1.9.0 G.01",
+							Value: []model.MqttEnergyValue{
+								model.MqttEnergyValue{
+									From:   timeV1.UnixMilli(),
+									To:     timeV2.UnixMilli(),
+									Method: "",
+									Value:  0.11,
 								},
 							},
 						},
@@ -114,36 +110,34 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 		},
 		{
 			name: "Insert Generator energy values",
-			energy: &model.MqttEnergyResponse{
-				Message: model.MqttEnergyMessage{
-					Meter: model.EnergyMeter{
-						MeteringPoint: "AT0030000000000000000000030000011",
-						Direction:     "",
-					},
-					Energy: model.MqttEnergy{
-						Start: timeV1.UnixMilli(),
-						End:   timeV2.UnixMilli(),
-						Data: []model.MqttEnergyData{
-							model.MqttEnergyData{
-								MeterCode: "1-1:2.9.0 P.01",
-								Value: []model.MqttEnergyValue{
-									model.MqttEnergyValue{
-										From:   timeV1.UnixMilli(),
-										To:     timeV2.UnixMilli(),
-										Method: "",
-										Value:  0.11,
-									},
+			energy: &model.MqttEnergyMessage{
+				Meter: model.EnergyMeter{
+					MeteringPoint: "AT0030000000000000000000030000011",
+					Direction:     "",
+				},
+				Energy: model.MqttEnergy{
+					Start: timeV1.UnixMilli(),
+					End:   timeV2.UnixMilli(),
+					Data: []model.MqttEnergyData{
+						model.MqttEnergyData{
+							MeterCode: "1-1:2.9.0 P.01",
+							Value: []model.MqttEnergyValue{
+								model.MqttEnergyValue{
+									From:   timeV1.UnixMilli(),
+									To:     timeV2.UnixMilli(),
+									Method: "",
+									Value:  0.11,
 								},
 							},
-							model.MqttEnergyData{
-								MeterCode: "1-1:1.9.0 G.01",
-								Value: []model.MqttEnergyValue{
-									model.MqttEnergyValue{
-										From:   timeV1.UnixMilli(),
-										To:     timeV2.UnixMilli(),
-										Method: "",
-										Value:  10.1,
-									},
+						},
+						model.MqttEnergyData{
+							MeterCode: "1-1:1.9.0 G.01",
+							Value: []model.MqttEnergyValue{
+								model.MqttEnergyValue{
+									From:   timeV1.UnixMilli(),
+									To:     timeV2.UnixMilli(),
+									Method: "",
+									Value:  10.1,
 								},
 							},
 						},
@@ -157,36 +151,34 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 		},
 		{
 			name: "Insert second Generator Allocated",
-			energy: &model.MqttEnergyResponse{
-				Message: model.MqttEnergyMessage{
-					Meter: model.EnergyMeter{
-						MeteringPoint: "AT0030000000000000000000030000010",
-						Direction:     "",
-					},
-					Energy: model.MqttEnergy{
-						Start: timeV1.UnixMilli(),
-						End:   timeV2.UnixMilli(),
-						Data: []model.MqttEnergyData{
-							model.MqttEnergyData{
-								MeterCode: "1-1:2.9.0 P.01",
-								Value: []model.MqttEnergyValue{
-									model.MqttEnergyValue{
-										From:   timeV1.UnixMilli(),
-										To:     timeV2.UnixMilli(),
-										Method: "",
-										Value:  20.1,
-									},
+			energy: &model.MqttEnergyMessage{
+				Meter: model.EnergyMeter{
+					MeteringPoint: "AT0030000000000000000000030000010",
+					Direction:     "",
+				},
+				Energy: model.MqttEnergy{
+					Start: timeV1.UnixMilli(),
+					End:   timeV2.UnixMilli(),
+					Data: []model.MqttEnergyData{
+						model.MqttEnergyData{
+							MeterCode: "1-1:2.9.0 P.01",
+							Value: []model.MqttEnergyValue{
+								model.MqttEnergyValue{
+									From:   timeV1.UnixMilli(),
+									To:     timeV2.UnixMilli(),
+									Method: "",
+									Value:  20.1,
 								},
 							},
-							model.MqttEnergyData{
-								MeterCode: "1-1:1.9.0 G.01",
-								Value: []model.MqttEnergyValue{
-									model.MqttEnergyValue{
-										From:   timeV1.UnixMilli(),
-										To:     timeV2.UnixMilli(),
-										Method: "",
-										Value:  20.1,
-									},
+						},
+						model.MqttEnergyData{
+							MeterCode: "1-1:1.9.0 G.01",
+							Value: []model.MqttEnergyValue{
+								model.MqttEnergyValue{
+									From:   timeV1.UnixMilli(),
+									To:     timeV2.UnixMilli(),
+									Method: "",
+									Value:  20.1,
 								},
 							},
 						},
@@ -239,7 +231,7 @@ func TestImportRawdataStore(t *testing.T) {
 	err = importEnergyV2("te100190", rawData)
 	require.NoError(t, err)
 
-	rawData.Message.Meter.MeteringPoint = "AT0030000000000000000000000381702"
+	rawData.Meter.MeteringPoint = "AT0030000000000000000000000381702"
 	err = importEnergyV2("te100190", rawData)
 	require.NoError(t, err)
 

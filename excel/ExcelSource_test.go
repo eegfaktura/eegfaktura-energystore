@@ -62,7 +62,12 @@ func TestImportExcelEnergyFile(t *testing.T) {
 	require.Equal(t, true, ok)
 
 	require.Equal(t, 84, len(_line.Consumers))
+	require.Equal(t, 84, len(_line.QoVConsumers))
+	require.ElementsMatch(t, _line.QoVConsumers, []int{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1})
+
 	require.Equal(t, 12, len(_line.Producers))
+	require.Equal(t, 12, len(_line.QoVProducers))
+	require.ElementsMatch(t, _line.QoVProducers, []int{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1})
 
 	fmt.Printf("Line Id: %s\n", _line.Id)
 	fmt.Printf("Consumer Len: %d\n", len(_line.Consumers))

@@ -14,7 +14,7 @@ type TopicType string
 func (t TopicType) Tenant() string {
 	elems := strings.Split(string(t), "/")
 	if len(elems) > 3 {
-		return strings.ToUpper(elems[3])
+		return strings.ToUpper(elems[2])
 	}
 	return ""
 }
@@ -33,6 +33,9 @@ func NewMqttStreamer() (*MQTTStreamer, error) {
 
 	opts.AddBroker(brokerHost)
 	opts.SetClientID(brokerId)
+	opts.SetProtocolVersion(4)
+	opts.SetAutoAckDisabled(false)
+	opts.SetCleanSession(true)
 
 	opts.SetOrderMatters(false)       // Allow out of order messages (use this option unless in order delivery is essential)
 	opts.ConnectTimeout = time.Second // Minimal delays on connect

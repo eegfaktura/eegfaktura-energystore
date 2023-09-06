@@ -66,12 +66,27 @@ func ConvertUnixTimeToRowId(prefix string, time time.Time) (string, error) {
 		time.Second()), nil
 }
 
-func ConvertRowIdToTimeString(prefix, rawId string) (string, error) {
+func ConvertRowIdToTimeString(prefix, rawId string) (string, *time.Time, error) {
 	var y, m, d, hh, mm, ss int
 	if _, err := fmt.Sscanf(rawId, fmt.Sprintf("%s/%%d/%%d/%%d/%%d/%%d/%%d", prefix), &y, &m, &d, &hh, &mm, &ss); err != nil {
-		return "", err
+		return "", nil, err
 	}
-	return fmt.Sprintf("%.2d.%.2d.%.4d %.2d:%.2d:00", d, m, y, hh, mm), nil
+	time := time.Date(y, time.Month(m), d, hh, mm, 0, 0, time.Local)
+	return fmt.Sprintf("%.2d.%.2d.%.4d %.2d:%.2d:00", d, m, y, hh, mm), &time, nil
+}
+
+func CheckTime(previousTime, currentTime *time.Time) bool {
+
+	if previousTime == nil || previousTime.Add(time.Minute*15) == *currentTime {
+		return true
+	}
+	return false
+}
+
+func ConvertTimeToStringExcel(t time.Time) string {
+	y, m, d := t.Date()
+	hh, mm := t.Hour(), t.Minute()
+	return fmt.Sprintf("%.2d.%.2d.%.4d %.2d:%.2d:00", d, m, y, hh, mm)
 }
 
 func ConvertDate(time time.Time) string {

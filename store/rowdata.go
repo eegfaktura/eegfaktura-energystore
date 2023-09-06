@@ -57,6 +57,11 @@ func (t *Turns) lock(name string) func() {
 	return l.Unlock
 }
 
+type IBowStorage interface {
+	GetMeta(key string) (*model.RawSourceMeta, error)
+	GetLineRange(bucket, key, until string) ebow.IRange
+}
+
 type BowStorage struct {
 	db     *ebow.DB
 	unlock func()
@@ -131,7 +136,7 @@ func (b *BowStorage) GetLinePrefix(key string) *ebow.Iter {
 	return b.db.Bucket("rawdata").Prefix(key)
 }
 
-func (b *BowStorage) GetLineRange(bucket, key, until string) *ebow.Range {
+func (b *BowStorage) GetLineRange(bucket, key, until string) ebow.IRange {
 	return b.db.Bucket("rawdata").Range(fmt.Sprintf("%s/%s", bucket, key), fmt.Sprintf("%s/%s", bucket, until))
 }
 
