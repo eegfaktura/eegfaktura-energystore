@@ -679,4 +679,100 @@ func TestBuildMatixMetaStruct(t *testing.T) {
 		expectedSourceIdx := []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 0}
 		require.ElementsMatch(t, expectedSourceIdx, currentSourceIdx)
 	})
+
+	t.Run("Initiate Metadata extended MM field", func(t *testing.T) {
+		db, err := store.OpenStorageTest("excelsource3", "../test/rawdata")
+		require.NoError(t, err)
+		defer func() {
+			db.Close()
+			os.RemoveAll("../test/rawdata/excelsource")
+		}()
+		header := excelHeader{
+			meteringPointId: map[int]string{
+				0:  "AT003000000000000000000Zaehlpkt01",
+				1:  "MM",
+				2:  "AT003000000000000000000Zaehlpkt01",
+				3:  "MM",
+				4:  "AT003000000000000000000Zaehlpkt01",
+				5:  "MM",
+				6:  "AT003000000000000000000Zaehlpkt02",
+				7:  "MM",
+				8:  "AT003000000000000000000Zaehlpkt02",
+				9:  "MM",
+				10: "AT003000000000000000000Zaehlpkt02",
+				11: "MM",
+				12: "TOTAL",
+				13: "TOTAL",
+				14: "TOTAL",
+			},
+			energyDirection: map[int]model.MeterDirection{
+				0: "CONSUMPTION", 1: "", 2: "CONSUMPTION", 3: "", 4: "CONSUMPTION", 5: "",
+				6: "CONSUMPTION", 7: "", 8: "CONSUMPTION", 9: "", 10: "CONSUMPTION", 11: "",
+			},
+			meterCode: map[int]MeterCodeType{
+				0:  Total,
+				1:  Bad,
+				2:  Share,
+				3:  Bad,
+				4:  Coverage,
+				5:  Bad,
+				6:  Total,
+				7:  Bad,
+				8:  Share,
+				9:  Bad,
+				10: Coverage,
+				11: Bad,
+			},
+			periodStart: map[int]string{
+				0: "01.01.2021 00:00:00", 1: "", 2: "01.01.2021 00:00:00", 3: "", 4: "01.01.2021 00:00:00", 5: "",
+				6: "01.01.2021 00:00:00", 7: "", 8: "01.01.2021 00:00:00", 9: "", 10: "01.01.2021 00:00:00", 11: "",
+			},
+			periodEnd: map[int]string{
+				0: "31.12.2021 00:00:00", 1: "", 2: "31.12.2021 00:00:00", 3: "", 4: "31.12.2021 00:00:00", 5: "",
+				6: "31.12.2021 00:00:00", 7: "", 8: "31.12.2021 00:00:00", 9: "", 10: "01.08.2021 00:00:00", 11: "",
+			},
+		}
+		excelCpMeta, cpMeta, err := buildMatrixMetaStruct(db, header)
+		require.NoError(t, err)
+		require.NotNil(t, cpMeta)
+		require.Equal(t, 2, len(cpMeta))
+		require.NotNil(t, excelCpMeta)
+		require.Equal(t, 2, len(excelCpMeta))
+
+		cConsuption := 0
+		cGeneration := 0
+		var currentIdx []int
+		currentSourceIdx := []int{}
+		consumptionIdx := []int{}
+		productionIdx := []int{}
+		for j := 0; j < len(excelCpMeta); j++ {
+			v := excelCpMeta[j]
+			if v.Dir == "CONSUMPTION" {
+				cConsuption += 1
+				consumptionIdx = append(consumptionIdx, v.Idx)
+			} else if v.Dir == "GENERATION" {
+				cGeneration += 1
+				productionIdx = append(productionIdx, v.Idx)
+			}
+			currentIdx = append(currentIdx, v.Idx)
+			currentSourceIdx = append(currentSourceIdx, v.SourceIdx)
+			fmt.Printf("Meta: %+v\n", v)
+		}
+
+		require.Equal(t, 0, cGeneration)
+		require.Equal(t, 2, cConsuption)
+
+		fmt.Printf("currentIdx: (%+v)\n", currentIdx)
+		fmt.Printf("currentSourceIdx: (%+v)\n", currentSourceIdx)
+		fmt.Printf("productionSourceIdx: (%+v)\n", productionIdx)
+
+		expectedIdx := []int{0, 6}
+		require.ElementsMatch(t, expectedIdx, currentIdx)
+		expectedSourceIdx := []int{0, 1}
+		require.ElementsMatch(t, expectedSourceIdx, currentSourceIdx)
+		for k, v := range excelCpMeta {
+			fmt.Printf("%+v: %+v\n", k, v)
+		}
+	})
+
 }

@@ -59,7 +59,10 @@ func (t *Turns) lock(name string) func() {
 
 type IBowStorage interface {
 	GetMeta(key string) (*model.RawSourceMeta, error)
+	SetMeta(line *model.RawSourceMeta) error
 	GetLineRange(bucket, key, until string) ebow.IRange
+	SetLines(line []*model.RawSourceLine) error
+	GetLine(line *model.RawSourceLine) error
 }
 
 type BowStorage struct {

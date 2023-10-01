@@ -4,6 +4,7 @@ import (
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
 	"at.ourproject/energystore/utils"
+	"errors"
 	"fmt"
 	"github.com/golang/glog"
 	"github.com/xuri/excelize/v2"
@@ -243,42 +244,54 @@ func ImportExcelEnergyFile(f *excelize.File, sheet string, db *store.BowStorage)
 	return years, nil
 }
 
-func buildMatrixMetaStruct(db *store.BowStorage, excelHeader excelHeader) (map[int]*excelCounterPointMeta, []*model.CounterPointMeta, error) {
+func buildMatrixMetaStruct(db store.IBowStorage, excelHeader excelHeader) (map[int]*excelCounterPointMeta, []*model.CounterPointMeta, error) {
 	glog.V(3).Info("Build Meta Matrix")
+
+	ensureMeteringPoint := func(meter string) (string, error) {
+		if len(meter) < 33 {
+			return "", errors.New("not a metercode")
+		}
+		return meter, nil
+	}
+
 	type pair struct {
 		key   string
 		value int
 		vG2   int
 		vG3   int
+		dir   model.MeterDirection
+		end   string
+		begin string
 	}
 	msSet := map[string]pair{}
 	meteringIdSet := map[string]int{}
 	for i := 0; i < len(excelHeader.meteringPointId); i++ {
 		if i < len(excelHeader.meterCode) {
-			v := excelHeader.meteringPointId[i]
-			if excelHeader.meterCode[i] == Total {
-				if _, ok := meteringIdSet[v]; !ok && strings.ToLower(v) != "total" {
-					meteringIdSet[v] = i
+			if v, err := ensureMeteringPoint(excelHeader.meteringPointId[i]); err == nil {
+				if excelHeader.meterCode[i] == Total {
+					if _, ok := meteringIdSet[v]; !ok && strings.ToLower(v) != "total" {
+						meteringIdSet[v] = i
+						if _ms, ok := msSet[v]; ok {
+							_ms.value = i
+							msSet[v] = _ms
+						} else {
+							msSet[v] = pair{v, i, -1, -1, excelHeader.energyDirection[i], excelHeader.periodEnd[i], excelHeader.periodStart[i]}
+						}
+					}
+				} else if strings.ToLower(v) != "total" && (excelHeader.meterCode[i] == Share || excelHeader.meterCode[i] == Profit) {
 					if _ms, ok := msSet[v]; ok {
-						_ms.value = i
+						_ms.vG2 = i
 						msSet[v] = _ms
 					} else {
-						msSet[v] = pair{v, i, -1, -1}
+						msSet[v] = pair{v, -1, i, -1, excelHeader.energyDirection[i], excelHeader.periodEnd[i], excelHeader.periodStart[i]}
 					}
-				}
-			} else if strings.ToLower(v) != "total" && (excelHeader.meterCode[i] == Share || excelHeader.meterCode[i] == Profit) {
-				if _ms, ok := msSet[v]; ok {
-					_ms.vG2 = i
-					msSet[v] = _ms
-				} else {
-					msSet[v] = pair{v, -1, i, -1}
-				}
-			} else if strings.ToLower(v) != "total" && excelHeader.meterCode[i] == Coverage {
-				if _ms, ok := msSet[v]; ok {
-					_ms.vG3 = i
-					msSet[v] = _ms
-				} else {
-					msSet[v] = pair{v, -1, -1, i}
+				} else if strings.ToLower(v) != "total" && excelHeader.meterCode[i] == Coverage {
+					if _ms, ok := msSet[v]; ok {
+						_ms.vG3 = i
+						msSet[v] = _ms
+					} else {
+						msSet[v] = pair{v, -1, -1, i, excelHeader.energyDirection[i], excelHeader.periodEnd[i], excelHeader.periodStart[i]}
+					}
 				}
 			}
 		}
@@ -304,7 +317,7 @@ func buildMatrixMetaStruct(db *store.BowStorage, excelHeader excelHeader) (map[i
 		_, ok := storedCpMeta[kv.key]
 		if !ok {
 			meterpoint := kv.key
-			switch excelHeader.energyDirection[kv.value] {
+			switch kv.dir {
 			case model.CONSUMER_DIRECTION:
 				metaInfo.ConsumerCount += 1
 				metaInfo.MaxConsumerIdx += 1
@@ -313,8 +326,8 @@ func buildMatrixMetaStruct(db *store.BowStorage, excelHeader excelHeader) (map[i
 					SourceIdx:   metaInfo.MaxConsumerIdx,
 					Name:        meterpoint,
 					Dir:         model.CONSUMER_DIRECTION,
-					PeriodStart: excelHeader.periodStart[kv.value],
-					PeriodEnd:   excelHeader.periodEnd[kv.value],
+					PeriodStart: kv.begin,
+					PeriodEnd:   kv.end,
 				}
 			case model.PRODUCER_DIRECTION:
 				metaInfo.ProducerCount += 1
@@ -324,26 +337,26 @@ func buildMatrixMetaStruct(db *store.BowStorage, excelHeader excelHeader) (map[i
 					SourceIdx:   metaInfo.MaxProducerIdx,
 					Name:        meterpoint,
 					Dir:         model.PRODUCER_DIRECTION,
-					PeriodStart: excelHeader.periodStart[kv.value],
-					PeriodEnd:   excelHeader.periodEnd[kv.value],
+					PeriodStart: kv.begin,
+					PeriodEnd:   kv.end,
 				}
 			}
 		}
 		storedMeta := storedCpMeta[kv.key]
 		nStoredPeriodEnd, _ := utils.ParseTime(storedMeta.PeriodEnd)
-		nExcelPeriodEnd, _ := utils.ParseTime(excelHeader.periodEnd[kv.value])
+		nExcelPeriodEnd, _ := utils.ParseTime(kv.end)
 		if nExcelPeriodEnd.Unix() > nStoredPeriodEnd.Unix() {
-			storedMeta.PeriodEnd = excelHeader.periodEnd[kv.value]
+			storedMeta.PeriodEnd = kv.end
 		}
 
 		nStoredPeriodStart, _ := utils.ParseTime(storedMeta.PeriodStart)
-		nExcelPeriodStart, _ := utils.ParseTime(excelHeader.periodStart[kv.value])
+		nExcelPeriodStart, _ := utils.ParseTime(kv.begin)
 		if nStoredPeriodStart.Unix() > nExcelPeriodStart.Unix() {
-			storedMeta.PeriodStart = excelHeader.periodStart[kv.value]
+			storedMeta.PeriodStart = kv.begin
 		}
 
 		excelCpMeta[i] = &excelCounterPointMeta{CounterPointMeta: storedMeta}
-		switch excelHeader.energyDirection[kv.value] {
+		switch kv.dir {
 		case model.PRODUCER_DIRECTION:
 			excelCpMeta[i].Idx = kv.value
 			excelCpMeta[i].IdxG2 = kv.vG2
@@ -448,13 +461,22 @@ func isDate(cell string) bool {
 	return false
 }
 
+func isDateString(cell string) bool {
+	if dateLine.MatchString(cell) {
+		return true
+	}
+	return false
+}
+
 func getExcelDate(cell string) (int, int, int, int, int, int) {
-	excelTime := parseExcelDate(cell)
+	excelTime := parseExcelDate(cell).Round(15 * time.Minute)
 	return excelTime.Day(), int(excelTime.Month()), excelTime.Year(), excelTime.Hour(), excelTime.Minute(), excelTime.Second()
 }
 
 func parseExcelDate(cell string) time.Time {
-	if isDate(cell) {
+	if isDateString(cell) {
+		return utils.StringToTime(cell)
+	} else {
 		var excelEpoch = time.Date(1899, time.December, 30, 0, 0, 0, 0, time.UTC)
 		var days, _ = strconv.ParseFloat(cell, 64)
 		return excelEpoch.Add(time.Second * time.Duration(days*86400))

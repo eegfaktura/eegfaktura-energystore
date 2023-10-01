@@ -27,7 +27,7 @@ run:
 docker-clean:
 	$(DOCKER) rmi ghcr.io/vfeeg-development/energy-store:$(DOCKER_TAG)
 
-docker:
+docker: docker-clean
 	$(DOCKER) build -t ghcr.io/vfeeg-development/energy-store:$(DOCKER_TAG) .
 
 push: docker

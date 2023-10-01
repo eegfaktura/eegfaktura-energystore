@@ -11,9 +11,9 @@ type RawSourceLine struct {
 func (c RawSourceLine) Copy(cLength int) RawSourceLine {
 	r := RawSourceLine{
 		Id:           c.Id,
-		Consumers:    make([]float64, cLength),
+		Consumers:    make([]float64, len(c.Consumers)),
 		Producers:    make([]float64, len(c.Producers)),
-		QoVConsumers: make([]int, cLength),
+		QoVConsumers: make([]int, len(c.Consumers)),
 		QoVProducers: make([]int, len(c.Producers)),
 	}
 	copy(r.Consumers[:], c.Consumers[:])
