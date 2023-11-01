@@ -28,10 +28,10 @@ func (R *Recort) RoundToFixed(precision uint) {
 
 type IntermediateRecord struct {
 	Id          string    `json:"id"`
-	Consumption []float64 `json:"consumption,omitempty"` // Consumption total energy consumption - value for CONSUMER
-	Utilization []float64 `json:"utilization,omitempty"` // Utilization energy used from the EEG  - value for CONSUMER
-	Allocation  []float64 `json:"allocation,omitempty"`  // Allocation calculated energy value that can be allocated to all participants - value for CONSUMER / GENERATOR
-	Production  []float64 `json:"production,omitempty"`  // Production total value of energy production - value for GENERATOR
+	Consumption []float64 `json:"consumption"` // Consumption total energy consumption - value for CONSUMER
+	Utilization []float64 `json:"utilization"` // Utilization energy used from the EEG  - value for CONSUMER
+	Allocation  []float64 `json:"allocation"`  // Allocation calculated energy value that can be allocated to all participants - value for CONSUMER / GENERATOR
+	Production  []float64 `json:"production"`  // Production total value of energy production - value for GENERATOR
 
 }
 

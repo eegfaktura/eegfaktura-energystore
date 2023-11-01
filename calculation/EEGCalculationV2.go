@@ -47,7 +47,17 @@ var ConvertToMeterMap = func(report *model.ReportResponse) reportValues {
 				meters[m.MeterId] = r
 			}
 			if m.Report == nil {
-				m.Report = &model.Report{}
+				m.Report = &model.Report{
+					Id:      "",
+					Summery: model.Recort{},
+					Intermediate: model.IntermediateRecord{
+						Id:          "",
+						Consumption: []float64{},
+						Utilization: []float64{},
+						Allocation:  []float64{},
+						Production:  []float64{},
+					},
+				}
 			}
 			meters[m.MeterId] = append(r, m)
 		}
