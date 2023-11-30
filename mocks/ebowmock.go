@@ -27,10 +27,26 @@ type MockBowRange struct {
 	mock.Mock
 }
 
-func (ms *MockBowStorage) GetMeta(b string) (*model.RawSourceMeta, error) {
-	args := ms.Called(b)
-	return args.Get(0).(*model.RawSourceMeta), nil
+func (ms *MockBowStorage) GetLine(line *model.RawSourceLine) error {
+	_ = ms.Called(line)
+	return nil
 }
+
+func (ms *MockBowStorage) SetLines(line []*model.RawSourceLine) error {
+	args := ms.Called(line)
+	return args.Error(0)
+}
+
+func (ms *MockBowStorage) SetMeta(line *model.RawSourceMeta) error {
+	args := ms.Called(line)
+	return args.Error(0)
+}
+
+func (ms *MockBowStorage) GetMeta(b string) (*model.RawSourceMeta, error) {
+	_ = ms.Called(b)
+	return &model.RawSourceMeta{}, nil
+}
+
 func (ms *MockBowStorage) GetLineRange(bucket, key, until string) ebow.IRange {
 	args := ms.Called(bucket, key, until)
 	return args.Get(0).(ebow.IRange)

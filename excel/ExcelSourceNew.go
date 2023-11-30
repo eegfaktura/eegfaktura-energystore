@@ -20,11 +20,11 @@ func calcRawDataMatrixLen(a []float64, step int) int {
 	return int(math.Ceil(float64(l) / float64(step)))
 }
 
-func ImportExcelEnergyFileNew(f *excelize.File, sheet string, db *store.BowStorage) error {
+func ImportExcelEnergyFileNew(f *excelize.File, sheet string, db store.IBowStorage) error {
 
 	exp := "DD.MM.YYYY HH:MM:SS"
 	style, err := f.NewStyle(&excelize.Style{CustomNumFmt: &exp})
-	err = f.SetCellStyle("Sheet1", "A12", "A15", style)
+	err = f.SetCellStyle(sheet, "A12", "A15", style)
 
 	rows, err := f.Rows(sheet)
 	if err != nil {
@@ -54,7 +54,7 @@ func ImportExcelEnergyFileNew(f *excelize.File, sheet string, db *store.BowStora
 				for i, c := range cols[1:] {
 					excelHeader.meteringPointId[i] = c
 				}
-			case "Spaltensumme", "Metering Interval", "Name", "MeteringReason", "Number of Metering Intervals":
+			case "Spaltensumme", "Metering Interval", "Name", "MeteringReason", "Number of Metering Intervals", "Spaltensumme / minimale Qualität":
 				continue
 			case "Energy direction":
 				excelHeader.energyDirection = make(map[int]model.MeterDirection, len(cols)-1)

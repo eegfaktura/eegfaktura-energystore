@@ -24,7 +24,7 @@ type InvestigatorCP struct {
 	Name          string `json:"name"`
 }
 
-type SummeryMeterResult struct {
+type SummaryMeterResult struct {
 	MeteringPoint string
 	Name          string
 	BeginDate     string
@@ -35,9 +35,9 @@ type SummeryMeterResult struct {
 	Share         float64
 }
 
-type SummeryResult struct {
-	Consumer []SummeryMeterResult
-	Producer []SummeryMeterResult
+type SummaryResult struct {
+	Consumer []SummaryMeterResult
+	Producer []SummaryMeterResult
 }
 
 func returnFloatValue(array []float64, idx int) float64 {
@@ -80,7 +80,7 @@ func CreateExcelFile(tenant string, start, end time.Time, cps *ExportCPs) (*byte
 		}
 	}()
 
-	if err = generateSummeryDataSheet(db, f, start, end, cps); err != nil {
+	if err = generateSummaryDataSheet(db, f, start, end, cps); err != nil {
 		return nil, err
 	}
 	if err := generateEnergyDataSheetV2(db, f, start, end, cps.Cps); err != nil {
@@ -91,9 +91,9 @@ func CreateExcelFile(tenant string, start, end time.Time, cps *ExportCPs) (*byte
 	return f.WriteToBuffer()
 }
 
-func generateSummeryDataSheet(db store.IBowStorage, f *excelize.File, start, end time.Time, cps *ExportCPs) error {
+func generateSummaryDataSheet(db store.IBowStorage, f *excelize.File, start, end time.Time, cps *ExportCPs) error {
 
-	sheet := "Summery"
+	sheet := "Summary"
 	counterpoints, err := summaryCounterPointsV2(db, start, end, cps)
 	if err != nil {
 		return err
@@ -111,7 +111,7 @@ func generateSummeryDataSheet(db store.IBowStorage, f *excelize.File, start, end
 		Font:      &excelize.Font{Size: 10.0, Bold: true},
 		Alignment: &excelize.Alignment{Vertical: "top", WrapText: true},
 	})
-	styleIdRowSummery, err := f.NewStyle(&excelize.Style{
+	styleIdRowSummary, err := f.NewStyle(&excelize.Style{
 		Font:      &excelize.Font{Size: 10.0},
 		Alignment: &excelize.Alignment{Vertical: "top", WrapText: true},
 	})
@@ -150,7 +150,7 @@ func generateSummeryDataSheet(db store.IBowStorage, f *excelize.File, start, end
 	_ = sw.SetColWidth(5, 5, float64(15))
 	_ = sw.SetColWidth(6, 10, float64(22))
 
-	rowOpts := excelize.RowOpts{StyleID: styleIdRowSummery}
+	rowOpts := excelize.RowOpts{StyleID: styleIdRowSummary}
 	err = sw.SetRow("A2",
 		[]interface{}{excelize.Cell{Value: "Gemeinschafts-ID", StyleID: styleIdBold}, excelize.Cell{Value: cps.CommunityId}}, rowOpts)
 	err = sw.SetRow("A3",
@@ -159,23 +159,23 @@ func generateSummeryDataSheet(db store.IBowStorage, f *excelize.File, start, end
 		[]interface{}{excelize.Cell{Value: "Zeitraum bis", StyleID: styleIdBold}, excelize.Cell{Value: utils.DateToString(endDate)}}, rowOpts)
 	err = sw.SetRow("A5",
 		[]interface{}{excelize.Cell{Value: "Gesamtverbrauch lt. Messung (bei Teilnahme gem. Erzeugung) [KWH]", StyleID: styleIdBold},
-			excelize.Cell{Value: sumMeterResult(counterpoints.Consumer, func(e *SummeryMeterResult) float64 { return e.Total })}},
-		excelize.RowOpts{StyleID: styleIdRowSummery, Height: 0.34 * 72})
+			excelize.Cell{Value: sumMeterResult(counterpoints.Consumer, func(e *SummaryMeterResult) float64 { return e.Total })}},
+		excelize.RowOpts{StyleID: styleIdRowSummary, Height: 0.34 * 72})
 	err = sw.SetRow("A6",
 		[]interface{}{excelize.Cell{Value: "Anteil gemeinschaftliche Erzeugung [KWH]", StyleID: styleIdBold},
-			excelize.Cell{Value: sumMeterResult(counterpoints.Consumer, func(e *SummeryMeterResult) float64 { return e.Coverage })}},
+			excelize.Cell{Value: sumMeterResult(counterpoints.Consumer, func(e *SummaryMeterResult) float64 { return e.Coverage })}},
 		rowOpts)
 	err = sw.SetRow("A7",
 		[]interface{}{excelize.Cell{Value: "Eigendeckung gemeinschaftliche Erzeugung [KWH]", StyleID: styleIdBold},
-			excelize.Cell{Value: sumMeterResult(counterpoints.Consumer, func(e *SummeryMeterResult) float64 { return e.Share })}},
-		excelize.RowOpts{StyleID: styleIdRowSummery, Height: 0.34 * 72})
+			excelize.Cell{Value: sumMeterResult(counterpoints.Consumer, func(e *SummaryMeterResult) float64 { return e.Share })}},
+		excelize.RowOpts{StyleID: styleIdRowSummary, Height: 0.34 * 72})
 	err = sw.SetRow("A8",
 		[]interface{}{excelize.Cell{Value: "Gesamt/Überschusserzeugung, Gemeinschaftsüberschuss [KWH]", StyleID: styleIdBold},
-			excelize.Cell{Value: sumMeterResult(counterpoints.Producer, func(e *SummeryMeterResult) float64 { return e.Share })}},
-		excelize.RowOpts{StyleID: styleIdRowSummery, Height: 0.34 * 72})
+			excelize.Cell{Value: sumMeterResult(counterpoints.Producer, func(e *SummaryMeterResult) float64 { return e.Share })}},
+		excelize.RowOpts{StyleID: styleIdRowSummary, Height: 0.34 * 72})
 	err = sw.SetRow("A9",
 		[]interface{}{excelize.Cell{Value: "Gesamte gemeinschaftliche Erzeugung [KWH]", StyleID: styleIdBold},
-			excelize.Cell{Value: sumMeterResult(counterpoints.Producer, func(e *SummeryMeterResult) float64 { return e.Total })}},
+			excelize.Cell{Value: sumMeterResult(counterpoints.Producer, func(e *SummaryMeterResult) float64 { return e.Total })}},
 		rowOpts)
 
 	line := 12
@@ -488,7 +488,7 @@ func addHeaderMeterCode(meta []*model.CounterPointMeta, countCon int, countProd 
 	return lineData
 }
 
-func summaryCounterPointsV2(db store.IBowStorage, start, end time.Time, cps *ExportCPs) (*SummeryResult, error) {
+func summaryCounterPointsV2(db store.IBowStorage, start, end time.Time, cps *ExportCPs) (*SummaryResult, error) {
 
 	meta, info, err := store.GetMetaInfo(db)
 	if err != nil {
@@ -509,7 +509,7 @@ func summaryCounterPointsV2(db store.IBowStorage, start, end time.Time, cps *Exp
 		}
 	}
 
-	summery := &SummeryResult{Consumer: []SummeryMeterResult{}, Producer: []SummeryMeterResult{}}
+	summary := &SummaryResult{Consumer: []SummaryMeterResult{}, Producer: []SummaryMeterResult{}}
 	for _, cp := range cps.Cps {
 		//m, err := findMeterMeta(eegModel.Meta, cp.MeteringPoint)
 		//if err != nil {
@@ -520,7 +520,7 @@ func summaryCounterPointsV2(db store.IBowStorage, start, end time.Time, cps *Exp
 			continue
 		}
 		if cp.Direction == "CONSUMPTION" {
-			summery.Consumer = append(summery.Consumer, SummeryMeterResult{
+			summary.Consumer = append(summary.Consumer, SummaryMeterResult{
 				MeteringPoint: cp.MeteringPoint,
 				Name:          cp.Name,
 				BeginDate:     m.PeriodStart,
@@ -531,7 +531,7 @@ func summaryCounterPointsV2(db store.IBowStorage, start, end time.Time, cps *Exp
 				Share:         returnFloatValue(report.Allocated, m.SourceIdx),
 			})
 		} else {
-			summery.Producer = append(summery.Producer, SummeryMeterResult{
+			summary.Producer = append(summary.Producer, SummaryMeterResult{
 				MeteringPoint: cp.MeteringPoint,
 				Name:          cp.Name,
 				BeginDate:     m.PeriodStart,
@@ -544,7 +544,7 @@ func summaryCounterPointsV2(db store.IBowStorage, start, end time.Time, cps *Exp
 		}
 	}
 
-	return summery, nil
+	return summary, nil
 }
 
 func sumEnergyOfPeriod(db store.IBowStorage, start, end time.Time, info *model.CounterPointMetaInfo) (*model.EnergyReport, []bool, []bool, error) {
@@ -605,7 +605,7 @@ func findMeterMeta(meta []*model.CounterPointMeta, meterId string) (*model.Count
 	return nil, errors.New("metering Point not found in Metadata")
 }
 
-func sumMeterResult(s []SummeryMeterResult, elem func(e *SummeryMeterResult) float64) float64 {
+func sumMeterResult(s []SummaryMeterResult, elem func(e *SummaryMeterResult) float64) float64 {
 	sum := 0.0
 	for _, e := range s {
 		sum = sum + elem(&e)

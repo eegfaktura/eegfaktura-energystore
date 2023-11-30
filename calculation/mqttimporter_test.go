@@ -161,7 +161,7 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 					End:   timeV2.UnixMilli(),
 					Data: []model.MqttEnergyData{
 						model.MqttEnergyData{
-							MeterCode: "1-1:2.9.0 P.01",
+							MeterCode: model.CODE_PLUS,
 							Value: []model.MqttEnergyValue{
 								model.MqttEnergyValue{
 									From:   timeV1.UnixMilli(),
@@ -172,13 +172,13 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 							},
 						},
 						model.MqttEnergyData{
-							MeterCode: "1-1:1.9.0 G.01",
+							MeterCode: model.CODE_GEN,
 							Value: []model.MqttEnergyValue{
 								model.MqttEnergyValue{
 									From:   timeV1.UnixMilli(),
 									To:     timeV2.UnixMilli(),
 									Method: "",
-									Value:  20.1,
+									Value:  21.1,
 								},
 							},
 						},
@@ -188,7 +188,65 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 			expected: func(t *testing.T, l *model.RawSourceLine) {
 				require.Equal(t, 4, len(l.Producers))
 				assert.Equal(t, 10.1, l.Producers[0])
-				assert.Equal(t, 20.1, l.Producers[2])
+				assert.Equal(t, 21.1, l.Producers[2])
+				assert.Equal(t, 20.1, l.Producers[3])
+			},
+		},
+		{
+			name: "Insert Generator - summarize energy values",
+			energy: &model.MqttEnergyMessage{
+				Meter: model.EnergyMeter{
+					MeteringPoint: "AT0030000000000000000000030000010",
+					Direction:     "",
+				},
+				Energy: model.MqttEnergy{
+					Start: timeV1.UnixMilli(),
+					End:   timeV2.UnixMilli(),
+					Data: []model.MqttEnergyData{
+						model.MqttEnergyData{
+							MeterCode: model.CODE_PLUS,
+							Value: []model.MqttEnergyValue{
+								model.MqttEnergyValue{
+									From:   timeV1.UnixMilli(),
+									To:     timeV2.UnixMilli(),
+									Method: "L1",
+									Value:  20.1,
+								},
+								model.MqttEnergyValue{
+									From:   timeV1.UnixMilli(),
+									To:     timeV2.UnixMilli(),
+									Method: "L1",
+									Value:  10.1,
+								},
+							},
+						},
+						model.MqttEnergyData{
+							MeterCode: model.CODE_GEN,
+							Value: []model.MqttEnergyValue{
+								model.MqttEnergyValue{
+									From:   timeV1.UnixMilli(),
+									To:     timeV2.UnixMilli(),
+									Method: "L1",
+									Value:  5.1,
+								},
+								model.MqttEnergyValue{
+									From:   timeV1.UnixMilli(),
+									To:     timeV2.UnixMilli(),
+									Method: "L1",
+									Value:  2.2,
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: func(t *testing.T, l *model.RawSourceLine) {
+				fmt.Printf("Producer Line: %+v\n", l)
+				require.Equal(t, 4, len(l.Producers))
+				assert.Equal(t, 7.3, utils.RoundToFixed(l.Producers[2], 1))
+				assert.Equal(t, 1, l.QoVProducers[2])
+				assert.Equal(t, 30.2, utils.RoundToFixed(l.Producers[3], 1))
+				assert.Equal(t, 1, l.QoVProducers[3])
 			},
 		},
 	}
@@ -262,9 +320,9 @@ func TestImportRawdataStore(t *testing.T) {
 	response, err := json.Marshal(energy)
 	require.NoError(t, err)
 
-	require.Equal(t, 2, len(energy.Report.Allocated))
+	require.Equal(t, 3, len(energy.Report.Allocated))
 	require.Equal(t, 1.088021, energy.Report.Allocated[0])
-	require.Equal(t, 2, len(energy.Report.Consumed))
+	require.Equal(t, 3, len(energy.Report.Consumed))
 	require.Equal(t, 5.388, energy.Report.Consumed[0])
 
 	fmt.Printf("META_DATA: %+v\n", string(response))

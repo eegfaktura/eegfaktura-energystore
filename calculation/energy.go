@@ -83,6 +83,64 @@ func EnergyReport(tenant string, year, segment int, periodCode string) (*model.E
 	return eegModel, nil
 }
 
+func EnergyReportV2(tenant string, participants []model.ParticipantReport, year, segment int, periodCode string) (*model.ReportResponse, error) {
+
+	db, err := store.OpenStorage(tenant)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { db.Close() }()
+
+	response := &model.ReportResponse{Id: fmt.Sprintf("%s/%.4d/%.2d", strings.ToUpper(periodCode), year, segment),
+		ParticipantReports: participants}
+
+	code := []byte(strings.ToUpper(periodCode))
+	if len(code) < 2 {
+		code = append(code, 'X')
+	}
+
+	switch code[1] {
+	case 'M':
+		err = CalculateMonthlyPeriodV2(db, response, AllocDynamicV2, year, segment)
+		if err != nil {
+			return nil, err
+		}
+		break
+	case 'H':
+		err = CalculateBiAnnualPeriodV2(db, response, AllocDynamicV2, year, segment)
+		if err != nil {
+			return nil, err
+		}
+		break
+	case 'Q':
+		err = CalculateQuarterlyPeriodV2(db, response, AllocDynamicV2, year, segment)
+		if err != nil {
+			return nil, err
+		}
+		break
+	default:
+		err = CalculateAnnualPeriodV2(db, response, AllocDynamicV2, year)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var meta *model.RawSourceMeta
+	if meta, err = db.GetMeta(fmt.Sprintf("cpmeta/%d", 0)); err != nil {
+		return nil, err
+	} else {
+		for _, m := range meta.CounterPoints {
+			glog.V(4).Infof("Meta: %+v\n", m)
+			if m.Dir == "CONSUMPTION" || m.Dir == "GENERATION" {
+				response.Meta = append(response.Meta, m)
+			} else {
+				glog.V(4).Infof("Omitted Meta: %+v\n", m)
+			}
+		}
+	}
+	return response, nil
+}
+
 //func EnergyDashboard(tenant, function string, year, month int) (*model.EegEnergy, error) {
 //	var err error
 //
@@ -131,4 +189,17 @@ func EnergyReport(tenant string, year, segment int, periodCode string) (*model.E
 //	}
 //
 //	return eegModel, nil
+//}
+
+//func EnergyParticipantReport(tenant string, year, segment int, periodCode string) (*model.EegEnergy, error) {
+//	db, err := store.OpenStorage(tenant)
+//	if err != nil {
+//		return nil, err
+//	}
+//	defer func() { db.Close() }()
+//
+//	var eegModel *model.EegEnergy
+//	var results []*model.EnergyReport
+//	var report *model.EnergyReport
+//
 //}

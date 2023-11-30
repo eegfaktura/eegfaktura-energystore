@@ -170,6 +170,7 @@ func importEnergyValuesV2(
 	})
 
 	var tablePrefix = "CP/"
+	rowIdVisited := map[string]bool{}
 	for _, v := range data.Data[meterCode.SourceInData].Value {
 		id, err := utils.ConvertUnixTimeToRowId(tablePrefix, time.UnixMilli(v.From))
 		if err != nil {
@@ -180,16 +181,37 @@ func importEnergyValuesV2(
 			resources[id] = model.MakeRawSourceLine(id, consumerCount, producerCount) //&model.RawSourceLine{Id: id, Consumers: make([]float64, consumerCount), Producers: make([]float64, producerCount)}
 		}
 
-		switch metaCP.Dir {
-		case model.CONSUMER_DIRECTION:
-			resources[id].Consumers = utils.Insert(resources[id].Consumers, (metaCP.SourceIdx*3)+meterCode.SourceDelta, v.Value)
-			resources[id].QoVConsumers = utils.InsertInt(resources[id].QoVConsumers, (metaCP.SourceIdx*3)+meterCode.SourceDelta, utils.CastQoVStringToInt(v.Method))
-		case model.PRODUCER_DIRECTION:
-			resources[id].Producers = utils.Insert(resources[id].Producers, (metaCP.SourceIdx*2)+meterCode.SourceDelta, v.Value)
-			resources[id].QoVProducers = utils.InsertInt(resources[id].QoVProducers, (metaCP.SourceIdx*2)+meterCode.SourceDelta, utils.CastQoVStringToInt(v.Method))
+		if _, visited := rowIdVisited[id]; visited {
+			// sum value to
+			sumEnergyValueToResource(resources[id], metaCP, meterCode, v)
+		} else {
+			addEnergyValueToResource(resources[id], metaCP, meterCode, v)
 		}
+		rowIdVisited[id] = true
+
 	}
 	return resources, nil
+}
+
+func sumEnergyValueToResource(resource *model.RawSourceLine, metaCP *model.CounterPointMeta, meterCode *model.MeterCodeMeta, v model.MqttEnergyValue) {
+	switch metaCP.Dir {
+	case model.CONSUMER_DIRECTION:
+		resource.Consumers[(metaCP.SourceIdx*3)+meterCode.SourceDelta] += v.Value
+	case model.PRODUCER_DIRECTION:
+		resource.Producers[(metaCP.SourceIdx*2)+meterCode.SourceDelta] += v.Value
+	}
+
+}
+
+func addEnergyValueToResource(resource *model.RawSourceLine, metaCP *model.CounterPointMeta, meterCode *model.MeterCodeMeta, v model.MqttEnergyValue) {
+	switch metaCP.Dir {
+	case model.CONSUMER_DIRECTION:
+		resource.Consumers = utils.Insert(resource.Consumers, (metaCP.SourceIdx*3)+meterCode.SourceDelta, v.Value)
+		resource.QoVConsumers = utils.InsertInt(resource.QoVConsumers, (metaCP.SourceIdx*3)+meterCode.SourceDelta, utils.CastQoVStringToInt(v.Method))
+	case model.PRODUCER_DIRECTION:
+		resource.Producers = utils.Insert(resource.Producers, (metaCP.SourceIdx*2)+meterCode.SourceDelta, v.Value)
+		resource.QoVProducers = utils.InsertInt(resource.QoVProducers, (metaCP.SourceIdx*2)+meterCode.SourceDelta, utils.CastQoVStringToInt(v.Method))
+	}
 }
 
 func fetchSourceRange(db *store.BowStorage, key string, start, end time.Time, resources map[string]*model.RawSourceLine) {

@@ -35,7 +35,7 @@ func NewMqttStreamer() (*MQTTStreamer, error) {
 	opts.SetClientID(brokerId)
 	opts.SetProtocolVersion(4)
 	opts.SetAutoAckDisabled(false)
-	opts.SetCleanSession(true)
+	opts.SetCleanSession(false)
 
 	opts.SetOrderMatters(false)       // Allow out of order messages (use this option unless in order delivery is essential)
 	opts.ConnectTimeout = time.Second // Minimal delays on connect
