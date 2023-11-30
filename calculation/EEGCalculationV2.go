@@ -49,7 +49,7 @@ var ConvertToMeterMap = func(report *model.ReportResponse) reportValues {
 			if m.Report == nil {
 				m.Report = &model.Report{
 					Id:      "",
-					Summery: model.Recort{},
+					Summary: model.Recort{},
 					Intermediate: model.IntermediateRecord{
 						Id:          "",
 						Consumption: []float64{},
@@ -110,29 +110,29 @@ func appendValues(line *model.RawSourceLine, lineTime time.Time, metaInfo map[st
 		switch v.Dir {
 		case model.CONSUMER_DIRECTION:
 			values := line.Consumers[v.SourceIdx : v.SourceIdx+3]
-			appendToMeterSummery(participants, values, v.Dir, lineTime)
+			appendToMeterSummary(participants, values, v.Dir, lineTime)
 		case model.PRODUCER_DIRECTION:
 			values := line.Consumers[v.SourceIdx : v.SourceIdx+2]
-			appendToMeterSummery(participants, values, v.Dir, lineTime)
+			appendToMeterSummary(participants, values, v.Dir, lineTime)
 		}
 	}
 
 	return err
 }
 
-func appendToMeterSummery(participants []*model.MeterReport, values []float64, dir model.MeterDirection, lineTime time.Time) {
+func appendToMeterSummary(participants []*model.MeterReport, values []float64, dir model.MeterDirection, lineTime time.Time) {
 	for _, p := range participants {
 		from := time.UnixMilli(p.From)
 		until := time.UnixMilli(p.Until)
 		if from.After(lineTime) && until.Before(lineTime) {
 			switch dir {
 			case model.CONSUMER_DIRECTION:
-				p.Report.Summery.Consumption += values[0]
-				p.Report.Summery.Allocation += values[1]
-				p.Report.Summery.Utilization += values[2]
+				p.Report.Summary.Consumption += values[0]
+				p.Report.Summary.Allocation += values[1]
+				p.Report.Summary.Utilization += values[2]
 			case model.PRODUCER_DIRECTION:
-				p.Report.Summery.Production += values[0]
-				p.Report.Summery.Allocation += values[1]
+				p.Report.Summary.Production += values[0]
+				p.Report.Summary.Allocation += values[1]
 			}
 		}
 	}
@@ -269,8 +269,8 @@ func calcParticipantReport(iter ebow.IRange,
 	metaInfo *model.CounterPointMetaInfo, rowPrefix string, startDate time.Time, switchIntermediate func(time.Time) int) error {
 	//intermediateReport := model.Recort{}
 	err := calcDailyScope(iter, allocFunc, metaInfo, startDate, rowPrefix,
-		func(currentDate time.Time, summery *calcResults) error {
-			err := appendEnergyToParticipantMeter(summery, reportValues, cpMeta, currentDate,
+		func(currentDate time.Time, summary *calcResults) error {
+			err := appendEnergyToParticipantMeter(summary, reportValues, cpMeta, currentDate,
 				func(participantReport *model.MeterReport, values []float64, dir model.MeterDirection) {
 					switch dir {
 					case model.CONSUMER_DIRECTION:
@@ -349,9 +349,9 @@ func appendEnergyToParticipantMeter(
 							dailyReport.rShar.RoundToFixed(6).GetElm(meta.SourceIdx, 0),
 							dailyReport.rAlloc.RoundToFixed(6).GetElm(meta.SourceIdx, 0),
 						}
-						p.Report.Summery.Consumption += values[0]
-						p.Report.Summery.Allocation += values[1]
-						p.Report.Summery.Utilization += values[2]
+						p.Report.Summary.Consumption += values[0]
+						p.Report.Summary.Allocation += values[1]
+						p.Report.Summary.Utilization += values[2]
 						*reportValues.totalConsumption += values[0]
 						appendIntermediate(p, values, meta.Dir)
 					case model.PRODUCER_DIRECTION:
@@ -360,8 +360,8 @@ func appendEnergyToParticipantMeter(
 							dailyReport.rProd.GetElm(meta.SourceIdx, 0),
 							dailyReport.rDist.GetElm(meta.SourceIdx, 0),
 						}
-						p.Report.Summery.Production += values[0]
-						p.Report.Summery.Allocation += values[1]
+						p.Report.Summary.Production += values[0]
+						p.Report.Summary.Allocation += values[1]
 						*reportValues.totalProduction += values[0]
 
 						appendIntermediate(p, values, meta.Dir)

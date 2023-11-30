@@ -1,6 +1,13 @@
 {
     "message": {
         "conversationId": "AT003000202209171439410210008412730",
+        "messageCode": "DATEN_CRMSG",
+        "messageId": "AT003000202303281518199280139185806",
+        "meter": {
+            "meteringPoint": "AT0030000000000000000000000381701"
+        },
+        "receiver": "RC100181",
+        "sender": "AT003000",
         "energy": {
             "data": [
                 {
@@ -1679,13 +1686,6 @@
             "interval": "QH",
             "nInterval": 276,
             "start": 1679785200000
-        },
-        "messageCode": "DATEN_CRMSG",
-        "messageId": "AT003000202303281518199280139185806",
-        "meter": {
-            "meteringPoint": "AT0030000000000000000000000381701"
-        },
-        "receiver": "RC100181",
-        "sender": "AT003000"
+        }
     }
 }

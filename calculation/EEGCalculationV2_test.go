@@ -72,20 +72,20 @@ func TestCalculateBiAnnualParticipantReport(t *testing.T) {
 	t.Run("Monthly Calculation", func(t *testing.T) {
 		clearParticipants()
 		startTime := time.Now()
-		require.NoError(t, CalculateMonthlyPeriodV2(db, &report, AllocDynamicV2, 2021, 1))
+		require.NoError(t, CalculateMonthlyPeriodV2(db, &report, AllocDynamicV2, 2023, 7))
 		fmt.Printf("-------------------------- Duration %s --------------------------\n", time.Now().Sub(startTime).Abs().String())
 
 		participant := report.ParticipantReports[0]
 		require.NotNil(t, participant.Meters[0].Report)
-		assert.Equal(t, len(participant.Meters[0].Report.Intermediate.Consumption), 31, "Participant01")
+		assert.Equal(t, 31, len(participant.Meters[0].Report.Intermediate.Consumption), "Participant01")
 
 		fmt.Println("REPORT PARTICIPANTS")
 		participant = report.ParticipantReports[1]
 		require.Equal(t, len(participant.Meters), 1)
 		require.NotNil(t, participant.Meters[0].Report)
-		require.Equal(t, 599.2975, participant.Meters[0].Report.Summery.Consumption)
-		require.Equal(t, 32.822976, participant.Meters[0].Report.Summery.Allocation)
-		require.Equal(t, 32.554322, participant.Meters[0].Report.Summery.Utilization)
+		require.Equal(t, 599.2975, participant.Meters[0].Report.Summary.Consumption)
+		require.Equal(t, 32.822976, participant.Meters[0].Report.Summary.Allocation)
+		require.Equal(t, 32.554322, participant.Meters[0].Report.Summary.Utilization)
 
 		//require.Equal(t, len(participant[0].Report.Intermediate), 31)
 		//require.Equal(t, 19.429, participant[0].Report.Intermediate[0].Consumption)
@@ -116,9 +116,9 @@ func TestCalculateBiAnnualParticipantReport(t *testing.T) {
 		fmt.Println("REPORT PARTICIPANTS")
 		participant = report.ParticipantReports[1]
 		require.Equal(t, len(participant.Meters), 1)
-		require.Equal(t, 3372.140750, participant.Meters[0].Report.Summery.Consumption)
-		require.Equal(t, 2433.459794, participant.Meters[0].Report.Summery.Allocation)
-		require.Equal(t, 1388.875928, participant.Meters[0].Report.Summery.Utilization)
+		require.Equal(t, 3372.140750, participant.Meters[0].Report.Summary.Consumption)
+		require.Equal(t, 2433.459794, participant.Meters[0].Report.Summary.Allocation)
+		require.Equal(t, 1388.875928, participant.Meters[0].Report.Summary.Utilization)
 		require.Equal(t, 6746.79875, utils.RoundToFixed(report.TotalConsumption, 6))
 
 		//require.Equal(t, 27, len(participant[0].Report.Intermediate))
@@ -163,9 +163,9 @@ func TestCalculateBiAnnualParticipantReport(t *testing.T) {
 		fmt.Println("REPORT PARTICIPANTS")
 		participant = report.ParticipantReports[1]
 		require.Equal(t, len(participant.Meters), 1)
-		require.Equal(t, 1599.252, participant.Meters[0].Report.Summery.Consumption)
-		require.Equal(t, 1860.957735, participant.Meters[0].Report.Summery.Allocation)
-		require.Equal(t, 941.826526, participant.Meters[0].Report.Summery.Utilization)
+		require.Equal(t, 1599.252, participant.Meters[0].Report.Summary.Consumption)
+		require.Equal(t, 1860.957735, participant.Meters[0].Report.Summary.Allocation)
+		require.Equal(t, 941.826526, participant.Meters[0].Report.Summary.Utilization)
 
 		//require.Equal(t, 27, len(participant[0].Report.Intermediate))
 		//require.Equal(t, float64(0), participant[0].Report.Intermediate[0].Consumption)
@@ -210,8 +210,8 @@ func TestCalculateBiAnnualParticipantReport(t *testing.T) {
 		fmt.Println("REPORT PARTICIPANTS")
 		participant := report.ParticipantReports[0]
 		require.Equal(t, len(participant.Meters), 1)
-		assert.Equal(t, 192.906, participant.Meters[0].Report.Summery.Production)
-		assert.Equal(t, 189.738546, participant.Meters[0].Report.Summery.Allocation)
+		assert.Equal(t, 192.906, participant.Meters[0].Report.Summary.Production)
+		assert.Equal(t, 189.738546, participant.Meters[0].Report.Summary.Allocation)
 
 		//require.Equal(t, 27, len(participant[0].Report.Intermediate))
 		//require.Equal(t, float64(0), participant[0].Report.Intermediate[0].Consumption)

@@ -44,13 +44,13 @@ func (ir *IntermediateRecord) RoundToFixed(precision uint) {
 
 type Report struct {
 	Id      string `json:"id"`
-	Summery Recort `json:"summery"`
+	Summary Recort `json:"summary"`
 	//Intermediate []Recort `json:"intermediate"`
 	Intermediate IntermediateRecord `json:"intermediate"`
 }
 
 func (report *Report) RoundToFixed(precision uint) {
-	report.Summery.RoundToFixed(precision)
+	report.Summary.RoundToFixed(precision)
 	//report.Intermediate.RoundToFixed(precision)
 	//for _, i := range report.Intermediate {
 	//	i.RoundToFixed(precision)

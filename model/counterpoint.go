@@ -37,6 +37,7 @@ const (
 
 type MeterCodeValue string
 
+// 1-1:1.9.0 G.01
 const (
 	CODE_GEN   MeterCodeValue = "1-1:2.9.0 G.01"
 	CODE_PLUS  MeterCodeValue = "1-1:2.9.0 P.01"
