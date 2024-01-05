@@ -108,12 +108,12 @@ func ImportExcelEnergyFile(f *excelize.File, sheet string, db *store.BowStorage)
 				for i, c := range cols[1:] {
 					excelHeader.energyDirection[i] = model.MeterDirection(c)
 				}
-			case "Period end":
+			case "Period end", "Data Period end":
 				excelHeader.periodEnd = make(map[int]string, len(cols)-1)
 				for i, c := range cols[1:] {
 					excelHeader.periodEnd[i] = excelDateToString(c)
 				}
-			case "Period start":
+			case "Period start", "Data Period start":
 				excelHeader.periodStart = make(map[int]string, len(cols)-1)
 				for i, c := range cols[1:] {
 					excelHeader.periodStart[i] = excelDateToString(c)
@@ -254,6 +254,17 @@ func buildMatrixMetaStruct(db store.IBowStorage, excelHeader excelHeader) (map[i
 		return meter, nil
 	}
 
+	filterExcelHeaderCol := func(pattern ...string) func(string) bool {
+		return func(name string) bool {
+			for _, p := range pattern {
+				if name == p {
+					return false
+				}
+			}
+			return true
+		}
+	}
+
 	type pair struct {
 		key   string
 		value int
@@ -265,41 +276,59 @@ func buildMatrixMetaStruct(db store.IBowStorage, excelHeader excelHeader) (map[i
 	}
 	msSet := map[string]pair{}
 	meteringIdSet := map[string]int{}
+	headerFilter := filterExcelHeaderCol("MM", "TOTAL")
+
 	for i := 0; i < len(excelHeader.meteringPointId); i++ {
-		if i < len(excelHeader.meterCode) {
-			if v, err := ensureMeteringPoint(excelHeader.meteringPointId[i]); err == nil {
-				if excelHeader.meterCode[i] == Total {
-					if _, ok := meteringIdSet[v]; !ok && strings.ToLower(v) != "total" {
-						meteringIdSet[v] = i
+		if headerFilter(strings.ToUpper(excelHeader.meteringPointId[i])) {
+			if i < len(excelHeader.meterCode) {
+				if v, err := ensureMeteringPoint(excelHeader.meteringPointId[i]); err == nil {
+					if excelHeader.meterCode[i] == Total {
+						if _, ok := meteringIdSet[v]; !ok && strings.ToLower(v) != "total" {
+							meteringIdSet[v] = i
+							if _ms, ok := msSet[v]; ok {
+								_ms.value = i
+								msSet[v] = _ms
+							} else {
+								msSet[v] = pair{v, i, -1, -1, excelHeader.energyDirection[i], excelHeader.periodEnd[i], excelHeader.periodStart[i]}
+							}
+						}
+					} else if strings.ToLower(v) != "total" && (excelHeader.meterCode[i] == Share || excelHeader.meterCode[i] == Profit) {
 						if _ms, ok := msSet[v]; ok {
-							_ms.value = i
+							_ms.vG2 = i
 							msSet[v] = _ms
 						} else {
-							msSet[v] = pair{v, i, -1, -1, excelHeader.energyDirection[i], excelHeader.periodEnd[i], excelHeader.periodStart[i]}
+							msSet[v] = pair{v, -1, i, -1, excelHeader.energyDirection[i], excelHeader.periodEnd[i], excelHeader.periodStart[i]}
 						}
-					}
-				} else if strings.ToLower(v) != "total" && (excelHeader.meterCode[i] == Share || excelHeader.meterCode[i] == Profit) {
-					if _ms, ok := msSet[v]; ok {
-						_ms.vG2 = i
-						msSet[v] = _ms
-					} else {
-						msSet[v] = pair{v, -1, i, -1, excelHeader.energyDirection[i], excelHeader.periodEnd[i], excelHeader.periodStart[i]}
-					}
-				} else if strings.ToLower(v) != "total" && excelHeader.meterCode[i] == Coverage {
-					if _ms, ok := msSet[v]; ok {
-						_ms.vG3 = i
-						msSet[v] = _ms
-					} else {
-						msSet[v] = pair{v, -1, -1, i, excelHeader.energyDirection[i], excelHeader.periodEnd[i], excelHeader.periodStart[i]}
+					} else if strings.ToLower(v) != "total" && excelHeader.meterCode[i] == Coverage {
+						if _ms, ok := msSet[v]; ok {
+							_ms.vG3 = i
+							msSet[v] = _ms
+						} else {
+							msSet[v] = pair{v, -1, -1, i, excelHeader.energyDirection[i], excelHeader.periodEnd[i], excelHeader.periodStart[i]}
+						}
 					}
 				}
 			}
 		}
 	}
 
+	// Validate and Transform read metering point data
+	// - Transform Meterstructure to a Map, SortedList
+	// - Check for valid period date
 	ms := []pair{}
 	for _, v := range msSet {
 		if !(v.value < 0) {
+			// check date
+			_, err := utils.ParseTime(v.end, 0)
+			if err != nil {
+				return nil, nil, errors.New("'Period End' date missing or wrong format")
+			}
+			_, err = utils.ParseTime(v.begin, 0)
+			if err != nil {
+				return nil, nil, errors.New("'Period Start' date missing or wrong format")
+			}
+
+			// Setup Map
 			ms = append(ms, v)
 		}
 	}
@@ -343,14 +372,14 @@ func buildMatrixMetaStruct(db store.IBowStorage, excelHeader excelHeader) (map[i
 			}
 		}
 		storedMeta := storedCpMeta[kv.key]
-		nStoredPeriodEnd, _ := utils.ParseTime(storedMeta.PeriodEnd)
-		nExcelPeriodEnd, _ := utils.ParseTime(kv.end)
+		nStoredPeriodEnd, _ := utils.ParseTime(storedMeta.PeriodEnd, 0)
+		nExcelPeriodEnd, _ := utils.ParseTime(kv.end, time.Now().UnixMilli())
 		if nExcelPeriodEnd.Unix() > nStoredPeriodEnd.Unix() {
 			storedMeta.PeriodEnd = kv.end
 		}
 
-		nStoredPeriodStart, _ := utils.ParseTime(storedMeta.PeriodStart)
-		nExcelPeriodStart, _ := utils.ParseTime(kv.begin)
+		nStoredPeriodStart, _ := utils.ParseTime(storedMeta.PeriodStart, time.Now().UnixMilli())
+		nExcelPeriodStart, _ := utils.ParseTime(kv.begin, time.Now().UnixMilli())
 		if nStoredPeriodStart.Unix() > nExcelPeriodStart.Unix() {
 			storedMeta.PeriodStart = kv.begin
 		}
@@ -378,7 +407,7 @@ func buildMatrixMetaStruct(db store.IBowStorage, excelHeader excelHeader) (map[i
 	})
 	glog.V(3).Info("ExcelMeta:")
 	for k, v := range excelCpMeta {
-		glog.V(3).Infof("Key: %+v Value: %+v\n", k, v)
+		glog.V(3).Infof("Key: %+v Value: %+v\n", k, *v.CounterPointMeta)
 	}
 	glog.V(3).Info("UpdateMeta:")
 	for i, v := range updateCpMeta {

@@ -14,6 +14,55 @@ import (
 	"time"
 )
 
+type MqttInverterMessage struct {
+	data   *model.MqttEnergyResponse
+	tenant string
+}
+
+type MqttInverterImporter struct {
+	msgChan chan MqttInverterMessage
+	ctx     context.Context
+}
+
+func NewMqttInverterImporter(ctx context.Context) *MqttInverterImporter {
+	importer := &MqttInverterImporter{msgChan: make(chan MqttInverterMessage, 20), ctx: ctx}
+	go importer.process()
+	return importer
+}
+
+func (miv *MqttInverterImporter) Execute(msg mqtt.Message) {
+	tenant := mqttclient.TopicType(msg.Topic()).Tenant()
+	if len(tenant) == 0 {
+		return
+	}
+	data := decodeInverterMessage(msg.Payload())
+	if data == nil {
+		return
+	}
+
+	miv.msgChan <- MqttInverterMessage{data: data, tenant: tenant}
+}
+
+var testInvCounter = 0
+
+func (miv *MqttInverterImporter) process() {
+	glog.Info("Start MQTT Queue")
+	for {
+		select {
+		case msg := <-miv.msgChan:
+			glog.Infof("Execute Inverter Data Message for Topic (%v)\n", msg.tenant)
+			err := importEnergyV2(msg.tenant, &msg.data.Message)
+			if err != nil {
+				glog.Error(err)
+			}
+			glog.Infof("Execution finished (Inv-Counter: %d)", testInvCounter)
+			testInvCounter += 1
+		case <-miv.ctx.Done():
+			break
+		}
+	}
+}
+
 type MqttMessage struct {
 	data   *model.MqttEnergyMessage
 	tenant string
@@ -66,6 +115,17 @@ func (mw *MqttEnergyImporter) process() {
 			break
 		}
 	}
+}
+
+func decodeInverterMessage(msg []byte) *model.MqttEnergyResponse {
+	//m := model.MqttEnergyResponse{}
+	m := model.MqttEnergyResponse{}
+	err := json.Unmarshal(msg, &m)
+	if err != nil {
+		glog.Errorf("Error decoding MQTT message. %s", err.Error())
+		return nil
+	}
+	return &m
 }
 
 func decodeMessage(msg []byte) *model.MqttEnergyMessage {
@@ -270,7 +330,7 @@ func dateToString(date time.Time) string {
 func stringToTime(date string, defaultValue time.Time) time.Time {
 	var d, m, y, hh, mm, ss int
 	if _, err := fmt.Sscanf(date, "%d.%d.%d %d:%d:%d", &d, &m, &y, &hh, &mm, &ss); err == nil {
-		return time.Date(y, time.Month(m), d, hh, mm, ss, 0, time.UTC)
+		return time.Date(y, time.Month(m), d, hh, mm, ss, 0, time.Local)
 	}
 	return defaultValue
 }

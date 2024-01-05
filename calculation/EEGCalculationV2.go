@@ -256,7 +256,6 @@ func CalculateAnnualPeriodV2(db *store.BowStorage, report *model.ReportResponse,
 		month := currentDate.Month()
 		a := int(month - startMonth)
 		b := 12
-		fmt.Printf("Intermediate Idx: %+v -- (week: %d startWeek: %d = %d\n", int(math.Max(float64((a%b+b)%b)+1, 1)), month, startMonth, month-startMonth)
 		return int(math.Max(float64((a%b+b)%b)+1, 1))
 	})
 	return err

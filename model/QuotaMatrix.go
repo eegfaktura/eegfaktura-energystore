@@ -71,6 +71,12 @@ func (A *Matrix) SetElm(row int, col int, v float64) {
 	A.Elements[index] = v
 }
 
+func (A *Matrix) SumElm(row int, col int, v float64) {
+	index := row*A.step + col
+	A.ensureSize(index)
+	A.Elements[index] = A.Elements[index] + v
+}
+
 func (A *Matrix) RowSum() *Matrix {
 	B := NewUniformMatrix(A.Cols, 1)
 	rRows := int(math.Max(float64(A.Rows), float64(B.Rows)))

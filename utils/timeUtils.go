@@ -31,10 +31,10 @@ func GetMonthDuration(from, to time.Time) (startFromYear, months int) {
 	return
 }
 
-func ParseTime(strTime string) (time.Time, error) {
+func ParseTime(strTime string, fallback int64) (time.Time, error) {
 	var y, m, d, hh, mm, ss int
 	if _, err := fmt.Sscanf(strTime, "%d.%d.%d %d:%d:%d", &d, &m, &y, &hh, &mm, &ss); err != nil {
-		return time.Now(), err
+		return time.UnixMilli(fallback), err
 	}
 	return time.Date(y, time.Month(m), d, hh, mm, ss, 0, time.Local), nil
 }

@@ -43,8 +43,13 @@ func (ms *MockBowStorage) SetMeta(line *model.RawSourceMeta) error {
 }
 
 func (ms *MockBowStorage) GetMeta(b string) (*model.RawSourceMeta, error) {
-	_ = ms.Called(b)
-	return &model.RawSourceMeta{}, nil
+	args := ms.Called(b)
+	return args.Get(0).(*model.RawSourceMeta), nil
+}
+
+func (ms *MockBowStorage) ListBuckets() ([]string, error) {
+	_ = ms.Called()
+	return []string{}, nil
 }
 
 func (ms *MockBowStorage) GetLineRange(bucket, key, until string) ebow.IRange {

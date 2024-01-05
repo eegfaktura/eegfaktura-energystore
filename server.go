@@ -79,6 +79,9 @@ func SetupMqttDispatcher(ctx context.Context) {
 	energyTopicPrefix := viper.GetString("mqtt.energySubscriptionTopic")
 	worker[energyTopicPrefix] = calculation.NewMqttEnergyImporter(ctx)
 
+	inverterTopicPrefix := viper.GetString("mqtt.inverterSubscriptionTopic")
+	worker[inverterTopicPrefix] = calculation.NewMqttInverterImporter(ctx)
+
 	dispatcher := mqttclient.NewDispatcher(ctx, streamer, worker)
 	_ = dispatcher
 }

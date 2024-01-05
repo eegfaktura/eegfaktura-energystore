@@ -38,7 +38,26 @@ func main() {
 	}
 	defer func() { db.Close() }()
 
+	fmt.Println("-- List Buckets")
+	buckets, _ := db.ListBuckets()
+	for _, b := range buckets {
+		fmt.Printf("Bucket: %s\n", b)
+	}
+	fmt.Println()
+
+	bucket, err := db.GetBucket("metadata")
+	n := map[string]interface{}{}
+	for bucket.Next(&n) {
+		fmt.Printf("Meta-Entry: %+v\n", n)
+	}
+
 	meta, err := db.GetMeta("cpmeta/0")
+
+	if err != nil {
+		fmt.Printf("Error Metadata: %v\n", err)
+	} else {
+		fmt.Printf("Metadata: %+v\n", meta)
+	}
 
 	if meter != nil && len(*meter) > 0 {
 		var cp *model.CounterPointMeta

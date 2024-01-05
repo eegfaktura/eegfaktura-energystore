@@ -12,5 +12,6 @@ mqtt:
   qos: 1
 #  energySubscriptionTopic: "eda/response/energy/+"
   energySubscriptionTopic: "eda/response/+/protocol/cr_msg"
+  inverterSubscriptionTopic: "eda/response/+/protocol/inverter_msg"
 services:
   mail-server: "localhost:9090"

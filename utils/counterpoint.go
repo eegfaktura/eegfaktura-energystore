@@ -130,3 +130,19 @@ func ConvertLineToMatrix(line *model.RawSourceLine) (*model.Matrix, *model.Matri
 	return consumerMatrix, producerMatrix
 
 }
+
+//func ConvertLineToMatrix1(line *model.RawSourceLine) (*model.Matrix, *model.Matrix, *model.Matrix, *model.Matrix) {
+//	lenConsumers := int(math.Max(float64(len(line.Consumers)-1), 1))
+//	lenProducers := int(math.Max(float64(len(line.Producers)-1), 1))
+//
+//	rowConsumers := (lenConsumers + 3 - (lenConsumers % 3)) / 3
+//	rowProducers := (lenProducers + 2 - (lenProducers % 2)) / 2
+//
+//	consumerMatrix := model.MakeMatrix(line.Consumers, rowConsumers, 3)
+//	producerMatrix := model.MakeMatrix(line.Producers, rowProducers, 2)
+//	consumerQoVMatrix := model.MakeMatrix(line.QoVConsumers, rowConsumers, 3)
+//	producerQoVMatrix := model.MakeMatrix(line.Producers, rowProducers, 2)
+//
+//	return consumerMatrix, producerMatrix
+//
+//}
