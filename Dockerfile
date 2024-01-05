@@ -12,6 +12,8 @@ COPY . .
 RUN go build -o /usr/local/bin/energystore -ldflags="-s -w" server.go
 RUN go build -o /usr/local/bin/initQoV -ldflags="-s -w" initQoV.go
 RUN go build -o /usr/local/bin/ebowctl -ldflags="-s -w" ebowctl.go
+RUN go build -o /usr/local/bin/estore -ldflags="-s -w" estore.go
+
 
 COPY config.yaml /etc/energystore/
 

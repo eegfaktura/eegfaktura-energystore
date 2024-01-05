@@ -83,12 +83,40 @@ func CreateExcelFile(tenant string, start, end time.Time, cps *ExportCPs) (*byte
 	if err = generateSummaryDataSheet(db, f, start, end, cps); err != nil {
 		return nil, err
 	}
-	if err := generateEnergyDataSheetV2(db, f, start, end, cps.Cps); err != nil {
+	var qovLog []model.RawSourceLine
+	if qovLog, err = generateEnergyDataSheetV2(db, f, start, end, cps.Cps); err != nil {
 		return nil, err
 	}
 
+	if qovLog != nil && len(qovLog) > 0 {
+		if err = generateLogDataSheetV2(db, f, qovLog, cps.Cps); err != nil {
+			fmt.Printf("LOG: %+v\n", err)
+		}
+	}
 	_ = f.DeleteSheet("Sheet1")
 	return f.WriteToBuffer()
+}
+
+func generateMeterMetaSlice(db store.IBowStorage, meters []InvestigatorCP) ([]*model.CounterPointMeta, error) {
+	_metaMap, err := store.GetMetaMap(db)
+	if err != nil {
+		return nil, err
+	}
+
+	//metaMap := store.MetaMapType{}
+	metaCon := []*model.CounterPointMeta{}
+	metaPro := []*model.CounterPointMeta{}
+	for _, k := range meters {
+		if v, ok := _metaMap[k.MeteringPoint]; ok {
+			if v.Dir == model.CONSUMER_DIRECTION {
+				metaCon = append(metaCon, v)
+			} else {
+				metaPro = append(metaPro, v)
+			}
+		}
+	}
+
+	return append(metaCon, metaPro...), nil
 }
 
 func generateSummaryDataSheet(db store.IBowStorage, f *excelize.File, start, end time.Time, cps *ExportCPs) error {
@@ -232,7 +260,9 @@ func generateSummaryDataSheet(db store.IBowStorage, f *excelize.File, start, end
 	return sw.Flush()
 }
 
-func generateEnergyDataSheetV2(db store.IBowStorage, f *excelize.File, start, end time.Time, meters []InvestigatorCP) error {
+func generateEnergyDataSheetV2(db store.IBowStorage, f *excelize.File, start, end time.Time, meters []InvestigatorCP) ([]model.RawSourceLine, error) {
+	var qovLogArray []model.RawSourceLine
+	//qovLogArray := []model.RawSourceLine{}
 
 	participantMeterMap := map[string]string{}
 	for _, m := range meters {
@@ -241,7 +271,7 @@ func generateEnergyDataSheetV2(db store.IBowStorage, f *excelize.File, start, en
 
 	_metaMap, err := store.GetMetaMap(db)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	//metaMap := store.MetaMapType{}
@@ -265,20 +295,20 @@ func generateEnergyDataSheetV2(db store.IBowStorage, f *excelize.File, start, en
 	// Create a new sheet.
 	_, err = f.NewSheet("Energiedaten")
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	styleIdL3, err := f.NewStyle(&excelize.Style{
 		Fill: excelize.Fill{Type: "pattern", Color: []string{"ff5429"}, Pattern: 1},
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	styleIdL2, err := f.NewStyle(&excelize.Style{
 		Fill: excelize.Fill{Type: "pattern", Color: []string{"FFFF00"}, Pattern: 1},
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	numFmt := "#,##0.000000"
@@ -286,7 +316,7 @@ func generateEnergyDataSheetV2(db store.IBowStorage, f *excelize.File, start, en
 		CustomNumFmt: &numFmt,
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	stylesQoV := []int{styleIdNumFmt, styleIdL2, styleIdL3}
@@ -302,7 +332,7 @@ func generateEnergyDataSheetV2(db store.IBowStorage, f *excelize.File, start, en
 
 	sw, err := f.NewStreamWriter("Energiedaten")
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	_ = sw.SetColWidth(1, 1, 30)
@@ -364,14 +394,12 @@ func generateEnergyDataSheetV2(db store.IBowStorage, f *excelize.File, start, en
 		lineNum = lineNum + 1
 		lineDate, t, err := utils.ConvertRowIdToTimeString("CP", _lineG1.Id)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		if rowOk := utils.CheckTime(pt, t); !rowOk {
 			diff := ((t.Unix() - pt.Unix()) / (60 * 15)) - 1
 			if diff > 0 {
-				//nTime := time.Unix(pt.Unix(), 0)
-				//fmt.Printf("Time: %v\n", nTime)
 				for i := int64(0); i < diff; i += 1 {
 					nTime := pt.Add(time.Minute * time.Duration(15*(int(i)+1)))
 					newId, _ := utils.ConvertUnixTimeToRowId("CP/", nTime)
@@ -388,6 +416,9 @@ func generateEnergyDataSheetV2(db store.IBowStorage, f *excelize.File, start, en
 		_ = sw.SetRow(fmt.Sprintf("A%d", lineNum+10),
 			append([]interface{}{excelize.Cell{Value: lineDate}}, addLineV2(&_lineG1, countCons, meta, stylesQoV)...))
 
+		if !checkQoV(&_lineG1, meta) {
+			qovLogArray = append(qovLogArray, _lineG1.Copy(0))
+		}
 		g1Ok = iterCP.Next(&_lineG1)
 	}
 
@@ -395,8 +426,171 @@ func generateEnergyDataSheetV2(db store.IBowStorage, f *excelize.File, start, en
 
 	err = f.SetColWidth("Energiedaten", "A", "A", float64(25.0))
 	if err != nil {
+		return nil, err
+	}
+
+	return qovLogArray, nil
+}
+
+func generateLogDataSheetV2(db store.IBowStorage, f *excelize.File, logs []model.RawSourceLine, meters []InvestigatorCP) error {
+	sheetName := "QoV Log"
+	meta, err := generateMeterMetaSlice(db, meters)
+	if err != nil {
 		return err
 	}
+
+	participantMeterMap := map[string]string{}
+	for _, m := range meters {
+		participantMeterMap[m.MeteringPoint] = m.Name
+	}
+
+	// Create a new sheet.
+	_, err = f.NewSheet(sheetName)
+	if err != nil {
+		return err
+	}
+
+	styleIdL3, err := f.NewStyle(&excelize.Style{
+		Fill: excelize.Fill{Type: "pattern", Color: []string{"ff5429"}, Pattern: 1},
+	})
+	if err != nil {
+		return err
+	}
+	styleIdL2, err := f.NewStyle(&excelize.Style{
+		Fill: excelize.Fill{Type: "pattern", Color: []string{"FFFF00"}, Pattern: 1},
+	})
+	if err != nil {
+		return err
+	}
+
+	numFmt := "#,##0.000000"
+	styleIdNumFmt, err := f.NewStyle(&excelize.Style{
+		CustomNumFmt: &numFmt,
+	})
+	if err != nil {
+		return err
+	}
+
+	stylesQoV := []int{styleIdNumFmt, styleIdL2, styleIdL3}
+
+	sw, err := f.NewStreamWriter(sheetName)
+	if err != nil {
+		return err
+	}
+
+	_ = sw.SetColWidth(1, 1, 30)
+	//_ = sw.SetColWidth(2, 1000, 25)
+
+	//meta, _ := db.GetMeta(fmt.Sprintf("cpmeta/%s", "0"))
+	countCons, countProd := utils.CountConsumerProducer(meta)
+
+	for i := 0; i < (countCons*6)+(countProd*4); i++ {
+		if i%2 == 0 {
+			_ = sw.SetColWidth(i+2, i+2, 25)
+		} else {
+			_ = sw.SetColWidth(i+2, i+2, 5)
+		}
+	}
+
+	_ = sw.SetRow("A2",
+		append([]interface{}{excelize.Cell{Value: "MeteringpointID"}},
+			addHeaderV2(meta, countCons, 6, countProd, 4,
+				func(m *model.CounterPointMeta, i int) interface{} {
+					if i%2 == 0 {
+						return m.Name
+					} else {
+						return "QoV"
+					}
+				},
+				func(m *model.CounterPointMeta, i int) int { return 0 })...))
+
+	_ = sw.SetRow("A3",
+		append([]interface{}{excelize.Cell{Value: "Name"}},
+			addHeaderV2(meta, countCons, 6, countProd, 4,
+				func(m *model.CounterPointMeta, i int) interface{} {
+					if i%2 == 0 {
+						if p, ok := participantMeterMap[m.Name]; ok {
+							return p
+						}
+						return "unknown"
+					} else {
+						return ""
+					}
+				},
+				func(m *model.CounterPointMeta, i int) int { return 0 })...))
+
+	_ = sw.SetRow("A4",
+		append([]interface{}{excelize.Cell{Value: "Energy direction"}},
+			addHeaderV2(meta, countCons, 6, countProd, 4,
+				func(m *model.CounterPointMeta, i int) interface{} {
+					if i%2 == 0 {
+						return m.Dir
+					} else {
+						return ""
+					}
+				},
+				func(m *model.CounterPointMeta, i int) int { return 0 })...))
+
+	_ = sw.SetRow("A7",
+		append([]interface{}{excelize.Cell{Value: "Metercode"}},
+			addHeaderV2(meta, countCons, 6, countProd, 4,
+				func(m *model.CounterPointMeta, i int) interface{} {
+					if m.Dir == model.CONSUMER_DIRECTION {
+						switch i {
+						case 0:
+							return "Gesamtverbrauch lt. Messung (bei Teilnahme gem. Erzeugung) [KWH]"
+						case 2:
+							return "Anteil gemeinschaftliche Erzeugung [KWH]"
+						case 4:
+							return "Eigendeckung gemeinschaftliche Erzeugung [KWH]"
+						default:
+							return ""
+						}
+					} else {
+						switch i {
+						case 0:
+							return "Gesamte gemeinschaftliche Erzeugung [KWH]"
+						case 2:
+							return "Gesamt/Überschusserzeugung, Gemeinschaftsüberschuss [KWH]"
+						default:
+							return ""
+						}
+					}
+				},
+				func(m *model.CounterPointMeta, i int) int { return 0 })...))
+
+	lineNum := 0
+	for _, l := range logs {
+		lineNum = lineNum + 1
+		lineDate, _, err := utils.ConvertRowIdToTimeString("CP", l.Id)
+		if err != nil {
+			return err
+		}
+
+		_ = sw.SetRow(fmt.Sprintf("A%d", lineNum+8),
+			append([]interface{}{excelize.Cell{Value: lineDate}}, addLineQoV(&l, countCons, countProd, meta, stylesQoV)...))
+	}
+
+	_ = sw.Flush()
+
+	//err = f.SetColWidth(sheetName, "A", "A", float64(25.0))
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//err = f.SetColWidth(sheetName, "E", "E", float64(10.0))
+	//if err != nil {
+	//	return err
+	//}
+
+	//for i := 4; i < countCons; i += 4 {
+	//	n, _ := excelize.ColumnNumberToName(i)
+	//	_ = f.SetColWidth(sheetName, n, n, float64(2.0))
+	//}
+	//for i := (countCons * 4) + 3; i < (countCons*4)+(countProd*3); i += 3 {
+	//	n, _ := excelize.ColumnNumberToName(i)
+	//	_ = f.SetColWidth(sheetName, n, n, float64(5.0))
+	//}
 
 	return nil
 }
@@ -488,6 +682,101 @@ func addHeaderMeterCode(meta []*model.CounterPointMeta, countCon int, countProd 
 	return lineData
 }
 
+func addLineQoV(g1 *model.RawSourceLine, countCon, countProd int, meta []*model.CounterPointMeta, stylesQoV []int) []interface{} {
+
+	lineData := make([]interface{}, (countCon*6)+(countProd*4))
+	//line := map[string][]float64{}
+	setCellValue := func(length, sourceIdx int, raw []float64, qov []int) excelize.Cell {
+		if length > sourceIdx {
+			_qov := 1
+			if len(qov) > sourceIdx {
+				_qov = qov[sourceIdx]
+			}
+			if _qov == 1 {
+				return excelize.Cell{Value: utils.RoundToFixed(raw[sourceIdx], 6), StyleID: stylesQoV[0]}
+			} else if _qov == 2 {
+				return excelize.Cell{Value: utils.RoundToFixed(raw[sourceIdx], 6), StyleID: stylesQoV[1]}
+			} else if _qov == 3 {
+				return excelize.Cell{Value: utils.RoundToFixed(raw[sourceIdx], 6), StyleID: stylesQoV[2]}
+			} else {
+				//fmt.Printf("Quality of Value is %d Value: %f\n", _qov, utils.RoundToFixed(raw[sourceIdx], 6))
+				return excelize.Cell{Value: ""}
+			}
+		} else {
+			return excelize.Cell{Value: ""}
+		}
+	}
+
+	setCellOoVValue := func(length, sourceIdx int, qov []int) excelize.Cell {
+		if length > sourceIdx {
+			_qov := 1
+			if len(qov) > sourceIdx {
+				_qov = qov[sourceIdx]
+			}
+			if _qov == 1 {
+				return excelize.Cell{Value: "L1", StyleID: stylesQoV[0]}
+			} else if _qov == 2 {
+				return excelize.Cell{Value: "L2", StyleID: stylesQoV[1]}
+			} else if _qov == 3 {
+				return excelize.Cell{Value: "L3", StyleID: stylesQoV[2]}
+			} else if _qov == 0 {
+				return excelize.Cell{Value: "L0"}
+			} else {
+				return excelize.Cell{Value: ""}
+			}
+		} else {
+			return excelize.Cell{Value: ""}
+		}
+	}
+
+	cCnt := 0
+	pCnt := 0
+	for _, m := range meta {
+		if m.Dir == model.CONSUMER_DIRECTION {
+			baseIdx := cCnt * 6
+			cCnt += 1
+			lineData[baseIdx] = setCellValue(len(g1.Consumers), m.SourceIdx*3, g1.Consumers, g1.QoVConsumers)
+			lineData[baseIdx+1] = setCellOoVValue(len(g1.Consumers), m.SourceIdx*3, g1.QoVConsumers)
+			lineData[baseIdx+2] = setCellValue(len(g1.Consumers), (m.SourceIdx*3)+1, g1.Consumers, g1.QoVConsumers)
+			lineData[baseIdx+3] = setCellOoVValue(len(g1.Consumers), (m.SourceIdx*3)+1, g1.QoVConsumers)
+			lineData[baseIdx+4] = setCellValue(len(g1.Consumers), (m.SourceIdx*3)+2, g1.Consumers, g1.QoVConsumers)
+			lineData[baseIdx+5] = setCellOoVValue(len(g1.Consumers), (m.SourceIdx*3)+2, g1.QoVConsumers)
+		} else if m.Dir == model.PRODUCER_DIRECTION {
+			baseIdx := (countCon * 6) + (pCnt * 4)
+			pCnt += 1
+			lineData[baseIdx] = setCellValue(len(g1.Producers), m.SourceIdx*2, g1.Producers, g1.QoVProducers) //excelize.Cell{Value: g1.Producers[m.SourceIdx]}
+			lineData[baseIdx+1] = setCellOoVValue(len(g1.Producers), m.SourceIdx*2, g1.QoVProducers)
+			lineData[baseIdx+2] = setCellValue(len(g1.Producers), (m.SourceIdx*2)+1, g1.Producers, g1.QoVProducers)
+			lineData[baseIdx+3] = setCellOoVValue(len(g1.Producers), (m.SourceIdx*2)+1, g1.QoVProducers)
+		}
+	}
+	return lineData
+}
+
+func addHeaderV2(meta []*model.CounterPointMeta, countCon, cellCon, countProd, cellProd int,
+	value func(meta *model.CounterPointMeta, cellOffset int) interface{},
+	style func(meta *model.CounterPointMeta, cellOffset int) int) []interface{} {
+	cCnt := 0
+	pCnt := 0
+	lineData := make([]interface{}, (countCon*cellCon)+(countProd*cellProd))
+	for _, m := range meta {
+		if m.Dir == model.CONSUMER_DIRECTION {
+			baseIdx := cCnt * cellCon
+			cCnt += 1
+			for i := 0; i < cellCon; i++ {
+				lineData[baseIdx+i] = excelize.Cell{Value: value(m, i), StyleID: style(m, i)}
+			}
+		} else if m.Dir == model.PRODUCER_DIRECTION {
+			baseIdx := (countCon * cellCon) + (pCnt * cellProd)
+			pCnt += 1
+			for i := 0; i < cellProd; i++ {
+				lineData[baseIdx+i] = excelize.Cell{Value: value(m, i), StyleID: style(m, i)}
+			}
+		}
+	}
+	return lineData
+}
+
 func summaryCounterPointsV2(db store.IBowStorage, start, end time.Time, cps *ExportCPs) (*SummaryResult, error) {
 
 	meta, info, err := store.GetMetaInfo(db)
@@ -495,7 +784,18 @@ func summaryCounterPointsV2(db store.IBowStorage, start, end time.Time, cps *Exp
 		return nil, err
 	}
 
-	report, qovConsumer, qovProducer, err := sumEnergyOfPeriod(db, start, end, info)
+	metaRangeConsumer := map[int]time.Time{}
+	metaRangeProducer := map[int]time.Time{}
+	for _, v := range meta {
+		if v.Dir == model.CONSUMER_DIRECTION {
+			ts, _ := utils.ParseTime(v.PeriodStart, 0)
+			metaRangeConsumer[v.SourceIdx] = ts
+		} else {
+			ts, _ := utils.ParseTime(v.PeriodStart, 0)
+			metaRangeProducer[v.SourceIdx] = ts
+		}
+	}
+	report, qovConsumer, qovProducer, err := sumEnergyOfPeriod(db, start, end, info, metaRangeConsumer, metaRangeProducer)
 
 	if err != nil {
 		return nil, err
@@ -547,7 +847,7 @@ func summaryCounterPointsV2(db store.IBowStorage, start, end time.Time, cps *Exp
 	return summary, nil
 }
 
-func sumEnergyOfPeriod(db store.IBowStorage, start, end time.Time, info *model.CounterPointMetaInfo) (*model.EnergyReport, []bool, []bool, error) {
+func sumEnergyOfPeriod(db store.IBowStorage, start, end time.Time, info *model.CounterPointMetaInfo, rangeConsumer, rangeProducer map[int]time.Time) (*model.EnergyReport, []bool, []bool, error) {
 	sYear, sMonth, sDay := start.Year(), int(start.Month()), start.Day()
 	eYear, eMonth, eDay := end.Year(), int(end.Month()), end.Day()
 
@@ -570,23 +870,31 @@ func sumEnergyOfPeriod(db store.IBowStorage, start, end time.Time, info *model.C
 		Distributed: make([]float64, info.ProducerCount),
 	}
 
+	checkBegin := func(lineDate, mDate time.Time) bool {
+		if lineDate.Before(mDate) {
+			return true
+		}
+		return false
+	}
+
 	qovConsumerSlice := model.CreateInitializedBoolSlice(info.ConsumerCount, true)
 	qovProducerSlice := model.CreateInitializedBoolSlice(info.ProducerCount, true)
 	for g1Ok {
+		lineDate, _ := utils.ConvertRowIdToTime("CP", _lineG1.Id)
 		consumerMatrix, producerMatrix := utils.ConvertLineToMatrix(&_lineG1)
 		for i := 0; i < consumerMatrix.Rows; i += 1 {
 			report.Consumed[i] += consumerMatrix.GetElm(i, 0)
 			report.Shared[i] += consumerMatrix.GetElm(i, 1)
 			report.Allocated[i] += consumerMatrix.GetElm(i, 2)
 			if (i*3)+2 < len(_lineG1.QoVConsumers) {
-				qovConsumerSlice[i] = qovConsumerSlice[i] && (_lineG1.QoVConsumers[(i*3)] == 1) && (_lineG1.QoVConsumers[(i*3)+1] == 1) && (_lineG1.QoVConsumers[(i*3)+2] == 1)
+				qovConsumerSlice[i] = qovConsumerSlice[i] && (checkBegin(lineDate, rangeConsumer[i]) || ((_lineG1.QoVConsumers[(i*3)] == 1) && (_lineG1.QoVConsumers[(i*3)+1] == 1) && (_lineG1.QoVConsumers[(i*3)+2] == 1)))
 			}
 		}
 		for i := 0; i < producerMatrix.Rows; i += 1 {
 			report.Produced[i] += producerMatrix.GetElm(i, 0)
 			report.Distributed[i] += producerMatrix.GetElm(i, 1)
 			if (i*2)+1 < len(_lineG1.QoVProducers) {
-				qovProducerSlice[i] = qovProducerSlice[i] && (_lineG1.QoVProducers[(i*2)] == 1) && (_lineG1.QoVProducers[(i*2)+1] == 1)
+				qovProducerSlice[i] = qovProducerSlice[i] && (checkBegin(lineDate, rangeProducer[i]) || ((_lineG1.QoVProducers[(i*2)] == 1) && (_lineG1.QoVProducers[(i*2)+1] == 1)))
 			}
 		}
 
@@ -611,4 +919,35 @@ func sumMeterResult(s []SummaryMeterResult, elem func(e *SummaryMeterResult) flo
 		sum = sum + elem(&e)
 	}
 	return utils.RoundFloat(sum, 6)
+}
+
+func checkQoV(line *model.RawSourceLine, meta []*model.CounterPointMeta) bool {
+	lineDate, _ := utils.ConvertRowIdToTime("CP", line.Id)
+
+	checkDate := func(periodStart string, lineDate time.Time) bool {
+		mDate, _ := utils.ParseTime(periodStart, 0)
+		if lineDate.Before(mDate) {
+			return true
+		}
+		return false
+	}
+
+	check := false
+	for _, m := range meta {
+		if m.Dir == model.CONSUMER_DIRECTION {
+			if checkDate(m.PeriodStart, lineDate) {
+				continue
+			}
+			check = line.QoVConsumers[m.SourceIdx] != 1 || line.QoVConsumers[m.SourceIdx+1] != 1 || line.QoVConsumers[m.SourceIdx+2] != 1
+		} else {
+			if checkDate(m.PeriodStart, lineDate) {
+				continue
+			}
+			check = line.QoVProducers[m.SourceIdx] != 1 || line.QoVProducers[m.SourceIdx+1] != 1
+		}
+		if check {
+			return false
+		}
+	}
+	return true
 }

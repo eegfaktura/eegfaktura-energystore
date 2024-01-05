@@ -70,8 +70,8 @@ func TestGenerateEnergyDataSheetV2(t *testing.T) {
 			SourceIdx:   0,
 			Dir:         model.CONSUMER_DIRECTION,
 			Count:       0,
-			PeriodStart: "daf",
-			PeriodEnd:   "dfsad",
+			PeriodStart: "01.01.2023 00:00:00",
+			PeriodEnd:   "02.01.2023 00:00:00",
 		},
 		&model.CounterPointMeta{
 			ID:          "002",
@@ -79,8 +79,8 @@ func TestGenerateEnergyDataSheetV2(t *testing.T) {
 			SourceIdx:   1,
 			Dir:         model.CONSUMER_DIRECTION,
 			Count:       0,
-			PeriodStart: "daf",
-			PeriodEnd:   "dfsad",
+			PeriodStart: "01.01.2023 00:00:00",
+			PeriodEnd:   "02.01.2023 00:00:00",
 		},
 		&model.CounterPointMeta{
 			ID:          "003",
@@ -88,8 +88,8 @@ func TestGenerateEnergyDataSheetV2(t *testing.T) {
 			SourceIdx:   0,
 			Dir:         model.PRODUCER_DIRECTION,
 			Count:       0,
-			PeriodStart: "daf",
-			PeriodEnd:   "dfsad",
+			PeriodStart: "01.01.2023 00:00:00",
+			PeriodEnd:   "02.01.2023 00:00:00",
 		},
 		&model.CounterPointMeta{
 			ID:          "004",
@@ -97,8 +97,8 @@ func TestGenerateEnergyDataSheetV2(t *testing.T) {
 			SourceIdx:   1,
 			Dir:         model.PRODUCER_DIRECTION,
 			Count:       0,
-			PeriodStart: "daf",
-			PeriodEnd:   "dfsad",
+			PeriodStart: "01.01.2023 00:00:00",
+			PeriodEnd:   "02.01.2023 00:00:00",
 		},
 	}, NumberOfMetering: 10}
 
@@ -191,7 +191,7 @@ func TestGenerateEnergyDataSheetV2(t *testing.T) {
 		metaData *model.RawSourceMeta
 		cps      *ExportCPs
 		entries  []*model.RawSourceLine
-		check    func(t *testing.T, f *excelize.File)
+		check    func(t *testing.T, f *excelize.File, l []model.RawSourceLine)
 	}{
 		{
 			name:     "fillupMissingValues",
@@ -203,7 +203,7 @@ func TestGenerateEnergyDataSheetV2(t *testing.T) {
 				QoVConsumers: []int{1, 1, 1, 1, 1, 1},
 				QoVProducers: []int{1, 1, 1, 1},
 			}),
-			check: func(t *testing.T, f *excelize.File) {
+			check: func(t *testing.T, f *excelize.File, l []model.RawSourceLine) {
 				rows, err := f.GetRows("Energiedaten")
 				assert.NoError(t, err)
 				assert.Equal(t, len(rows[1]), 11)
@@ -219,7 +219,7 @@ func TestGenerateEnergyDataSheetV2(t *testing.T) {
 			metaData: testMetaData,
 			cps:      cps,
 			entries:  entries,
-			check: func(t *testing.T, f *excelize.File) {
+			check: func(t *testing.T, f *excelize.File, l []model.RawSourceLine) {
 				rows, err := f.GetRows("Energiedaten")
 				assert.NoError(t, err)
 				assert.Equal(t, len(rows[1]), 11)
@@ -229,6 +229,36 @@ func TestGenerateEnergyDataSheetV2(t *testing.T) {
 				assert.Equal(t, "01.01.2023 01:30:00", rows[16][0])
 				assert.Equal(t, "01.01.2023 01:45:00", rows[17][0])
 				assert.Equal(t, "01.01.2023 02:00:00", rows[18][0])
+
+				assert.Nil(t, l)
+			},
+		},
+		{
+			name:     "Bad Data - QoV differs to 1",
+			metaData: testMetaData,
+			cps:      cps,
+			entries: append(entries, &model.RawSourceLine{Id: "CP/2023/01/02/00/00/00/",
+				Consumers:    []float64{0, 0, 0, 0, 0, 0},
+				Producers:    []float64{0, 0, 0, 0},
+				QoVConsumers: []int{1, 2, 2, 1, 1, 1},
+				QoVProducers: []int{1, 1, 1, 1},
+			}),
+			check: func(t *testing.T, f *excelize.File, l []model.RawSourceLine) {
+				rows, err := f.GetRows("Energiedaten")
+				assert.NoError(t, err)
+				assert.Equal(t, len(rows[1]), 11)
+				assert.Equal(t, len(rows), 107)
+
+				assert.Equal(t, "01.01.2023 00:00:00", rows[10][0])
+				assert.Equal(t, "01.01.2023 01:30:00", rows[16][0])
+				assert.Equal(t, "01.01.2023 01:45:00", rows[17][0])
+				assert.Equal(t, "01.01.2023 02:00:00", rows[18][0])
+
+				assert.Equal(t, 1, len(l))
+
+				//rows, err = f.GetRows("QoV Log")
+				//assert.NoError(t, err)
+				//assert.Equal(t, 10, len(rows))
 			},
 		},
 	}
@@ -249,13 +279,13 @@ func TestGenerateEnergyDataSheetV2(t *testing.T) {
 				}
 			}()
 
-			err := generateEnergyDataSheetV2(mockBow,
+			qovLog, err := generateEnergyDataSheetV2(mockBow,
 				f,
 				time.Date(2023, time.Month(1), 1, 0, 0, 0, 0, time.Local),
 				time.Date(2023, time.Month(1), 2, 0, 0, 0, 0, time.Local),
 				tt.cps.Cps)
 			assert.NoError(t, err)
-			tt.check(t, f)
+			tt.check(t, f, qovLog)
 		})
 	}
 }

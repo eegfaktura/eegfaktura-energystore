@@ -63,6 +63,7 @@ type IBowStorage interface {
 	GetLineRange(bucket, key, until string) ebow.IRange
 	SetLines(line []*model.RawSourceLine) error
 	GetLine(line *model.RawSourceLine) error
+	ListBuckets() ([]string, error)
 }
 
 type BowStorage struct {
@@ -151,6 +152,14 @@ func (b *BowStorage) GetLineG2(line *model.RawSourceLine) error {
 }
 func (b *BowStorage) GetLineG3(line *model.RawSourceLine) error {
 	return b.db.Bucket("rawdata").Get(line.Id, line)
+}
+
+func (b *BowStorage) ListBuckets() ([]string, error) {
+	return b.db.Buckets(), nil
+}
+
+func (b *BowStorage) GetBucket(name string) (*ebow.Iter, error) {
+	return b.db.Bucket(name).Iter(), nil
 }
 
 func GenerateCPKey(year int, month int) string {

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"os"
 	"testing"
+	"time"
 )
 
 //var (
@@ -39,8 +40,8 @@ import (
 //}
 
 func TestNewMqttEnergyImporter(t *testing.T) {
-	timeV1, err := utils.ParseTime("24.10.2022 00:00:00")
-	timeV2, err := utils.ParseTime("24.10.2022 00:15:00")
+	timeV1, err := utils.ParseTime("24.10.2022 00:00:00", time.Now().UnixMilli())
+	timeV2, err := utils.ParseTime("24.10.2022 00:15:00", time.Now().UnixMilli())
 	require.NoError(t, err)
 	tests := []struct {
 		name     string
@@ -328,4 +329,67 @@ func TestImportRawdataStore(t *testing.T) {
 	fmt.Printf("META_DATA: %+v\n", string(response))
 
 	os.RemoveAll("../test/rawdata/rc100190")
+}
+
+func Test_updateMetaCP(t *testing.T) {
+	type args struct {
+		metaCP *model.CounterPointMeta
+		begin  time.Time
+		end    time.Time
+	}
+	tests := []struct {
+		name string
+		args args
+		test func(t *testing.T, args args)
+	}{
+		{
+			name: "Adjust meta period end time",
+			args: args{
+				metaCP: &model.CounterPointMeta{
+					ID:          "000",
+					Name:        "IV0000999222222222221",
+					SourceIdx:   0,
+					Dir:         "CONSUMPTION",
+					Count:       0,
+					PeriodStart: "30.12.2023 15:00:0000",
+					PeriodEnd:   "30.12.2023 15:00:0000",
+				},
+				begin: time.Date(2023, 12, 30, 15, 1, 0, 0, time.Local),
+				end:   time.Date(2023, 12, 30, 15, 15, 0, 0, time.Local),
+			},
+			test: func(t *testing.T, args args) {
+				result := updateMetaCP(args.metaCP, args.begin, args.end)
+				assert.Equalf(t, true, result, "updateMetaCP(%v, %v, %v)", args.metaCP, args.begin, args.end)
+				assert.Equal(t, "30.12.2023 15:00:0000", args.metaCP.PeriodStart)
+				assert.Equal(t, "30.12.2023 15:15:0000", args.metaCP.PeriodEnd)
+			},
+		},
+		{
+			name: "Adjust meta period start time",
+			args: args{
+				metaCP: &model.CounterPointMeta{
+					ID:          "000",
+					Name:        "IV0000999222222222221",
+					SourceIdx:   0,
+					Dir:         "CONSUMPTION",
+					Count:       0,
+					PeriodStart: "30.12.2023 15:00:0000",
+					PeriodEnd:   "30.12.2023 15:15:0000",
+				},
+				begin: time.Date(2023, 12, 30, 14, 0, 0, 0, time.Local),
+				end:   time.Date(2023, 12, 30, 15, 15, 0, 0, time.Local),
+			},
+			test: func(t *testing.T, args args) {
+				result := updateMetaCP(args.metaCP, args.begin, args.end)
+				assert.Equalf(t, true, result, "updateMetaCP(%v, %v, %v)", args.metaCP, args.begin, args.end)
+				assert.Equal(t, "30.12.2023 14:00:0000", args.metaCP.PeriodStart)
+				assert.Equal(t, "30.12.2023 15:15:0000", args.metaCP.PeriodEnd)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.test(t, tt.args)
+		})
+	}
 }
