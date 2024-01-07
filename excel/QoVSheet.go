@@ -5,6 +5,7 @@ import (
 	"at.ourproject/energystore/utils"
 	"fmt"
 	"github.com/xuri/excelize/v2"
+	"time"
 )
 
 func generateLogDataSheet(ctx *RunnerContext, f *excelize.File) error {
@@ -128,7 +129,7 @@ func generateLogDataSheet(ctx *RunnerContext, f *excelize.File) error {
 	lineNum := 0
 	for _, l := range ctx.qovLogArray {
 		lineNum = lineNum + 1
-		lineDate, _, err := utils.ConvertRowIdToTimeString("CP", l.Id)
+		lineDate, _, err := utils.ConvertRowIdToTimeString("CP", l.Id, time.Local)
 		if err != nil {
 			return err
 		}

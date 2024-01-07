@@ -100,7 +100,7 @@ func (ss *SummarySheet) closeSheet(ctx *RunnerContext) error {
 	}
 
 	beginDate := time.Date(ctx.start.Year(), ctx.start.Month(), ctx.start.Day(), 0, 0, 0, 0, time.Local)
-	endDate := time.Date(ctx.end.Year(), ctx.end.Month(), ctx.end.Day(), 0, 0, 0, 0, time.Local)
+	endDate := time.Date(ctx.end.Year(), ctx.end.Month(), ctx.end.Day(), 23, 45, 0, 0, time.Local)
 
 	_ = sw.SetColWidth(1, 1, float64(40))
 	_ = sw.SetColWidth(2, 2, float64(35))

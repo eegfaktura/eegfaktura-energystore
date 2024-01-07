@@ -210,7 +210,7 @@ func (er *EnergyRunner) run(db store.IBowStorage, f *excelize.File, start, end t
 
 	var pt *time.Time = nil
 	for g1Ok {
-		_, t, err := utils.ConvertRowIdToTimeString("CP", _lineG1.Id)
+		_, t, err := utils.ConvertRowIdToTimeString("CP", _lineG1.Id, time.UTC)
 		if rowOk := utils.CheckTime(pt, t); !rowOk {
 			diff := ((t.Unix() - pt.Unix()) / (60 * 15)) - 1
 			if diff > 0 {
@@ -225,7 +225,8 @@ func (er *EnergyRunner) run(db store.IBowStorage, f *excelize.File, start, end t
 				}
 			}
 		}
-		pt = t
+		ct := time.Unix(t.Unix(), 0).UTC()
+		pt = &ct
 
 		if err = er.handleLine(rCxt, &_lineG1); err != nil {
 			return nil, err

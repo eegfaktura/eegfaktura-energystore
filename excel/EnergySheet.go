@@ -132,7 +132,7 @@ func (es *EnergySheet) initSheet(ctx *RunnerContext) error {
 
 func (es *EnergySheet) handleLine(ctx *RunnerContext, line *model.RawSourceLine) error {
 	es.lineNum += 1
-	lineDate, _, err := utils.ConvertRowIdToTimeString("CP", line.Id)
+	lineDate, _, err := utils.ConvertRowIdToTimeString("CP", line.Id, time.Local)
 	if err != nil {
 		return err
 	}
