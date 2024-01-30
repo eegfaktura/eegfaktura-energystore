@@ -141,7 +141,7 @@ func (A *Matrix) trace() float64 {
 
 func (A *Matrix) Add(B *Matrix) error {
 	/*  Just for convenience!
-	If base matrix is not defined yet create a element array with zero value
+	If base matrix is not defined yet create an element array with zero value
 	*/
 	if A.Elements == nil && A.Rows == 0 && A.Cols == 0 {
 		A.Elements = make([]float64, B.Cols*B.Rows)

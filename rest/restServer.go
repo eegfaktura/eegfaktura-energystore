@@ -26,6 +26,8 @@ func NewRestServer() *mux.Router {
 	r.HandleFunc("/eeg/lastRecordDate", jwtWrapper(lastRecordDate())).Methods("GET")
 	r.HandleFunc("/eeg/excel/export/{year}/{month}", jwtWrapper(exportMeteringData())).Methods("POST")
 	r.HandleFunc("/eeg/excel/report/download", jwtWrapper(exportReport())).Methods("POST")
+
+	r = InitQueryApiRouter(r)
 	return r
 }
 

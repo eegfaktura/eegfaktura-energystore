@@ -10,7 +10,7 @@ DOCKER=docker
 GOPATH := ${PWD}/..:${GOPATH}
 export GOPATH
 
-DOCKER_TAG=v0.1.4
+DOCKER_TAG=v0.1.5
 
 all: test build
 build:

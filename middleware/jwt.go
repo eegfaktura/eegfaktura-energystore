@@ -20,11 +20,6 @@ type JwtValidateMiddleware struct {
 	jwtUtil *AccessTokenGenJWT
 }
 
-const (
-	BASIC_SCHEMA  string = "Basic "
-	BEARER_SCHEMA string = "Bearer "
-)
-
 func init() {
 	jwt.TimeFunc = func() time.Time {
 		return time.Now().UTC().Add(time.Second * 5)

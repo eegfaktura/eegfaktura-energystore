@@ -1,0 +1,35 @@
+{
+  "app" : {
+    "realm": "VFEEG",
+    "auth-server-url": "https://login.ourproject.at/auth/",
+    "ssl-required": "external",
+    "resource": "at.ourproject.vfeeg.app",
+    "public-client": true,
+    "verify-token-audience": true,
+    "use-resource-role-mappings": true,
+    "confidential-port": 0,
+    "secret": "LxUXJLXP2Ra57y4RcIzXPYgNHvJF7H1j"
+  },
+  "admin" : {
+    "realm": "VFEEG",
+    "auth-server-url": "https://login.ourproject.at/auth/",
+    "ssl-required": "external",
+    "resource": "at.ourproject.vfeeg.admin",
+    "public-client": true,
+    "verify-token-audience": true,
+    "use-resource-role-mappings": true,
+    "confidential-port": 0,
+    "secret": "LxUXJLXP2Ra57y4RcIzXPYgNHvJF7H1j"
+  },
+  "api" : {
+    "realm": "VFEEG",
+    "auth-server-url": "https://login.ourproject.at/auth/",
+    "ssl-required": "external",
+    "resource": "at.ourproject.vfeeg.app",
+    "public-client": true,
+    "verify-token-audience": true,
+    "use-resource-role-mappings": true,
+    "confidential-port": 0,
+    "secret": "LxUXJLXP2Ra57y4RcIzXPYgNHvJF7H1j"
+  }
+}

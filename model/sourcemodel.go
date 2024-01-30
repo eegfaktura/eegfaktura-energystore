@@ -23,6 +23,20 @@ func (c RawSourceLine) Copy(cLength int) RawSourceLine {
 	return r
 }
 
+func (c RawSourceLine) DeepCopy(nConsumer, nProducer int) RawSourceLine {
+	r := RawSourceLine{
+		Consumers:    make([]float64, nConsumer*3),
+		Producers:    make([]float64, nProducer*2),
+		QoVConsumers: make([]int, nConsumer*3),
+		QoVProducers: make([]int, nProducer*2)}
+
+	copy(r.Consumers[:], c.Consumers[:])
+	copy(r.Producers[:], c.Producers[:])
+	copy(r.QoVConsumers[:], c.QoVConsumers[:])
+	copy(r.QoVProducers[:], c.QoVProducers[:])
+	return r
+}
+
 func MakeRawSourceLine(id string, consumerSize, producerSize int) *RawSourceLine {
 	return &RawSourceLine{Id: id,
 		Consumers: make([]float64, consumerSize), Producers: make([]float64, producerSize),
