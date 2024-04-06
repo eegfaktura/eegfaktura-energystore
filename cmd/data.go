@@ -47,7 +47,7 @@ func handleData(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	db, err := store.OpenStorage(tenant)
+	db, err := store.OpenStorage(tenant, ecId)
 	if err != nil {
 		return err
 	}
@@ -99,7 +99,7 @@ func handleData(cmd *cobra.Command, args []string) error {
 }
 
 func determinePeriod() (string, string, error) {
-	lastEntry, err := services.GetLastEnergyEntry(tenant)
+	lastEntry, err := services.GetLastEnergyEntry(tenant, ecId)
 	if err != nil {
 		return "", "", err
 	}

@@ -16,19 +16,19 @@ import (
 )
 
 // SingleUpload is the resolver for the singleUpload field.
-func (r *mutationResolver) SingleUpload(ctx context.Context, tenant string, sheet string, file graphql.Upload) (bool, error) {
+func (r *mutationResolver) SingleUpload(ctx context.Context, tenant string, ecID string, sheet string, file graphql.Upload) (bool, error) {
 	glog.Infof("START UPLOAD: %+v %+v", tenant, sheet)
-	err := excel.ImportFile(tenant, file.Filename, sheet, file.File)
+	err := excel.ImportFile(tenant, ecID, file.Filename, sheet, file.File)
 	return err == nil, err
 }
 
 // LastEnergyDate is the resolver for the lastEnergyDate field.
-func (r *queryResolver) LastEnergyDate(ctx context.Context, tenant string) (string, error) {
-	return services.GetLastEnergyEntry(tenant)
+func (r *queryResolver) LastEnergyDate(ctx context.Context, tenant string, ecID string) (string, error) {
+	return services.GetLastEnergyEntry(tenant, ecID)
 }
 
 // Report is the resolver for the report field.
-func (r *queryResolver) Report(ctx context.Context, tenant string, year int, segment int, period string) (*model.EegEnergy, error) {
+func (r *queryResolver) Report(ctx context.Context, tenant string, ecID string, year int, segment int, period string) (*model.EegEnergy, error) {
 	var err error
 	energy := &model.EegEnergy{}
 

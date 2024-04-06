@@ -15,18 +15,18 @@ import (
 
 func TestCalculateBiAnnualParticipantReport(t *testing.T) {
 
-	db, err := store.OpenStorageTest("excelsource", "../test/rawdata")
+	db, err := store.OpenStorageTest("excelsource", "ecid", "../test/rawdata")
 	require.NoError(t, err)
 	defer func() {
 		db.Close()
 		//os.RemoveAll("../test/rawdata/excelsource")
 	}()
 
-	excelFile, err := excel.OpenExceFile("../test/zaehlpunkte-beispieldatei-neu.xlsx")
+	excelFile, err := excel.OpenExceFile("../test/zaehlpunkte-beispieldatei.xlsx")
 	require.NoError(t, err)
 	defer excelFile.Close()
 
-	err = excel.ImportExcelEnergyFileNew(excelFile, "Energiedaten", db)
+	err = excel.ImportExcelEnergyFileNew(excelFile, "ConsumptionDataReport", db)
 	require.NoError(t, err)
 
 	var report model.ReportResponse
@@ -111,7 +111,7 @@ func TestCalculateBiAnnualParticipantReport(t *testing.T) {
 		participant := report.ParticipantReports[0]
 		assert.Equal(t, len(participant.Meters), 1)
 		require.NotNil(t, participant.Meters[0].Report)
-		assert.Equal(t, 27, len(participant.Meters[0].Report.Intermediate.Utilization), "Participant01")
+		assert.Equal(t, 26, len(participant.Meters[0].Report.Intermediate.Utilization), "Participant01")
 
 		fmt.Println("REPORT PARTICIPANTS")
 		participant = report.ParticipantReports[1]

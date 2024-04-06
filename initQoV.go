@@ -12,6 +12,7 @@ import (
 
 func main() {
 	var tenant = flag.String("tenant", "", "tenant to be converted")
+	var ecId = flag.String("ecId", "", "communityId of eeg")
 	var configPath = flag.String("configPath", ".", "Configfile Path")
 	var from = flag.String("from", "", "Start Date")
 	var to = flag.String("to", "", "Until Date")
@@ -47,7 +48,7 @@ func main() {
 	fmt.Printf("From Date String:  %s\n", dateFrom)
 	fmt.Printf("Until Date String: %s\n", dateTo)
 
-	db, err := store.OpenStorage(*tenant)
+	db, err := store.OpenStorage(*tenant, *ecId)
 	if err != nil {
 		panic(err)
 	}

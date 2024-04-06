@@ -40,7 +40,7 @@ import (
 //}
 
 func TestImportExcelEnergyFile(t *testing.T) {
-	db, err := store.OpenStorageTest("dashboard", "../test/rawdata")
+	db, err := store.OpenStorageTest("dashboard", "ecid", "../test/rawdata")
 	require.Nil(t, err)
 	defer func() {
 		db.Close()
@@ -85,7 +85,7 @@ func TestImportExcelEnergyFile(t *testing.T) {
 func TestBuildMatixMetaStruct(t *testing.T) {
 
 	t.Run("Initiate Meta Struct", func(t *testing.T) {
-		db, err := store.OpenStorageTest("excelsource1", "../test/rawdata")
+		db, err := store.OpenStorageTest("excelsource1", "ecid", "../test/rawdata")
 		require.NoError(t, err)
 		defer func() {
 			db.Close()
@@ -244,7 +244,7 @@ func TestBuildMatixMetaStruct(t *testing.T) {
 	})
 
 	t.Run("Check MetaStruct", func(t *testing.T) {
-		db, err := store.OpenStorageTest("excelsource2", "../test/rawdata")
+		db, err := store.OpenStorageTest("excelsource2", "ecid", "../test/rawdata")
 		require.NoError(t, err)
 		defer func() {
 			db.Close()
@@ -339,7 +339,7 @@ func TestBuildMatixMetaStruct(t *testing.T) {
 				15: "24.10.2022 00:00:00",
 				16: "24.10.2022 00:00:00",
 				17: "24.10.2022 00:00:00",
-				18: "",
+				18: "24.10.2022 00:00:00",
 				19: "24.10.2022 00:00:00",
 			},
 			periodEnd: map[int]string{
@@ -362,6 +362,7 @@ func TestBuildMatixMetaStruct(t *testing.T) {
 				16: "24.10.2022 00:00:00",
 				17: "24.10.2022 00:00:00",
 				18: "24.10.2022 00:00:00",
+				19: "24.10.2022 00:00:00",
 			},
 		}
 
@@ -406,7 +407,7 @@ func TestBuildMatixMetaStruct(t *testing.T) {
 	})
 
 	t.Run("Initiate Metadata with 32 consumers and 1 producer", func(t *testing.T) {
-		db, err := store.OpenStorageTest("excelsource3", "../test/rawdata")
+		db, err := store.OpenStorageTest("excelsource3", "ecid", "../test/rawdata")
 		require.NoError(t, err)
 		defer func() {
 			db.Close()
@@ -681,7 +682,7 @@ func TestBuildMatixMetaStruct(t *testing.T) {
 	})
 
 	t.Run("Initiate Metadata extended MM field", func(t *testing.T) {
-		db, err := store.OpenStorageTest("excelsource3", "../test/rawdata")
+		db, err := store.OpenStorageTest("excelsource3", "ecid", "../test/rawdata")
 		require.NoError(t, err)
 		defer func() {
 			db.Close()

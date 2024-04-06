@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"errors"
 	"fmt"
 	"time"
 )
@@ -108,4 +109,31 @@ func StringToTime(date string) time.Time {
 
 func TruncateToDay(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.Local)
+}
+
+func PeriodToStartEndTime(year, segment int, periodCode string) (time.Time, time.Time, error) {
+
+	switch periodCode {
+	case "YM":
+		if segment > 0 && segment < 13 {
+			return time.Date(year, time.Month(segment), 1, 0, 0, 0, 0, time.UTC),
+				time.Date(year, time.Month(segment+1), 0, 0, 0, 0, 0, time.UTC), nil
+		}
+	case "YQ":
+		if segment > 0 && segment < 5 {
+			return time.Date(year, time.Month((segment-1)*3+1), 1, 0, 0, 0, 0, time.UTC),
+				time.Date(year, time.Month((segment)*3+1), 0, 0, 0, 0, 0, time.UTC), nil
+		}
+	case "YH":
+		if segment > 0 && segment < 3 {
+			return time.Date(year, time.Month((segment-1)*6+1), 1, 0, 0, 0, 0, time.UTC),
+				time.Date(year, time.Month((segment)*6+1), 0, 0, 0, 0, 0, time.UTC), nil
+		}
+	case "Y":
+		if segment == 0 {
+			return time.Date(year, time.Month(1), 1, 0, 0, 0, 0, time.UTC),
+				time.Date(year, time.Month(12), 31, 0, 0, 0, 0, time.UTC), nil
+		}
+	}
+	return time.Now(), time.Now(), errors.New(fmt.Sprintf("Wrong Time-Period (year: %d, segment: %d, type: %s)", year, segment, periodCode))
 }

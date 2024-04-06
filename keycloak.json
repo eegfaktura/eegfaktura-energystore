@@ -1,7 +1,7 @@
 {
   "app" : {
-    "realm": "VFEEG",
-    "auth-server-url": "https://login.ourproject.at/auth/",
+    "realm": "EEGFaktura",
+    "auth-server-url": "https://login.eegfaktura.at/",
     "ssl-required": "external",
     "resource": "at.ourproject.vfeeg.app",
     "public-client": true,

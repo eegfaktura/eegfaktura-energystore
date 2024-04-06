@@ -1,10 +1,10 @@
 
 persistence:
-  path: "../../rawdata/converted"
+  path: "../../rawdata/test-converted/test"
 
 jwt:
   privKeyFile: "./zertifikat-key.pem"
-  pubKeyFile: "./zertifikat-pub.pem"
+  pubKeyFile: "./zertifikat-pub-1.pem"
 
 mqtt:
   host: "localhost:1883"

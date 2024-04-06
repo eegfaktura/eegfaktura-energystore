@@ -47,9 +47,9 @@ func returnFloatValue(array []float64, idx int) float64 {
 	return 0
 }
 
-func ExportEnergyDataToMail(tenant, to string, year, month int, cps *ExportCPs) error {
+func ExportEnergyDataToMail(tenant, ecid, to string, year, month int, cps *ExportCPs) error {
 
-	buf, err := ExportExcel(tenant, year, month, cps)
+	buf, err := ExportExcel(tenant, ecid, year, month, cps)
 	if err != nil {
 		return err
 	}
@@ -58,12 +58,12 @@ func ExportEnergyDataToMail(tenant, to string, year, month int, cps *ExportCPs) 
 	return utils.SendMail(tenant, to, fmt.Sprintf("EEG (%s) - Excel Report", tenant), nil, &filename, buf)
 }
 
-func ExportExcel(tenant string, year, month int, cps *ExportCPs) (*bytes.Buffer, error) {
+func ExportExcel(tenant, ecid string, year, month int, cps *ExportCPs) (*bytes.Buffer, error) {
 	start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.Local)
 	end := time.Date(year, time.Month(month)+1, 0, 0, 0, 0, 0, time.Local)
 
 	//return CreateExcelFile(tenant, start, end, cps)
-	return ExportEnergyToExcel(tenant, start, end, cps)
+	return ExportEnergyToExcel(tenant, ecid, start, end, cps)
 }
 
 type periodRange struct {
@@ -248,8 +248,8 @@ func (er *EnergyRunner) run(db store.IBowStorage, f *excelize.File, start, end t
 	return f.WriteToBuffer()
 }
 
-func ExportEnergyToExcel(tenant string, start, end time.Time, cps *ExportCPs) (*bytes.Buffer, error) {
-	db, err := store.OpenStorage(tenant)
+func ExportEnergyToExcel(tenant, ecid string, start, end time.Time, cps *ExportCPs) (*bytes.Buffer, error) {
+	db, err := store.OpenStorage(tenant, ecid)
 	if err != nil {
 		return nil, err
 	}

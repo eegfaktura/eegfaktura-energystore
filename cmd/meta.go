@@ -91,7 +91,7 @@ info.
 
 func handleMeta(cmd *cobra.Command, args []string) error {
 	viper.Set("persistence.path", dir)
-	db, err := store.OpenStorage(tenant)
+	db, err := store.OpenStorage(tenant, ecId)
 	if err != nil {
 		return err
 	}
@@ -117,7 +117,7 @@ func handleMeta(cmd *cobra.Command, args []string) error {
 
 func setMeta(cmd *cobra.Command, args []string) error {
 	viper.Set("persistence.path", dir)
-	db, err := store.OpenStorage(tenant)
+	db, err := store.OpenStorage(tenant, ecId)
 	if err != nil {
 		return err
 	}

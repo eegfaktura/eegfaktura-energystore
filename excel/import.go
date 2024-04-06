@@ -10,9 +10,9 @@ import (
 	"github.com/golang/glog"
 )
 
-func ImportFile(tenant, filename, sheet string, file io.Reader) error {
+func ImportFile(tenant, ecId, filename, sheet string, file io.Reader) error {
 	fmt.Printf("Start Import\n")
-	db, err := store.OpenStorage(tenant)
+	db, err := store.OpenStorage(tenant, ecId)
 	if err != nil {
 		return err
 	}

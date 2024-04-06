@@ -12,6 +12,15 @@ import (
 
 var re = regexp.MustCompile(`^(\w*)[^(]*\(([^)]*)\)$`)
 
+type ReportData struct {
+	Consumed    float64 `json:"consumed"`
+	Allocated   float64 `json:"allocated"`
+	Distributed float64 `json:"distributed"`
+	Produced    float64 `json:"produced"`
+	QoVConsumer int     `json:"qoVConsumer"`
+	QoVProducer int     `json:"qoVProducer"`
+}
+
 type RawData struct {
 	Ts    int64     `json:"ts"`
 	Value []float64 `json:"value"`
@@ -22,6 +31,7 @@ type RawDataResult struct {
 	Data      []RawData            `json:"data"`
 	Direction model.MeterDirection `json:"direction"`
 }
+
 type RawDataEngine struct {
 	cps      []TargetMP
 	params   map[string][]string
@@ -65,18 +75,28 @@ func (rde *RawDataEngine) HandleEnd(ctx *EngineContext) error {
 	return rde.function.HandleFinish(ctx)
 }
 
-func QueryRawData(tenant string, start, end time.Time, cps []TargetMP, params map[string][]string) (map[string]*RawDataResult, error) {
+func QueryIntraDayReport(tenant, ecid string, start, end time.Time) ([]*ReportData, error) {
+	c, _ := NewIntraDayFunction()
+	e := &Engine{c}
+
+	if err := e.Query(tenant, ecid, start, end); err != nil {
+		return nil, err
+	}
+	return (c.(*IntraDay)).GetResult(), nil
+}
+
+func QueryRawData(tenant, ecid string, start, end time.Time, cps []TargetMP, params map[string][]string) (map[string]*RawDataResult, error) {
 	c := &RawDataEngine{cps: cps, params: params}
 	e := &Engine{c}
 
-	if err := e.query(tenant, start, end); err != nil {
+	if err := e.Query(tenant, ecid, start, end); err != nil {
 		return nil, err
 	}
 	return c.function.GetResult(), nil
 }
 
-func QueryMetaData(tenant string) (map[string]*MetaData, error) {
-	db, err := OpenStorage(tenant)
+func QueryMetaData(tenant, ecid string) (map[string]*MetaData, error) {
+	db, err := OpenStorage(tenant, ecid)
 	if err != nil {
 		return nil, err
 	}

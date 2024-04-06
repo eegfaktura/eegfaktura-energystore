@@ -27,6 +27,7 @@ func convertRowId(prefix, id string) string {
 func main() {
 
 	var tenant = flag.String("tenant", "", "tenant to be converted")
+	var ecId = flag.String("ecId", "", "communityId of eeg")
 	var configPath = flag.String("configPath", ".", "Configfile Path")
 	flag.Parse()
 
@@ -40,13 +41,13 @@ func main() {
 	oldTenant := strings.ToUpper(*tenant)
 	newTenant := oldTenant + "_new"
 
-	dbOld, err := store.OpenStorage(oldTenant)
+	dbOld, err := store.OpenStorage(oldTenant, *ecId)
 	if err != nil {
 		panic(err)
 	}
 	defer func() { dbOld.Close() }()
 
-	dbNew, err := store.OpenStorage(newTenant)
+	dbNew, err := store.OpenStorage(newTenant, *ecId)
 	if err != nil {
 		panic(err)
 	}

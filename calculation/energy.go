@@ -3,6 +3,7 @@ package calculation
 import (
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
+	"at.ourproject/energystore/utils"
 	"fmt"
 	"github.com/golang/glog"
 	"strings"
@@ -20,7 +21,7 @@ import (
 //   - YM1-YM12: cumulate months
 func EnergyReport(tenant string, year, segment int, periodCode string) (*model.EegEnergy, error) {
 
-	db, err := store.OpenStorage(tenant)
+	db, err := store.OpenStorage(tenant, "")
 	if err != nil {
 		return nil, err
 	}
@@ -83,9 +84,9 @@ func EnergyReport(tenant string, year, segment int, periodCode string) (*model.E
 	return eegModel, nil
 }
 
-func EnergyReportV2(tenant string, participants []model.ParticipantReport, year, segment int, periodCode string) (*model.ReportResponse, error) {
+func EnergyReportV2(tenant, ecid string, participants []model.ParticipantReport, year, segment int, periodCode string) (*model.ReportResponse, error) {
 
-	db, err := store.OpenStorage(tenant)
+	db, err := store.OpenStorage(tenant, ecid)
 	if err != nil {
 		return nil, err
 	}
@@ -203,3 +204,18 @@ func EnergyReportV2(tenant string, participants []model.ParticipantReport, year,
 //	var report *model.EnergyReport
 //
 //}
+
+func EnergySummary(tenant, ecid string, year, segment int, periodCode string) (*store.ReportData, error) {
+	c, _ := store.NewEnergySummary()
+	e := &store.Engine{c}
+
+	start, end, err := utils.PeriodToStartEndTime(year, segment, periodCode)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := e.Query(tenant, ecid, start, end); err != nil {
+		return nil, err
+	}
+	return (c.(*store.EnergySummary)).GetResult(), nil
+}

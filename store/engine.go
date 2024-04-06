@@ -18,9 +18,8 @@ type periodRange struct {
 }
 
 type EngineContext struct {
-	start time.Time
-	end   time.Time
-	//cps             []TargetMP
+	start           time.Time
+	end             time.Time
 	metaMap         map[string]*model.CounterPointMeta
 	meta            []*model.CounterPointMeta
 	info            *model.CounterPointMetaInfo
@@ -88,27 +87,82 @@ type EnergyConsumer interface {
 	HandleEnd(ctx *EngineContext) error
 }
 
-type Engine struct {
-	consumer EnergyConsumer
+type AddTo func(*EngineContext, time.Time, *model.RawSourceLine) error
+
+type Cache struct {
+	cacheTs   time.Duration
+	cache     model.RawSourceLine
+	cacheTime time.Time
 }
 
-func (e *Engine) query(tenant string, start, end time.Time) error {
+func (ca *Cache) CacheLine(ctx *EngineContext, ts time.Time, line *model.RawSourceLine, addTo AddTo) error {
+	if ts.Before(ca.cacheTime) {
+		return ca.addToCache(line)
+	}
 
-	db, err := OpenStorage(tenant)
+	err := addTo(ctx, ca.cacheTime, &ca.cache)
+	if err != nil {
+		return err
+	}
+
+	ca.cache = line.DeepCopy(ctx.countCons, ctx.countProd)
+	ca.cacheTime = ca.cacheTime.Add(ca.cacheTs)
+	return nil
+}
+
+func (ca *Cache) InitCache(ctx *EngineContext) error {
+	ca.cacheTime = ctx.start.Add(ca.cacheTs)
+	ca.cache = model.RawSourceLine{
+		Consumers:    make([]float64, ctx.countCons*3),
+		Producers:    make([]float64, ctx.countProd*2),
+		QoVConsumers: make([]int, ctx.countCons*3),
+		QoVProducers: make([]int, ctx.countProd*2)}
+
+	ca.cache.QoVConsumers = utils.InitSlice(1, ca.cache.QoVConsumers)
+	ca.cache.QoVProducers = utils.InitSlice(1, ca.cache.QoVProducers)
+	return nil
+}
+
+func (ca *Cache) addToCache(line *model.RawSourceLine) error {
+	ca.cache.Id = line.Id
+	for i := range line.Consumers {
+		if len(line.Consumers) > i {
+			ca.cache.Consumers[i] += line.Consumers[i]
+			if len(line.QoVConsumers) > i {
+				ca.cache.QoVConsumers[i] = calcQoV(ca.cache.QoVConsumers[i], line.QoVConsumers[i])
+			} else {
+				ca.cache.QoVConsumers[i] = calcQoV(ca.cache.QoVConsumers[i], 0)
+			}
+		} else {
+			break
+		}
+	}
+	for i := range line.Producers {
+		if len(line.Producers) > i {
+			ca.cache.Producers[i] += line.Producers[i]
+			if len(line.QoVProducers) > i {
+				ca.cache.QoVProducers[i] = calcQoV(ca.cache.QoVProducers[i], line.QoVProducers[i])
+			} else {
+				ca.cache.QoVProducers[i] = calcQoV(ca.cache.QoVProducers[i], 0)
+			}
+		} else {
+			break
+		}
+	}
+	return nil
+}
+
+type Engine struct {
+	Consumer EnergyConsumer
+}
+
+func (e *Engine) Query(tenant, ecid string, start, end time.Time) error {
+
+	db, err := OpenStorage(tenant, ecid)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
-
-	ctx, err := createEngineContext(db, start, end)
-	if err != nil {
-		return err
-	}
-
-	err = e.consumer.HandleStart(ctx)
-	if err != nil {
-		return err
-	}
 
 	sYear, sMonth, sDay := start.Year(), int(start.Month()), start.Day()
 	eYear, eMonth, eDay := end.Year(), int(end.Month()), end.Day()
@@ -118,14 +172,26 @@ func (e *Engine) query(tenant string, start, end time.Time) error {
 
 	var _lineG1 model.RawSourceLine
 	g1Ok := iterCP.Next(&_lineG1)
-
 	if !g1Ok {
 		return errors.New("no Rows found")
+	}
+	_, lineStart, err := utils.ConvertRowIdToTimeString("CP", _lineG1.Id, time.Local)
+	if err != nil {
+		return err
+	}
+	ctx, err := createEngineContext(db, *lineStart, end)
+	if err != nil {
+		return err
+	}
+
+	err = e.Consumer.HandleStart(ctx)
+	if err != nil {
+		return err
 	}
 
 	var pt *time.Time = nil
 	for g1Ok {
-		_, t, err := utils.ConvertRowIdToTimeString("CP", _lineG1.Id, time.UTC)
+		_, t, err := utils.ConvertRowIdToTimeString("CP", _lineG1.Id, time.Local)
 		if rowOk := utils.CheckTime(pt, t); !rowOk {
 			diff := ((t.Unix() - pt.Unix()) / (60 * 15)) - 1
 			if diff > 0 {
@@ -134,7 +200,7 @@ func (e *Engine) query(tenant string, start, end time.Time) error {
 					newId, _ := utils.ConvertUnixTimeToRowId("CP/", nTime)
 					fillLine := model.MakeRawSourceLine(newId,
 						ctx.countCons*3, ctx.countProd*2).Copy(ctx.countCons * 3)
-					if err = e.consumer.HandleLine(ctx, &fillLine); err != nil {
+					if err = e.Consumer.HandleLine(ctx, &fillLine); err != nil {
 						return err
 					}
 				}
@@ -143,11 +209,11 @@ func (e *Engine) query(tenant string, start, end time.Time) error {
 		ct := time.Unix(t.Unix(), 0).UTC()
 		pt = &ct
 
-		if err = e.consumer.HandleLine(ctx, &_lineG1); err != nil {
+		if err = e.Consumer.HandleLine(ctx, &_lineG1); err != nil {
 			return err
 		}
 		g1Ok = iterCP.Next(&_lineG1)
 	}
 
-	return e.consumer.HandleEnd(ctx)
+	return e.Consumer.HandleEnd(ctx)
 }

@@ -31,6 +31,7 @@ func ImportExcelEnergyFileNew(f *excelize.File, sheet string, db store.IBowStora
 		glog.Error(err)
 		return err
 	}
+	defer rows.Close()
 
 	var rIdx int = 1
 	var rawDatas []*model.RawSourceLine = []*model.RawSourceLine{}

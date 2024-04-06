@@ -1,9 +1,11 @@
 package middleware
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/sirupsen/logrus"
 	"io"
 	"net/http"
@@ -19,6 +21,7 @@ const (
 
 var (
 	kcConfig map[string]*keycloakConfig
+	verifier *oidc.IDTokenVerifier
 )
 
 type keycloakConfig struct {
@@ -52,6 +55,22 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
+
+	/**
+	set up jwt token verifier
+	*/
+	clientIDApp := kcConfig["app"].ClientId
+	realmApp := kcConfig["app"].Realm
+	hostApp := strings.TrimRight(kcConfig["app"].Host, "/")
+
+	ctx := context.Background()
+	providerUriApp := fmt.Sprintf("%s/realms/%s", hostApp, realmApp)
+	println(providerUriApp)
+	provider, err := oidc.NewProvider(ctx, providerUriApp)
+	if err != nil {
+		logrus.Errorf("E: %v", err)
+	}
+	verifier = provider.Verifier(&oidc.Config{ClientID: clientIDApp, SkipClientIDCheck: true})
 }
 
 func readKeycloakConfig() (map[string]*keycloakConfig, error) {
@@ -73,4 +92,45 @@ func readKeycloakConfig() (map[string]*keycloakConfig, error) {
 	kcConfig := map[string]*keycloakConfig{}
 	err = json.Unmarshal(payload, &kcConfig)
 	return kcConfig, err
+}
+
+func verifyRequest(handler JWTHandlerFunc) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		jwtToken := r.Header.Get("Authorization")
+		if len(jwtToken) == 0 {
+			logrus.WithField("error", "JWT-Token").Printf("No Access_token in request!\n")
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+
+		if strings.HasPrefix(jwtToken, BEARER_SCHEMA) {
+			jwtToken = jwtToken[len(BEARER_SCHEMA):]
+		} else {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		idToken, err := verifier.Verify(context.Background(), jwtToken)
+		if err != nil {
+			logrus.WithField("error", "JWT-Token").Errorf("%v", err)
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+
+		claims := PlatformClaims{}
+		if err := idToken.Claims(&claims); err != nil {
+			logrus.WithField("error", "Claims").Errorf("%v", err)
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+
+		tenant := r.Header.Get("X-Tenant")
+		if contains(claims.Tenants, tenant) == false {
+			logrus.WithField("tenant", tenant).Warnf("Unauthorized access with tenant %s", tenant)
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+
+		handler(w, r, &claims, strings.ToUpper(tenant))
+	}
 }

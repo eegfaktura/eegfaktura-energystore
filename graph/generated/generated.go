@@ -46,21 +46,21 @@ type DirectiveRoot struct {
 
 type ComplexityRoot struct {
 	Mutation struct {
-		SingleUpload func(childComplexity int, tenant string, sheet string, file graphql.Upload) int
+		SingleUpload func(childComplexity int, tenant string, ecID string, sheet string, file graphql.Upload) int
 	}
 
 	Query struct {
-		LastEnergyDate func(childComplexity int, tenant string) int
-		Report         func(childComplexity int, tenant string, year int, segment int, period string) int
+		LastEnergyDate func(childComplexity int, tenant string, ecID string) int
+		Report         func(childComplexity int, tenant string, ecID string, year int, segment int, period string) int
 	}
 }
 
 type MutationResolver interface {
-	SingleUpload(ctx context.Context, tenant string, sheet string, file graphql.Upload) (bool, error)
+	SingleUpload(ctx context.Context, tenant string, ecID string, sheet string, file graphql.Upload) (bool, error)
 }
 type QueryResolver interface {
-	LastEnergyDate(ctx context.Context, tenant string) (string, error)
-	Report(ctx context.Context, tenant string, year int, segment int, period string) (*model.EegEnergy, error)
+	LastEnergyDate(ctx context.Context, tenant string, ecID string) (string, error)
+	Report(ctx context.Context, tenant string, ecID string, year int, segment int, period string) (*model.EegEnergy, error)
 }
 
 type executableSchema struct {
@@ -88,7 +88,7 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 			return 0, false
 		}
 
-		return e.complexity.Mutation.SingleUpload(childComplexity, args["tenant"].(string), args["sheet"].(string), args["file"].(graphql.Upload)), true
+		return e.complexity.Mutation.SingleUpload(childComplexity, args["tenant"].(string), args["ecId"].(string), args["sheet"].(string), args["file"].(graphql.Upload)), true
 
 	case "Query.lastEnergyDate":
 		if e.complexity.Query.LastEnergyDate == nil {
@@ -100,7 +100,7 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 			return 0, false
 		}
 
-		return e.complexity.Query.LastEnergyDate(childComplexity, args["tenant"].(string)), true
+		return e.complexity.Query.LastEnergyDate(childComplexity, args["tenant"].(string), args["ecId"].(string)), true
 
 	case "Query.report":
 		if e.complexity.Query.Report == nil {
@@ -112,7 +112,7 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 			return 0, false
 		}
 
-		return e.complexity.Query.Report(childComplexity, args["tenant"].(string), args["year"].(int), args["segment"].(int), args["period"].(string)), true
+		return e.complexity.Query.Report(childComplexity, args["tenant"].(string), args["ecId"].(string), args["year"].(int), args["segment"].(int), args["period"].(string)), true
 
 	}
 	return 0, false
@@ -189,13 +189,13 @@ scalar EegEnergy
 scalar Upload
 
 type Query {
-  lastEnergyDate(tenant: String!): String!
-  report(tenant: String!, year: Int!, segment: Int!, period: String!): EegEnergy!
+  lastEnergyDate(tenant: String!, ecId: String!): String!
+  report(tenant: String!, ecId: String!, year: Int!, segment: Int!, period: String!): EegEnergy!
 }
 
 "The ` + "`" + `Mutation` + "`" + ` type, represents all updates we can make to our data."
 type Mutation {
-    singleUpload(tenant: String!, sheet: String!, file: Upload!): Boolean!
+    singleUpload(tenant: String!, ecId: String!, sheet: String!, file: Upload!): Boolean!
 }`, BuiltIn: false},
 }
 var parsedSchema = gqlparser.MustLoadSchema(sources...)
@@ -217,23 +217,32 @@ func (ec *executionContext) field_Mutation_singleUpload_args(ctx context.Context
 	}
 	args["tenant"] = arg0
 	var arg1 string
-	if tmp, ok := rawArgs["sheet"]; ok {
-		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sheet"))
+	if tmp, ok := rawArgs["ecId"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ecId"))
 		arg1, err = ec.unmarshalNString2string(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
 	}
-	args["sheet"] = arg1
-	var arg2 graphql.Upload
-	if tmp, ok := rawArgs["file"]; ok {
-		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("file"))
-		arg2, err = ec.unmarshalNUpload2githubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚐUpload(ctx, tmp)
+	args["ecId"] = arg1
+	var arg2 string
+	if tmp, ok := rawArgs["sheet"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sheet"))
+		arg2, err = ec.unmarshalNString2string(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
 	}
-	args["file"] = arg2
+	args["sheet"] = arg2
+	var arg3 graphql.Upload
+	if tmp, ok := rawArgs["file"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("file"))
+		arg3, err = ec.unmarshalNUpload2githubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚐUpload(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["file"] = arg3
 	return args, nil
 }
 
@@ -264,6 +273,15 @@ func (ec *executionContext) field_Query_lastEnergyDate_args(ctx context.Context,
 		}
 	}
 	args["tenant"] = arg0
+	var arg1 string
+	if tmp, ok := rawArgs["ecId"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ecId"))
+		arg1, err = ec.unmarshalNString2string(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["ecId"] = arg1
 	return args, nil
 }
 
@@ -279,33 +297,42 @@ func (ec *executionContext) field_Query_report_args(ctx context.Context, rawArgs
 		}
 	}
 	args["tenant"] = arg0
-	var arg1 int
-	if tmp, ok := rawArgs["year"]; ok {
-		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("year"))
-		arg1, err = ec.unmarshalNInt2int(ctx, tmp)
+	var arg1 string
+	if tmp, ok := rawArgs["ecId"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ecId"))
+		arg1, err = ec.unmarshalNString2string(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
 	}
-	args["year"] = arg1
+	args["ecId"] = arg1
 	var arg2 int
-	if tmp, ok := rawArgs["segment"]; ok {
-		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("segment"))
+	if tmp, ok := rawArgs["year"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("year"))
 		arg2, err = ec.unmarshalNInt2int(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
 	}
-	args["segment"] = arg2
-	var arg3 string
-	if tmp, ok := rawArgs["period"]; ok {
-		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("period"))
-		arg3, err = ec.unmarshalNString2string(ctx, tmp)
+	args["year"] = arg2
+	var arg3 int
+	if tmp, ok := rawArgs["segment"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("segment"))
+		arg3, err = ec.unmarshalNInt2int(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
 	}
-	args["period"] = arg3
+	args["segment"] = arg3
+	var arg4 string
+	if tmp, ok := rawArgs["period"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("period"))
+		arg4, err = ec.unmarshalNString2string(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["period"] = arg4
 	return args, nil
 }
 
@@ -361,7 +388,7 @@ func (ec *executionContext) _Mutation_singleUpload(ctx context.Context, field gr
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Mutation().SingleUpload(rctx, fc.Args["tenant"].(string), fc.Args["sheet"].(string), fc.Args["file"].(graphql.Upload))
+		return ec.resolvers.Mutation().SingleUpload(rctx, fc.Args["tenant"].(string), fc.Args["ecId"].(string), fc.Args["sheet"].(string), fc.Args["file"].(graphql.Upload))
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -416,7 +443,7 @@ func (ec *executionContext) _Query_lastEnergyDate(ctx context.Context, field gra
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Query().LastEnergyDate(rctx, fc.Args["tenant"].(string))
+		return ec.resolvers.Query().LastEnergyDate(rctx, fc.Args["tenant"].(string), fc.Args["ecId"].(string))
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -471,7 +498,7 @@ func (ec *executionContext) _Query_report(ctx context.Context, field graphql.Col
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Query().Report(rctx, fc.Args["tenant"].(string), fc.Args["year"].(int), fc.Args["segment"].(int), fc.Args["period"].(string))
+		return ec.resolvers.Query().Report(rctx, fc.Args["tenant"].(string), fc.Args["ecId"].(string), fc.Args["year"].(int), fc.Args["segment"].(int), fc.Args["period"].(string))
 	})
 	if err != nil {
 		ec.Error(ctx, err)

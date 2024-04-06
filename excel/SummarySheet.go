@@ -39,7 +39,7 @@ func (ss *SummarySheet) initSheet(ctx *RunnerContext) error {
 func (ss *SummarySheet) handleLine(ctx *RunnerContext, line *model.RawSourceLine) error {
 	lineDate, _ := utils.ConvertRowIdToTime("CP", line.Id)
 	consumerMatrix, producerMatrix := utils.ConvertLineToMatrix(line)
-	for i := 0; i < consumerMatrix.Rows; i += 1 {
+	for i := 0; i < consumerMatrix.Rows && i < ctx.info.ConsumerCount; i += 1 {
 		ss.report.Consumed[i] += consumerMatrix.GetElm(i, 0)
 		ss.report.Shared[i] += consumerMatrix.GetElm(i, 1)
 		ss.report.Allocated[i] += consumerMatrix.GetElm(i, 2)
@@ -47,7 +47,7 @@ func (ss *SummarySheet) handleLine(ctx *RunnerContext, line *model.RawSourceLine
 			ss.qovConsumerSlice[i] = ss.qovConsumerSlice[i] && (ctx.checkBegin(lineDate, ctx.periodsConsumer[i].start) || ((line.QoVConsumers[(i*3)] == 1) && (line.QoVConsumers[(i*3)+1] == 1) && (line.QoVConsumers[(i*3)+2] == 1)))
 		}
 	}
-	for i := 0; i < producerMatrix.Rows; i += 1 {
+	for i := 0; i < producerMatrix.Rows && i < ctx.info.ProducerCount; i += 1 {
 		ss.report.Produced[i] += producerMatrix.GetElm(i, 0)
 		ss.report.Distributed[i] += producerMatrix.GetElm(i, 1)
 		if (i*2)+1 < len(line.QoVProducers) {

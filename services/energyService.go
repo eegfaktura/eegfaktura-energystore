@@ -8,11 +8,11 @@ import (
 	"time"
 )
 
-func GetLastEnergyEntry(tenant string) (string, error) {
+func GetLastEnergyEntry(tenant, ecid string) (string, error) {
 	var err error
 	var meta *model.RawSourceMeta
 
-	db, err := store.OpenStorage(tenant)
+	db, err := store.OpenStorage(tenant, ecid)
 	if err != nil {
 		return "", err
 	}

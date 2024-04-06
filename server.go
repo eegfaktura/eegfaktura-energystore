@@ -10,12 +10,12 @@ import (
 	"flag"
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/gorilla/handlers"
+	"github.com/spf13/viper"
 	"log"
 	"net/http"
 	"os"
 
 	"at.ourproject/energystore/config"
-	"github.com/spf13/viper"
 )
 
 const defaultPort = "8080"
@@ -32,8 +32,9 @@ func main() {
 	println("-> \nRead Config")
 	config.ReadConfig(*configPath)
 
-	ctx, _ := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
 	SetupMqttDispatcher(ctx)
+	defer cancel()
 
 	r := rest.NewRestServer()
 	//r.Use(middleware.GQLMiddleware(viper.GetString("jwt.pubKeyFile")))

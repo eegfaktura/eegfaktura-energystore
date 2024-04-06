@@ -164,12 +164,12 @@ func checkQoV(line *model.RawSourceLine, meta []*model.CounterPointMeta) bool {
 	check := false
 	for _, m := range meta {
 		if m.Dir == model.CONSUMER_DIRECTION {
-			if checkDate(m.PeriodStart, lineDate) {
+			if checkDate(m.PeriodStart, lineDate) || !(len(line.QoVConsumers) > (m.SourceIdx + 2)) {
 				continue
 			}
 			check = line.QoVConsumers[m.SourceIdx] != 1 || line.QoVConsumers[m.SourceIdx+1] != 1 || line.QoVConsumers[m.SourceIdx+2] != 1
 		} else {
-			if checkDate(m.PeriodStart, lineDate) {
+			if checkDate(m.PeriodStart, lineDate) || !(len(line.QoVProducers) > (m.SourceIdx + 1)) {
 				continue
 			}
 			check = line.QoVProducers[m.SourceIdx] != 1 || line.QoVProducers[m.SourceIdx+1] != 1

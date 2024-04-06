@@ -17,6 +17,15 @@ type Recort struct {
 	Production  float64 `json:"production"`  // Production total value of energy production - value for GENERATOR
 }
 
+type SummaryReportData struct {
+	Consumed    float64 `json:"consumed"`
+	Allocated   float64 `json:"allocated"`
+	Distributed float64 `json:"distributed"`
+	Produced    float64 `json:"produced"`
+	QoVConsumer int     `json:"qoVConsumer"`
+	QoVProducer int     `json:"qoVProducer"`
+}
+
 func (R *Recort) RoundToFixed(precision uint) {
 	ratio := math.Pow(10, float64(precision))
 

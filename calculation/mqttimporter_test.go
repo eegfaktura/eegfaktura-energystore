@@ -51,6 +51,7 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 		{
 			name: "Insert New Energy Allocated",
 			energy: &model.MqttEnergyMessage{
+				EcId: "ecIdTest",
 				Meter: model.EnergyMeter{
 					MeteringPoint: "AT0030000000000000000000000000001",
 					Direction:     "",
@@ -81,6 +82,7 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 		{
 			name: "Second Energy Consumer",
 			energy: &model.MqttEnergyMessage{
+				EcId: "ecIdTest",
 				Meter: model.EnergyMeter{
 					MeteringPoint: "AT0030000000000000000000000000002",
 					Direction:     "",
@@ -112,6 +114,7 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 		{
 			name: "Insert Generator energy values",
 			energy: &model.MqttEnergyMessage{
+				EcId: "ecIdTest",
 				Meter: model.EnergyMeter{
 					MeteringPoint: "AT0030000000000000000000030000011",
 					Direction:     "",
@@ -153,6 +156,7 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 		{
 			name: "Insert second Generator Allocated",
 			energy: &model.MqttEnergyMessage{
+				EcId: "ecIdTest",
 				Meter: model.EnergyMeter{
 					MeteringPoint: "AT0030000000000000000000030000010",
 					Direction:     "",
@@ -196,6 +200,7 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 		{
 			name: "Insert Generator - summarize energy values",
 			energy: &model.MqttEnergyMessage{
+				EcId: "ecIdTest",
 				Meter: model.EnergyMeter{
 					MeteringPoint: "AT0030000000000000000000030000010",
 					Direction:     "",
@@ -256,10 +261,10 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err = importEnergyV2("importer", tt.energy)
+			err = importEnergyV2("importer", "ecid", tt.energy)
 			require.NoError(t, err)
 
-			db, err := store.OpenStorageTest("importer", "../test/rawdata")
+			db, err := store.OpenStorageTest("importer", "ecid", "../test/rawdata")
 			require.NoError(t, err)
 			it := db.GetLinePrefix(fmt.Sprintf("CP/%s", "2022/10/24"))
 			defer it.Close()
@@ -287,14 +292,14 @@ func TestImportRawdataStore(t *testing.T) {
 	rawData := decodeMessage(jsonRaw)
 	require.NotNil(t, rawData)
 
-	err = importEnergyV2("te100190", rawData)
+	err = importEnergyV2("te100190", "ecid", rawData)
 	require.NoError(t, err)
 
 	rawData.Meter.MeteringPoint = "AT0030000000000000000000000381702"
-	err = importEnergyV2("te100190", rawData)
+	err = importEnergyV2("te100190", "ecid", rawData)
 	require.NoError(t, err)
 
-	db, err := store.OpenStorageTest("te100190", "../test/rawdata")
+	db, err := store.OpenStorageTest("te100190", "ecid", "../test/rawdata")
 	require.NoError(t, err)
 
 	meta, err := db.GetMeta("cpmeta/0")

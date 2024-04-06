@@ -11,9 +11,10 @@ import (
 
 type Aggregate struct {
 	ParentFunction
-	cacheTs   time.Duration
-	cache     model.RawSourceLine
-	cacheTime time.Time
+	Cache
+	//cacheTs   time.Duration
+	//cache     model.RawSourceLine
+	//cacheTime time.Time
 }
 
 func NewAggregateFunction(args []string, cps []TargetMP) (IQueryFunction, error) {
@@ -27,8 +28,9 @@ func NewAggregateFunction(args []string, cps []TargetMP) (IQueryFunction, error)
 		return nil, err
 	}
 
-	return &Aggregate{ParentFunction: ParentFunction{cps: cps},
-		cacheTs: cacheTs}, nil
+	return &Aggregate{
+		ParentFunction: ParentFunction{cps: cps},
+		Cache:          Cache{cacheTs: cacheTs}}, nil
 }
 
 func parseArgument(arg string) (time.Duration, error) {
@@ -87,26 +89,26 @@ func (agg *Aggregate) HandleFinish(ctx *EngineContext) error {
 	return agg.addToResult(ctx, agg.cacheTime, &agg.cache)
 }
 
-func (agg *Aggregate) addToCache(line *model.RawSourceLine) error {
-	agg.cache.Id = line.Id
-	for i := range line.Consumers {
-		if len(line.Consumers) > i {
-			agg.cache.Consumers[i] += line.Consumers[i]
-			agg.cache.QoVConsumers[i] = calcQoV(agg.cache.QoVConsumers[i], line.QoVConsumers[i])
-		} else {
-			break
-		}
-	}
-	for i := range line.Producers {
-		if len(line.Producers) > i {
-			agg.cache.Producers[i] += line.Producers[i]
-			agg.cache.QoVProducers[i] = calcQoV(agg.cache.QoVProducers[i], line.QoVProducers[i])
-		} else {
-			break
-		}
-	}
-	return nil
-}
+//func (agg *Aggregate) addToCache(line *model.RawSourceLine) error {
+//	agg.cache.Id = line.Id
+//	for i := range line.Consumers {
+//		if len(line.Consumers) > i {
+//			agg.cache.Consumers[i] += line.Consumers[i]
+//			agg.cache.QoVConsumers[i] = calcQoV(agg.cache.QoVConsumers[i], line.QoVConsumers[i])
+//		} else {
+//			break
+//		}
+//	}
+//	for i := range line.Producers {
+//		if len(line.Producers) > i {
+//			agg.cache.Producers[i] += line.Producers[i]
+//			agg.cache.QoVProducers[i] = calcQoV(agg.cache.QoVProducers[i], line.QoVProducers[i])
+//		} else {
+//			break
+//		}
+//	}
+//	return nil
+//}
 
 func calcQoV(current, target int) int {
 	if current != 1 {

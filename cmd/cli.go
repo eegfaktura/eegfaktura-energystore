@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-var tenant, dir string
+var tenant, dir, ecId string
 
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
@@ -32,6 +32,9 @@ func init() {
 
 	RootCmd.PersistentFlags().StringVar(&dir, "dir", "",
 		"Directory where the value log files are located.")
+
+	RootCmd.PersistentFlags().StringVar(&ecId, "ecId", "",
+		"CommunityId of.")
 }
 
 func validateRootCmdArgs(cmd *cobra.Command, args []string) error {
@@ -43,6 +46,9 @@ func validateRootCmdArgs(cmd *cobra.Command, args []string) error {
 	}
 	if dir == "" {
 		return errors.New("--dir not specified")
+	}
+	if ecId == "" {
+		return errors.New("--ecId not specified")
 	}
 	return nil
 }

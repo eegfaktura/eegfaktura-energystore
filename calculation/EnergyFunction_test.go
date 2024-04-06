@@ -8,7 +8,7 @@ import (
 )
 
 func TestCalcHourSum(t *testing.T) {
-	db, err := store.OpenStorageTest("dashboard", "../../../rawdata")
+	db, err := store.OpenStorageTest("dashboard", "ecid", "../../../rawdata")
 	require.Nil(t, err)
 	defer db.Close()
 

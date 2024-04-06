@@ -31,6 +31,7 @@ type Subscriber struct {
 func NewSubscriber(ctx context.Context, streamer *MQTTStreamer, topic string, worker Executor) *Subscriber {
 	sub := &Subscriber{}
 	sub.receiver = func(client mqtt.Client, msg mqtt.Message) {
+		glog.V(3).Infof("Receive msg from topic %s - %v", msg.Topic(), string(msg.Payload()))
 		worker.Execute(msg)
 	}
 	streamer.SubscribeTopic(ctx, topic, sub.receiver)

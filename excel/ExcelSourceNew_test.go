@@ -16,7 +16,7 @@ func setupMock() *mocks.MockBowStorage {
 	mockBow.On("SetMeta", mock.Anything).Return(nil)
 	mockBow.On("SetLines", mock.Anything).Return(nil)
 	mockBow.On("GetLine", mock.Anything)
-	mockBow.On("GetMeta", "cpmeta/0")
+	mockBow.On("GetMeta", "cpmeta/0").Return(&model.RawSourceMeta{CounterPoints: make([]*model.CounterPointMeta, 0)})
 
 	return mockBow
 }

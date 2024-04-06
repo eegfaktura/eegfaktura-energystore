@@ -17,6 +17,7 @@ var (
 
 func main() {
 	var tenant = flag.String("tenant", "", "tenant to be converted")
+	var ecId = flag.String("ecId", "", "communityId of eeg")
 	var configPath = flag.String("configPath", ".", "Configfile Path")
 	var meter = flag.String("cp", "", "Meteringpoint")
 	var periodStart = flag.String("periodStart", "", "First Period")
@@ -32,7 +33,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	db, err := store.OpenStorage(*tenant)
+	db, err := store.OpenStorage(*tenant, *ecId)
 	if err != nil {
 		panic(err)
 	}

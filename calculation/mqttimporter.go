@@ -51,7 +51,7 @@ func (miv *MqttInverterImporter) process() {
 		select {
 		case msg := <-miv.msgChan:
 			glog.Infof("Execute Inverter Data Message for Topic (%v)\n", msg.tenant)
-			err := importEnergyV2(msg.tenant, &msg.data.Message)
+			err := importEnergyV2(msg.tenant, "inverter", &msg.data.Message)
 			if err != nil {
 				glog.Error(err)
 			}
@@ -66,6 +66,7 @@ func (miv *MqttInverterImporter) process() {
 type MqttMessage struct {
 	data   *model.MqttEnergyMessage
 	tenant string
+	ecId   string
 }
 
 type MqttEnergyImporter struct {
@@ -92,7 +93,7 @@ func (mw *MqttEnergyImporter) Execute(msg mqtt.Message) {
 		return
 	}
 
-	mw.msgChan <- MqttMessage{data: data, tenant: tenant}
+	mw.msgChan <- MqttMessage{data: data, tenant: tenant, ecId: data.EcId}
 	fmt.Printf("Received Messages %d\n", gloablReceivedMsg)
 	//msg.Ack()
 }
@@ -105,7 +106,7 @@ func (mw *MqttEnergyImporter) process() {
 		select {
 		case msg := <-mw.msgChan:
 			glog.Infof("Execute Energy Data Message for Topic (%v)\n", msg.tenant)
-			err := importEnergyV2(msg.tenant, msg.data)
+			err := importEnergyV2(msg.tenant, msg.ecId, msg.data)
 			if err != nil {
 				glog.Error(err)
 			}
@@ -139,10 +140,10 @@ func decodeMessage(msg []byte) *model.MqttEnergyMessage {
 	return &m
 }
 
-func importEnergyV2(tenant string, data *model.MqttEnergyMessage) error {
+func importEnergyV2(tenant, ecid string, data *model.MqttEnergyMessage) error {
 	// GetMetaData from tenant
 
-	db, err := store.OpenStorage(tenant)
+	db, err := store.OpenStorage(tenant, ecid)
 	if err != nil {
 		return err
 	}
@@ -175,6 +176,11 @@ func importEnergyV2(tenant string, data *model.MqttEnergyMessage) error {
 	meterCodeMeta := map[string]*model.MeterCodeMeta{}
 	for i, d := range data.Energy.Data {
 		if meterMeta := utils.DecodeMeterCode(d.MeterCode, i); meterMeta != nil {
+			if _, ok := meterCodeMeta[meterMeta.Type]; ok {
+				if d.MeterCode == model.CODE_GEN || d.MeterCode == model.CODE_CON {
+					continue
+				}
+			}
 			meterCodeMeta[meterMeta.Type] = meterMeta
 		}
 	}

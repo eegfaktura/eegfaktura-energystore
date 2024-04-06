@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/golang/glog"
 	"github.com/spf13/viper"
+	"path/filepath"
 	"strings"
 	"sync"
 )
@@ -73,11 +74,11 @@ type BowStorage struct {
 
 var turns = newTurns()
 
-func OpenStorage(tenant string) (*BowStorage, error) {
+func OpenStorage(tenant, ecId string) (*BowStorage, error) {
 	t := strings.ToLower(tenant)
 	basePath := viper.GetString("persistence.path")
 	unlock := turns.lock(t)
-	db, err := ebow.Open(fmt.Sprintf("%s/%s", basePath, t), ebow.SetLogger(ebowLogger{5}))
+	db, err := ebow.Open(filepath.Join(fmt.Sprintf("%s/%s", basePath, t), ecId), ebow.SetLogger(ebowLogger{5}))
 	if err != nil {
 		unlock()
 		return nil, err
