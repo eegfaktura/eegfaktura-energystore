@@ -51,13 +51,17 @@ func (id *IntraDay) addToResult(ctx *EngineContext, t time.Time, line *model.Raw
 		id.Result[hour] = &ReportData{}
 	}
 
-	for i := 0; i < len(line.Consumers); i += 3 {
+	cLen := len(line.Consumers)
+	cLen = cLen - (cLen % 3)
+	for i := 0; i < cLen; i += 3 {
 		id.Result[hour].Consumed += line.Consumers[i]
 		id.Result[hour].Allocated += line.Consumers[i+1]
 		id.Result[hour].Distributed += line.Consumers[i+2]
 		id.Result[hour].QoVConsumer = calcQoV(id.Result[hour].QoVConsumer, line.QoVConsumers[i])
 	}
-	for i := 0; i < len(line.Producers); i += 2 {
+	pLen := len(line.Producers)
+	pLen = pLen - (pLen % 2)
+	for i := 0; i < pLen; i += 2 {
 		id.Result[hour].Produced += line.Producers[i]
 		id.Result[hour].QoVProducer = calcQoV(id.Result[hour].QoVProducer, line.QoVProducers[i])
 	}

@@ -36,7 +36,9 @@ func (id *EnergySummary) GetResult() *ReportData {
 }
 
 func (id *EnergySummary) addToResult(ctx *EngineContext, t time.Time, line *model.RawSourceLine) error {
-	for i := 0; i < len(line.Consumers); i += 3 {
+	cLen := len(line.Consumers)
+	cLen = cLen - (cLen % 3)
+	for i := 0; i < cLen; i += 3 {
 		id.Result.Consumed += line.Consumers[i]
 		id.Result.Allocated += line.Consumers[i+1]
 		id.Result.Distributed += line.Consumers[i+2]
@@ -46,7 +48,10 @@ func (id *EnergySummary) addToResult(ctx *EngineContext, t time.Time, line *mode
 			id.Result.QoVConsumer = calcQoV(id.Result.QoVConsumer, 1)
 		}
 	}
-	for i := 0; i < len(line.Producers); i += 2 {
+
+	pLen := len(line.Producers)
+	pLen = pLen - (pLen % 2)
+	for i := 0; i < pLen; i += 2 {
 		id.Result.Produced += line.Producers[i]
 		if len(line.QoVProducers) > i+2 {
 			id.Result.QoVProducer = calcQoV(id.Result.QoVProducer, line.QoVProducers[i])
