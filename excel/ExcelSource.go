@@ -447,15 +447,15 @@ func returnMeterValue(cols []string, idx int) float64 {
 
 func returnMeterCode(c string) MeterCodeType {
 	switch {
-	case strings.Contains(c, "GESAMTVERBRAUCH"):
-		return Total // G1
-	case strings.Contains(c, "GESAMTE"):
-		return Total // G1
-	case strings.Contains(c, "ANTEIL"):
-		return Share // G2
-	case strings.Contains(c, "EIGENDECKUNG"):
-		return Coverage // G3
-	case strings.Contains(c, "ÜBERSCHUSSERZEUGUNG"):
+	case strings.Contains(c, "GESAMTVERBRAUCH"), strings.Contains(c, "GESAMTVERBRAUCH LT. MESSUNG (BEI TEILNAHME GEM. ERZEUGUNG) [KWH]"):
+		return Total // G1 Consumer
+	case strings.Contains(c, "GESAMTE GEMEINSCHAFTLICHE"), strings.Contains(c, "GESAMTE GEMEINSCHAFTLICHE ERZEUGUNG [KWH]"):
+		return Total // G1 Producer
+	case strings.Contains(c, "ANTEIL"), strings.Contains(c, "ANTEIL GEMEINSCHAFTLICHE ERZEUGUNG [KWH]"):
+		return Share // G2 Consumer
+	case strings.Contains(c, "EIGENDECKUNG GEMEINSCHAFTLICHE"), strings.Contains(c, "EIGENDECKUNG GEMEINSCHAFTLICHE ERZEUGUNG [KWH]"):
+		return Coverage // G3 Consumer
+	case strings.Contains(c, "ÜBERSCHUSSERZEUGUNG"), strings.Contains(c, "GESAMT/ÜBERSCHUSSERZEUGUNG, GEMEINSCHAFTSÜBERSCHUSS [KWH]"):
 		return Profit // G2
 	default:
 		return Bad
