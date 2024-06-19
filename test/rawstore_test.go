@@ -10,7 +10,7 @@ import (
 )
 
 func TestTe100110(t *testing.T) {
-	db, err := store.OpenStorageTest("te100110", "../../../rawdata/converted")
+	db, err := store.OpenStorageTest("te100110", "TE0000000000000000001", "../../../rawdata/converted")
 	require.NoError(t, err)
 	defer func() {
 		db.Close()

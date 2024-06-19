@@ -10,11 +10,13 @@ DOCKER=docker
 GOPATH := ${PWD}/..:${GOPATH}
 export GOPATH
 
-DOCKER_TAG=v0.2.1
+DOCKER_TAG=v0.2.4
 
 all: test build
 build:
 	$(GOBUILD) -o $(BINARY_NAME) -v -ldflags="-s -w"
+estore:
+	$(GOBUILD) -o estore -v -ldflags="-s -w" estore.go
 test:
 	$(GOTEST) -v ./...
 clean:

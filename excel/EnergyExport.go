@@ -205,7 +205,7 @@ func (er *EnergyRunner) run(db store.IBowStorage, f *excelize.File, start, end t
 	g1Ok := iterCP.Next(&_lineG1)
 
 	if !g1Ok {
-		return nil, errors.New("no Rows found")
+		return nil, model.ErrNoEntries(errors.New("no Rows found"))
 	}
 
 	var pt *time.Time = nil

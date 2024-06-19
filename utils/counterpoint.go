@@ -67,6 +67,13 @@ var InsertInt = func(orig []int, index int, value int) []int {
 	return orig
 }
 
+var GetInt = func(orig []int, index int) int {
+	if index >= 0 && len(orig) < index {
+		return orig[index]
+	}
+	return 0
+}
+
 func CastQoVStringToInt(qov string) int {
 	switch strings.ToUpper(qov) {
 	case "L1":
@@ -86,20 +93,32 @@ func RoundFloat(val float64, precision uint) float64 {
 
 // DecodeMeterCode define meteringpoint value category
 func DecodeMeterCode(meterCode model.MeterCodeValue, sourceIdx int) *model.MeterCodeMeta {
-	if meterCode == model.CODE_GEN || meterCode == model.CODE_GEN_TF { // "1-1:2.9.0 G.01"
+	if meterCode == model.CODE_GEN { // "1-1:2.9.0 G.01"
 		return &model.MeterCodeMeta{Type: "GEN", Code: "G.01", SourceInData: sourceIdx, SourceDelta: 0} // Erzeugung -- Erzeuger
 	}
-	if meterCode == model.CODE_PLUS || meterCode == model.CODE_PLUS_TF { // "1-1:2.9.0 P.01"
+	if meterCode == model.CODE_GEN_TF { // "1-1:2.9.0 G.01T"
+		return &model.MeterCodeMeta{Type: "GEN", Code: "G.01", SourceInData: sourceIdx, SourceDelta: 0} // Erzeugung -- Erzeuger
+	}
+	if meterCode == model.CODE_PLUS { // "1-1:2.9.0 P.01"
 		return &model.MeterCodeMeta{Type: "PLUS", Code: "P.01", SourceInData: sourceIdx, SourceDelta: 1} // Überschuss -- Erzeuger
 	}
-	if meterCode == model.CODE_CON || meterCode == model.CODE_CON_TF { // "1-1:1.9.0 G.01"
+	if meterCode == model.CODE_PLUS_TF { // "1-1:2.9.0 P.01T"
+		return &model.MeterCodeMeta{Type: "PLUS", Code: "P.01", SourceInData: sourceIdx, SourceDelta: 1} // Überschuss -- Erzeuger
+	}
+	if meterCode == model.CODE_CON { // "1-1:1.9.0 G.01"
+		return &model.MeterCodeMeta{Type: "CON", Code: "G.01", SourceInData: sourceIdx, SourceDelta: 0} // Verbrauch -- Verbraucher
+	}
+	if meterCode == model.CODE_CON_TF { // "1-1:1.9.0 G.01T"
 		return &model.MeterCodeMeta{Type: "CON", Code: "G.01", SourceInData: sourceIdx, SourceDelta: 0} // Verbrauch -- Verbraucher
 	}
 	if meterCode == model.CODE_SHARE { // "1-1:2.9.0 G.02"
 		return &model.MeterCodeMeta{Type: "SHARE", Code: "G.02", SourceInData: sourceIdx, SourceDelta: 1} // Anteil -- Verbraucher
 	}
-	if meterCode == model.CODE_COVER || meterCode == model.CODE_COVER_TF { // "1-1:2.9.0 G.03"
+	if meterCode == model.CODE_COVER { // "1-1:2.9.0 G.03"
 		return &model.MeterCodeMeta{Type: "COVER", Code: "G.03", SourceInData: sourceIdx, SourceDelta: 2} // Eigendeckung -- Verbraucher
+	}
+	if meterCode == model.CODE_COVER_TF { // "1-1:2.9.0 G.03R"
+		return &model.MeterCodeMeta{Type: "COVER", Code: "G.03", SourceInData: sourceIdx, SourceDelta: 2} // Eigendeckung -- Verbraucher (only for BEG)
 	}
 	return nil
 }

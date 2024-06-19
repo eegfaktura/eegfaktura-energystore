@@ -4,7 +4,9 @@ import (
 	"at.ourproject/energystore/middleware"
 	"at.ourproject/energystore/store"
 	"encoding/json"
+	"fmt"
 	"github.com/gorilla/mux"
+	"io"
 	"net/http"
 	"time"
 )
@@ -27,7 +29,11 @@ func queryRawData() middleware.JWTHandlerFunc {
 			End   int64            `json:"end"`
 		}
 
-		err := json.NewDecoder(r.Body).Decode(&request)
+		body, err := io.ReadAll(r.Body)
+		fmt.Printf("DATA: %s - %v\n", string(body), err)
+
+		//err = json.NewDecoder(r.Body).Decode(&request)
+		err = json.Unmarshal(body, &request)
 		if err != nil {
 			respondWithError(w, http.StatusBadRequest, err.Error())
 			return

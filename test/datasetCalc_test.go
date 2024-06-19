@@ -14,7 +14,7 @@ import (
 
 func TestCalculateReports(t *testing.T) {
 
-	db, err := store.OpenStorageTest("excelsource", "../test/rawdata")
+	db, err := store.OpenStorageTest("excelsource", "TE0000000000000000001", "../test/rawdata")
 	require.NoError(t, err)
 	defer func() {
 		db.Close()
@@ -205,7 +205,7 @@ func TestCalculateReports(t *testing.T) {
 }
 
 func TestCalculateBadImport(t *testing.T) {
-	db, err := store.OpenStorageTest("excelsource", "../test/rawdata")
+	db, err := store.OpenStorageTest("excelsource", "TE0000000000000000001", "../test/rawdata")
 	require.NoError(t, err)
 	defer func() {
 		db.Close()

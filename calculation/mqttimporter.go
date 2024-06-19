@@ -11,6 +11,7 @@ import (
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/golang/glog"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -140,8 +141,13 @@ func decodeMessage(msg []byte) *model.MqttEnergyMessage {
 	return &m
 }
 
+//var importLook = sync.Mutex{}
+
 func importEnergyV2(tenant, ecid string, data *model.MqttEnergyMessage) error {
 	// GetMetaData from tenant
+
+	//importLook.Lock()
+	//defer importLook.Unlock()
 
 	db, err := store.OpenStorage(tenant, ecid)
 	if err != nil {
@@ -174,12 +180,20 @@ func importEnergyV2(tenant, ecid string, data *model.MqttEnergyMessage) error {
 	}
 
 	meterCodeMeta := map[string]*model.MeterCodeMeta{}
+	meterCodeMetaExt := map[string]*model.MeterCodeMeta{}
 	for i, d := range data.Energy.Data {
 		if meterMeta := utils.DecodeMeterCode(d.MeterCode, i); meterMeta != nil {
-			if _, ok := meterCodeMeta[meterMeta.Type]; ok {
-				if d.MeterCode == model.CODE_GEN || d.MeterCode == model.CODE_CON {
+			//if _, ok := meterCodeMeta[meterMeta.Type]; ok {
+			//	if d.MeterCode == model.CODE_GEN || d.MeterCode == model.CODE_CON {
+			//		continue
+			//	}
+			//}
+			if d.MeterCode == model.CODE_CON_TF || d.MeterCode == model.CODE_GEN_TF || d.MeterCode == model.CODE_COVER_TF || d.MeterCode == model.CODE_PLUS_TF {
+				if strings.ToUpper(tenant[:2]) != "CC" && d.MeterCode == model.CODE_COVER_TF {
 					continue
 				}
+				meterCodeMetaExt[meterMeta.Type] = meterMeta
+				continue
 			}
 			meterCodeMeta[meterMeta.Type] = meterMeta
 		}
@@ -192,10 +206,25 @@ func importEnergyV2(tenant, ecid string, data *model.MqttEnergyMessage) error {
 
 	///
 	for _, v := range meterCodeMeta {
-		resources, err = importEnergyValuesV2(v, data.Energy, metaCP, consumerCount, producerCount, resources)
+		resources, err = importEnergyValuesV2(v, data.Energy, metaCP, consumerCount, producerCount, resources, false)
 		// Store updated RawDataStructure
 		glog.Infof("Update CP %s energy values (%d) from %s to %s",
 			data.Meter.MeteringPoint,
+			len(resources),
+			time.UnixMilli(data.Energy.Start).Format(time.RFC822),
+			time.UnixMilli(data.Energy.End).Format(time.RFC822))
+		if err != nil {
+			return err
+		}
+	}
+
+	// Check extended Rows for input - CODE_GEN_TF, CODE_PLUS_TF, ...
+	for _, v := range meterCodeMetaExt {
+		resources, err = importEnergyValuesV2(v, data.Energy, metaCP, consumerCount, producerCount, resources, true)
+		// Store updated RawDataStructure
+		glog.Infof("Update/Override CP %s (%x) energy values (%d) from %s to %s",
+			data.Meter.MeteringPoint,
+			v.Code,
 			len(resources),
 			time.UnixMilli(data.Energy.Start).Format(time.RFC822),
 			time.UnixMilli(data.Energy.End).Format(time.RFC822))
@@ -227,17 +256,22 @@ func importEnergyValuesV2(
 	data model.MqttEnergy,
 	metaCP *model.CounterPointMeta,
 	consumerCount, producerCount int,
-	resources map[string]*model.RawSourceLine) (map[string]*model.RawSourceLine, error) {
+	resources map[string]*model.RawSourceLine,
+	isExt bool) (map[string]*model.RawSourceLine, error) {
 
 	sort.Slice(data.Data[meterCode.SourceInData].Value, func(i, j int) bool {
-		a := time.UnixMilli(data.Data[0].Value[i].From)
-		b := time.UnixMilli(data.Data[0].Value[j].From)
+		a := time.UnixMilli(data.Data[meterCode.SourceInData].Value[i].From)
+		b := time.UnixMilli(data.Data[meterCode.SourceInData].Value[j].From)
 		return a.Unix() < b.Unix()
 	})
 
 	var tablePrefix = "CP/"
 	rowIdVisited := map[string]bool{}
 	for _, v := range data.Data[meterCode.SourceInData].Value {
+		//if isExt && v.Value == 0 {
+		//	continue
+		//}
+
 		id, err := utils.ConvertUnixTimeToRowId(tablePrefix, time.UnixMilli(v.From))
 		if err != nil {
 			return resources, err
@@ -247,11 +281,12 @@ func importEnergyValuesV2(
 			resources[id] = model.MakeRawSourceLine(id, consumerCount, producerCount) //&model.RawSourceLine{Id: id, Consumers: make([]float64, consumerCount), Producers: make([]float64, producerCount)}
 		}
 
+		// Just a specific function for winter-time-switch. If in a energy day file timestamps occur twice add those values.
 		if _, visited := rowIdVisited[id]; visited {
 			// sum value to
-			sumEnergyValueToResource(resources[id], metaCP, meterCode, v)
+			sumEnergyValueToResource(resources[id], metaCP, meterCode, v, isExt)
 		} else {
-			addEnergyValueToResource(resources[id], metaCP, meterCode, v)
+			addEnergyValueToResource(resources[id], metaCP, meterCode, v, isExt)
 		}
 		rowIdVisited[id] = true
 
@@ -259,17 +294,35 @@ func importEnergyValuesV2(
 	return resources, nil
 }
 
-func sumEnergyValueToResource(resource *model.RawSourceLine, metaCP *model.CounterPointMeta, meterCode *model.MeterCodeMeta, v model.MqttEnergyValue) {
+func sumEnergyValueToResource(resource *model.RawSourceLine, metaCP *model.CounterPointMeta, meterCode *model.MeterCodeMeta, v model.MqttEnergyValue, isExt bool) {
+	// Exit the function if the extended MeterCode is zero
+	if isExt && v.Value == 0 {
+		return
+	}
+
 	switch metaCP.Dir {
 	case model.CONSUMER_DIRECTION:
 		resource.Consumers[(metaCP.SourceIdx*3)+meterCode.SourceDelta] += v.Value
 	case model.PRODUCER_DIRECTION:
 		resource.Producers[(metaCP.SourceIdx*2)+meterCode.SourceDelta] += v.Value
 	}
-
 }
 
-func addEnergyValueToResource(resource *model.RawSourceLine, metaCP *model.CounterPointMeta, meterCode *model.MeterCodeMeta, v model.MqttEnergyValue) {
+func addEnergyValueToResource(resource *model.RawSourceLine, metaCP *model.CounterPointMeta, meterCode *model.MeterCodeMeta, v model.MqttEnergyValue, isExt bool) {
+	// Exit the function if the extended MeterCode is zero
+	if isExt && v.Value == 0 {
+		qov := 0
+		switch metaCP.Dir {
+		case model.CONSUMER_DIRECTION:
+			qov = utils.GetInt(resource.QoVConsumers, (metaCP.SourceIdx*3)+meterCode.SourceDelta)
+		case model.PRODUCER_DIRECTION:
+			qov = utils.GetInt(resource.QoVProducers, (metaCP.SourceIdx*2)+meterCode.SourceDelta)
+		}
+		if qov > 0 {
+			return
+		}
+	}
+
 	switch metaCP.Dir {
 	case model.CONSUMER_DIRECTION:
 		resource.Consumers = utils.Insert(resource.Consumers, (metaCP.SourceIdx*3)+meterCode.SourceDelta, v.Value)

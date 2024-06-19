@@ -145,8 +145,7 @@ func exportReport() middleware.JWTHandlerFunc {
 		//b, err := excel.CreateExcelFile(tenant, time.UnixMilli(cps.Start), time.UnixMilli(cps.End), &cps)
 		b, err := excel.ExportEnergyToExcel(tenant, ecid, time.UnixMilli(cps.Start), time.UnixMilli(cps.End), &cps)
 		if err != nil {
-			glog.Errorf("Create Energy Export: %v", err.Error())
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			respondWith(w, http.StatusInternalServerError, tenant, err)
 			return
 		}
 		w.Header().Set("Content-type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

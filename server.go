@@ -85,4 +85,12 @@ func SetupMqttDispatcher(ctx context.Context) {
 
 	dispatcher := mqttclient.NewDispatcher(ctx, streamer, worker)
 	_ = dispatcher
+
+	if err := streamer.Connect(); err != nil {
+		panic(err)
+	}
+
+	for k, _ := range worker {
+		streamer.SubscribeTopic(ctx, k, nil)
+	}
 }

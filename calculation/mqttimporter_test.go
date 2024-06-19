@@ -286,7 +286,7 @@ func TestImportRawdataStore(t *testing.T) {
 
 	viper.Set("persistence.path", "../test/rawdata")
 
-	jsonRaw, err := os.ReadFile("../test/energy-response-text.json")
+	jsonRaw, err := os.ReadFile("../test/energy-response-new-text.json")
 	require.NoError(t, err)
 
 	rawData := decodeMessage(jsonRaw)

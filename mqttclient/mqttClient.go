@@ -60,11 +60,28 @@ func NewMqttStreamer() (*MQTTStreamer, error) {
 
 	client := mqtt.NewClient(opts)
 
+	return &MQTTStreamer{client: client}, nil
+}
+
+func (m *MQTTStreamer) Connect() error {
+	client := m.client
 	if token := client.Connect(); token.Wait() && token.Error() != nil {
-		return nil, token.Error()
+		return token.Error()
 	}
 
-	return &MQTTStreamer{client: client}, nil
+	return nil
+}
+
+type MqttRoutes struct {
+	topic    string
+	callback mqtt.MessageHandler
+}
+
+func (m *MQTTStreamer) AddRoutes(routes ...MqttRoutes) {
+	client := m.client
+	for _, r := range routes {
+		client.AddRoute(r.topic, r.callback)
+	}
 }
 
 func (m *MQTTStreamer) SubscribeTopic(ctx context.Context, topic string, callback mqtt.MessageHandler) {

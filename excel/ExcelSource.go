@@ -46,6 +46,10 @@ const (
 	Share
 	Coverage
 	Profit
+	TotalTF
+	ShareTF
+	CoverageTF
+	ProfitTF
 	TotalProd
 	Bad
 )
@@ -60,9 +64,12 @@ type excelHeader struct {
 
 type excelCounterPointMeta struct {
 	*model.CounterPointMeta
-	Idx   int
-	IdxG2 int
-	IdxG3 int
+	Idx     int
+	IdxG2   int
+	IdxG3   int
+	IdxG1TF int
+	IdxG2TF int
+	IdxG3TF int
 }
 
 func ImportExcelEnergyFile(f *excelize.File, sheet string, db *store.BowStorage) ([]int, error) {
@@ -270,6 +277,9 @@ func buildMatrixMetaStruct(db store.IBowStorage, excelHeader excelHeader) (map[i
 		value int
 		vG2   int
 		vG3   int
+		vG1TF int
+		vG2TF int
+		vG3TF int
 		dir   model.MeterDirection
 		end   string
 		begin string
@@ -289,7 +299,7 @@ func buildMatrixMetaStruct(db store.IBowStorage, excelHeader excelHeader) (map[i
 								_ms.value = i
 								msSet[v] = _ms
 							} else {
-								msSet[v] = pair{v, i, -1, -1, excelHeader.energyDirection[i], excelHeader.periodEnd[i], excelHeader.periodStart[i]}
+								msSet[v] = pair{v, i, -1, -1, -1, -1, -1, excelHeader.energyDirection[i], excelHeader.periodEnd[i], excelHeader.periodStart[i]}
 							}
 						}
 					} else if strings.ToLower(v) != "total" && (excelHeader.meterCode[i] == Share || excelHeader.meterCode[i] == Profit) {
@@ -297,14 +307,35 @@ func buildMatrixMetaStruct(db store.IBowStorage, excelHeader excelHeader) (map[i
 							_ms.vG2 = i
 							msSet[v] = _ms
 						} else {
-							msSet[v] = pair{v, -1, i, -1, excelHeader.energyDirection[i], excelHeader.periodEnd[i], excelHeader.periodStart[i]}
+							msSet[v] = pair{v, -1, i, -1, -1, -1, -1, excelHeader.energyDirection[i], excelHeader.periodEnd[i], excelHeader.periodStart[i]}
 						}
 					} else if strings.ToLower(v) != "total" && excelHeader.meterCode[i] == Coverage {
 						if _ms, ok := msSet[v]; ok {
 							_ms.vG3 = i
 							msSet[v] = _ms
 						} else {
-							msSet[v] = pair{v, -1, -1, i, excelHeader.energyDirection[i], excelHeader.periodEnd[i], excelHeader.periodStart[i]}
+							msSet[v] = pair{v, -1, -1, i, -1, -1, -1, excelHeader.energyDirection[i], excelHeader.periodEnd[i], excelHeader.periodStart[i]}
+						}
+					} else if strings.ToLower(v) != "total" && excelHeader.meterCode[i] == TotalTF {
+						if _ms, ok := msSet[v]; ok {
+							_ms.vG1TF = i
+							msSet[v] = _ms
+						} else {
+							msSet[v] = pair{v, -1, -1, -1, i, -1, -1, excelHeader.energyDirection[i], excelHeader.periodEnd[i], excelHeader.periodStart[i]}
+						}
+					} else if strings.ToLower(v) != "total" && excelHeader.meterCode[i] == ProfitTF {
+						if _ms, ok := msSet[v]; ok {
+							_ms.vG2TF = i
+							msSet[v] = _ms
+						} else {
+							msSet[v] = pair{v, -1, -1, -1, -1, i, -1, excelHeader.energyDirection[i], excelHeader.periodEnd[i], excelHeader.periodStart[i]}
+						}
+					} else if strings.ToLower(v) != "total" && excelHeader.meterCode[i] == CoverageTF {
+						if _ms, ok := msSet[v]; ok {
+							_ms.vG3TF = i
+							msSet[v] = _ms
+						} else {
+							msSet[v] = pair{v, -1, -1, -1, -1, -1, i, excelHeader.energyDirection[i], excelHeader.periodEnd[i], excelHeader.periodStart[i]}
 						}
 					}
 				}
@@ -390,10 +421,16 @@ func buildMatrixMetaStruct(db store.IBowStorage, excelHeader excelHeader) (map[i
 			excelCpMeta[i].Idx = kv.value
 			excelCpMeta[i].IdxG2 = kv.vG2
 			excelCpMeta[i].IdxG3 = kv.vG3
+			excelCpMeta[i].IdxG1TF = kv.vG1TF
+			excelCpMeta[i].IdxG2TF = kv.vG2TF
+			excelCpMeta[i].IdxG3TF = kv.vG3TF
 		default:
 			excelCpMeta[i].Idx = kv.value
 			excelCpMeta[i].IdxG2 = kv.vG2
 			excelCpMeta[i].IdxG3 = kv.vG3
+			excelCpMeta[i].IdxG1TF = kv.vG1TF
+			excelCpMeta[i].IdxG2TF = kv.vG2TF
+			excelCpMeta[i].IdxG3TF = kv.vG3TF
 		}
 	}
 
@@ -447,16 +484,24 @@ func returnMeterValue(cols []string, idx int) float64 {
 
 func returnMeterCode(c string) MeterCodeType {
 	switch {
-	case strings.Contains(c, "GESAMTVERBRAUCH"), strings.Contains(c, "GESAMTVERBRAUCH LT. MESSUNG (BEI TEILNAHME GEM. ERZEUGUNG) [KWH]"):
+	case strings.Contains(c, "GESAMTVERBRAUCH LT. MESSUNG (BEI TEILNAHME GEM. ERZEUGUNG)"):
 		return Total // G1 Consumer
-	case strings.Contains(c, "GESAMTE GEMEINSCHAFTLICHE"), strings.Contains(c, "GESAMTE GEMEINSCHAFTLICHE ERZEUGUNG [KWH]"):
-		return Total // G1 Producer
-	case strings.Contains(c, "ANTEIL"), strings.Contains(c, "ANTEIL GEMEINSCHAFTLICHE ERZEUGUNG [KWH]"):
+	case strings.Contains(c, "VERBRAUCH LT. MESSUNG ENTSPRECHEND DEM TEILNAHMEFAKTOR JE ZP UND EC-ID"):
+		return TotalTF
+	case strings.Contains(c, "ANTEIL GEMEINSCHAFTLICHE ERZEUGUNG"):
 		return Share // G2 Consumer
-	case strings.Contains(c, "EIGENDECKUNG GEMEINSCHAFTLICHE"), strings.Contains(c, "EIGENDECKUNG GEMEINSCHAFTLICHE ERZEUGUNG [KWH]"):
+	case strings.Contains(c, "EIGENDECKUNG GEMEINSCHAFTLICHE ERZEUGUNG"):
 		return Coverage // G3 Consumer
-	case strings.Contains(c, "ÜBERSCHUSSERZEUGUNG"), strings.Contains(c, "GESAMT/ÜBERSCHUSSERZEUGUNG, GEMEINSCHAFTSÜBERSCHUSS [KWH]"):
-		return Profit // G2
+	case strings.Contains(c, "EIGENDECKUNG AUS ERNEUERBARER ENERGIE"):
+		return CoverageTF // G3 Consumer
+	case strings.Contains(c, "GESAMT/ÜBERSCHUSSERZEUGUNG, GEMEINSCHAFTSÜBERSCHUSS"):
+		return Profit // G2 Producer
+	case strings.Contains(c, "RESTÜBERSCHUSS BEI EG UND JE ZP"):
+		return ProfitTF // G2 Producer
+	case strings.Contains(c, "GESAMTE GEMEINSCHAFTLICHE ERZEUGUNG [KWH]"):
+		return Total // G1 Producer
+	case strings.Contains(c, "ERZEUGUNG LT. MESSUNG ENTSPRECHEND DEM TEILNAHMEFAKTOR UND EC-ID"):
+		return TotalTF // G1 Producer
 	default:
 		return Bad
 	}

@@ -116,10 +116,18 @@ func ImportExcelEnergyFileNew(f *excelize.File, sheet string, db store.IBowStora
 								consumerMatrix.SumElm(v.SourceIdx, 0, returnMeterValue(cols, v.Idx))
 								consumerMatrix.SumElm(v.SourceIdx, 1, returnMeterValue(cols, v.IdxG2))
 								consumerMatrix.SumElm(v.SourceIdx, 2, returnMeterValue(cols, v.IdxG3))
+
+								overrideWithExtendedValues(consumerMatrix, cols, 0, v.SourceIdx, v.IdxG1TF, visited)
+								overrideWithExtendedValues(consumerMatrix, cols, 1, v.SourceIdx, v.IdxG2TF, visited)
+								overrideWithExtendedValues(consumerMatrix, cols, 2, v.SourceIdx, v.IdxG3TF, visited)
 							} else {
 								consumerMatrix.SetElm(v.SourceIdx, 0, returnMeterValue(cols, v.Idx))
 								consumerMatrix.SetElm(v.SourceIdx, 1, returnMeterValue(cols, v.IdxG2))
 								consumerMatrix.SetElm(v.SourceIdx, 2, returnMeterValue(cols, v.IdxG3))
+
+								overrideWithExtendedValues(consumerMatrix, cols, 0, v.SourceIdx, v.IdxG1TF, visited)
+								overrideWithExtendedValues(consumerMatrix, cols, 1, v.SourceIdx, v.IdxG2TF, visited)
+								overrideWithExtendedValues(consumerMatrix, cols, 2, v.SourceIdx, v.IdxG3TF, visited)
 							}
 							rawData.QoVConsumers = utils.InsertInt(rawData.QoVConsumers, v.SourceIdx*3, 1)
 							rawData.QoVConsumers = utils.InsertInt(rawData.QoVConsumers, (v.SourceIdx*3)+1, 1)
@@ -129,9 +137,15 @@ func ImportExcelEnergyFileNew(f *excelize.File, sheet string, db store.IBowStora
 							if visited {
 								producerMatrix.SumElm(v.SourceIdx, 0, returnMeterValue(cols, v.Idx))
 								producerMatrix.SumElm(v.SourceIdx, 1, returnMeterValue(cols, v.IdxG2))
+
+								overrideWithExtendedValues(producerMatrix, cols, 0, v.SourceIdx, v.IdxG1TF, visited)
+								overrideWithExtendedValues(producerMatrix, cols, 1, v.SourceIdx, v.IdxG2TF, visited)
 							} else {
 								producerMatrix.SetElm(v.SourceIdx, 0, returnMeterValue(cols, v.Idx))
 								producerMatrix.SetElm(v.SourceIdx, 1, returnMeterValue(cols, v.IdxG2))
+
+								overrideWithExtendedValues(producerMatrix, cols, 0, v.SourceIdx, v.IdxG1TF, visited)
+								overrideWithExtendedValues(producerMatrix, cols, 1, v.SourceIdx, v.IdxG2TF, visited)
 							}
 							rawData.QoVProducers = utils.InsertInt(rawData.QoVProducers, v.SourceIdx*2, 1)
 							rawData.QoVProducers = utils.InsertInt(rawData.QoVProducers, (v.SourceIdx*2)+1, 1)
@@ -178,4 +192,15 @@ func ImportExcelEnergyFileNew(f *excelize.File, sheet string, db store.IBowStora
 		years = append(years, k)
 	}
 	return nil
+}
+
+func overrideWithExtendedValues(matrix *model.Matrix, cols []string, matrixIdx, sourceIdx, idx int, visited bool) {
+	extVal := returnMeterValue(cols, idx)
+	if extVal > 0 {
+		if visited {
+			matrix.SumElm(sourceIdx, matrixIdx, extVal)
+		} else {
+			matrix.SetElm(sourceIdx, matrixIdx, extVal)
+		}
+	}
 }

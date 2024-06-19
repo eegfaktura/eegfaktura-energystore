@@ -1,7 +1,7 @@
 {
   "app" : {
     "realm": "EEGFaktura",
-    "auth-server-url": "https://login.eegfaktura.at/",
+    "auth-server-url": "http://localhost:7080/",
     "ssl-required": "external",
     "resource": "at.ourproject.vfeeg.app",
     "public-client": true,
@@ -11,8 +11,8 @@
     "secret": "LxUXJLXP2Ra57y4RcIzXPYgNHvJF7H1j"
   },
   "admin" : {
-    "realm": "VFEEG",
-    "auth-server-url": "https://login.ourproject.at/auth/",
+    "realm": "EEGFaktura",
+    "auth-server-url": "http://localhost:7080/",
     "ssl-required": "external",
     "resource": "at.ourproject.vfeeg.admin",
     "public-client": true,
@@ -22,14 +22,14 @@
     "secret": "LxUXJLXP2Ra57y4RcIzXPYgNHvJF7H1j"
   },
   "api" : {
-    "realm": "VFEEG",
-    "auth-server-url": "https://login.ourproject.at/auth/",
+    "realm": "EEGFaktura",
+    "auth-server-url": "https://login.eegfaktura.at/",
     "ssl-required": "external",
-    "resource": "at.ourproject.vfeeg.app",
+    "resource": "at.ourproject.vfeeg.api",
     "public-client": true,
     "verify-token-audience": true,
     "use-resource-role-mappings": true,
     "confidential-port": 0,
-    "secret": "LxUXJLXP2Ra57y4RcIzXPYgNHvJF7H1j"
+    "secret": "7Rhr9Upoh6klOk6mgqr9jnGIWYuP3GBh"
   }
 }

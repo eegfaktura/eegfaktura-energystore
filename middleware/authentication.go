@@ -26,7 +26,7 @@ var (
 
 type keycloakConfig struct {
 	ClientId string `json:"resource"`
-	Secret   string `json:"secret"`
+	Secret   string `json:"secret,omitempty"`
 	Realm    string `json:"realm"`
 	Host     string `json:"auth-server-url"`
 }
