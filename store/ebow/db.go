@@ -21,6 +21,7 @@ import (
 var (
 	ErrNotFound = errors.New("Record doesn't exist")
 	ErrReadOnly = errors.New("Put and Delete aren't allowed in read-only mode")
+	ErrNoRows   = errors.New("no Rows found")
 )
 
 // version increases when backwards-incompatible change is introduced,

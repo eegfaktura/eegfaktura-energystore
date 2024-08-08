@@ -9,6 +9,7 @@ import (
 	"context"
 	"flag"
 	"github.com/99designs/gqlgen/graphql/handler"
+	"github.com/golang/glog"
 	"github.com/gorilla/handlers"
 	"github.com/spf13/viper"
 	"log"
@@ -29,7 +30,7 @@ func main() {
 	var configPath = flag.String("configPath", ".", "Configfile Path")
 	flag.Parse()
 
-	println("-> \nRead Config")
+	glog.V(3).Info("-> Read Config")
 	config.ReadConfig(*configPath)
 
 	ctx, cancel := context.WithCancel(context.Background())

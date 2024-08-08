@@ -3,7 +3,6 @@ package excel
 import (
 	"at.ourproject/energystore/store"
 	"errors"
-	"fmt"
 	"io"
 	"path/filepath"
 
@@ -11,7 +10,7 @@ import (
 )
 
 func ImportFile(tenant, ecId, filename, sheet string, file io.Reader) error {
-	fmt.Printf("Start Import\n")
+	glog.Info("Start Import")
 	db, err := store.OpenStorage(tenant, ecId)
 	if err != nil {
 		return err

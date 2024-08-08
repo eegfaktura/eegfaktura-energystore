@@ -14,6 +14,9 @@ type ParentFunction struct {
 func (paf *ParentFunction) addToResult(ctx *EngineContext, ts time.Time, line *model.RawSourceLine) error {
 	for _, cp := range paf.cps {
 		m := ctx.metaMap[cp.MeteringPoint]
+		if m == nil {
+			continue
+		}
 		if _, ok := paf.Result[cp.MeteringPoint]; !ok {
 			paf.Result[cp.MeteringPoint] = &RawDataResult{Direction: m.Dir}
 		}

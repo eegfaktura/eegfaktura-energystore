@@ -38,7 +38,10 @@ func DetermineDirection(meteringPoint string) model.MeterDirection {
 // It is expected that a GENERATOR have a metercode with profit values CODE_PLUS (1-1:2.9.0 P.01)
 func ExamineDirection(energydata []model.MqttEnergyData) model.MeterDirection {
 	for _, d := range energydata {
-		if d.MeterCode == model.CODE_PLUS || d.MeterCode == model.CODE_PLUS_TF {
+		if d.MeterCode == model.CODE_PLUS ||
+			d.MeterCode == model.CODE_PLUS_TF ||
+			d.MeterCode == model.CODE_GEN ||
+			d.MeterCode == model.CODE_GEN_TF {
 			return model.PRODUCER_DIRECTION
 		}
 	}
@@ -68,10 +71,17 @@ var InsertInt = func(orig []int, index int, value int) []int {
 }
 
 var GetInt = func(orig []int, index int) int {
-	if index >= 0 && len(orig) < index {
+	if index >= 0 && index < len(orig) {
 		return orig[index]
 	}
 	return 0
+}
+
+var GetBool = func(slice []bool, index int) bool {
+	if index >= 0 && index < len(slice) {
+		return slice[index]
+	}
+	return false
 }
 
 func CastQoVStringToInt(qov string) int {
@@ -84,11 +94,6 @@ func CastQoVStringToInt(qov string) int {
 		return 3
 	}
 	return 0
-}
-
-func RoundFloat(val float64, precision uint) float64 {
-	ratio := math.Pow(10, float64(precision))
-	return math.Round(val*ratio) / ratio
 }
 
 // DecodeMeterCode define meteringpoint value category

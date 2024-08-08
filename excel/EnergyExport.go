@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/golang/glog"
 	"github.com/xuri/excelize/v2"
 	"time"
 )
@@ -240,7 +241,7 @@ func (er *EnergyRunner) run(db store.IBowStorage, f *excelize.File, start, end t
 
 	if rCxt.qovLogArray != nil && len(rCxt.qovLogArray) > 0 {
 		if err = generateLogDataSheet(rCxt, f); err != nil {
-			fmt.Printf("LOG: %+v\n", err)
+			glog.Infof("LOG: %+v\n", err)
 		}
 	}
 
@@ -258,7 +259,7 @@ func ExportEnergyToExcel(tenant, ecid string, start, end time.Time, cps *ExportC
 	f := excelize.NewFile()
 	defer func() {
 		if err := f.Close(); err != nil {
-			fmt.Println(err)
+			glog.Error(err)
 		}
 	}()
 

@@ -10,7 +10,7 @@ DOCKER=docker
 GOPATH := ${PWD}/..:${GOPATH}
 export GOPATH
 
-DOCKER_TAG=v0.2.4
+DOCKER_TAG=v0.2.5
 
 all: test build
 build:
@@ -35,5 +35,5 @@ docker:
 push: docker
 	$(DOCKER) push ghcr.io/vfeeg-development/energy-store:$(DOCKER_TAG)
 
-protoc:
+protoc: protoc/masterdata.proto protoc/excel.proto
 	protoc --experimental_allow_proto3_optional=true --proto_path=. --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative ./protoc/*.proto

@@ -72,7 +72,7 @@ func handleData(cmd *cobra.Command, args []string) error {
 		for i := 0; i < consumerMatrix.Rows; i += 1 {
 			meta, ok := mapConsumers[i]
 			if ok && filter(meter, meta) {
-				fmt.Printf("%10s|%33s|%14s|>%4.5f [%s]; %4.5f [%s]; %4.5f [%s]\n", _line.Id, meta.Name, meta.Dir,
+				fmt.Printf("%10s|%33s|%14s|>%4.6f [%s]; %4.6f [%s]; %4.6f [%s]\n", _line.Id, meta.Name, meta.Dir,
 					consumerMatrix.GetElm(i, 0), getQoV(_line.QoVConsumers, i, 0, 3),
 					consumerMatrix.GetElm(i, 1), getQoV(_line.QoVConsumers, i, 1, 3),
 					consumerMatrix.GetElm(i, 2), getQoV(_line.QoVConsumers, i, 2, 3))

@@ -59,6 +59,7 @@ func buildMock(entries []*model.RawSourceLine) *mocks.MockBowStorage {
 func TestGetLastEnergyEntry(t *testing.T) {
 	type args struct {
 		tenant string
+		ecId   string
 	}
 	tests := []struct {
 		name    string
@@ -70,7 +71,7 @@ func TestGetLastEnergyEntry(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := GetLastEnergyEntry(tt.args.tenant)
+			got, err := GetLastEnergyEntry(tt.args.tenant, tt.args.ecId)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetLastEnergyEntry() error = %v, wantErr %v", err, tt.wantErr)
 				return

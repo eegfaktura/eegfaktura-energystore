@@ -64,7 +64,7 @@ func fetchEnergyReportV2() middleware.JWTHandlerFunc {
 		vars := mux.Vars(r)
 		ecid := vars["ecid"]
 		startMonitor := time.Now()
-		fmt.Printf("Start Time Monitor fetchEnergyReport. %d\n", startMonitor.UnixMilli())
+		glog.V(4).Infof("Start Time Monitor fetchEnergyReport. %d\n", startMonitor.UnixMilli())
 		energy := &model.ReportResponse{}
 
 		var request model.ReportRequest
@@ -78,11 +78,7 @@ func fetchEnergyReportV2() middleware.JWTHandlerFunc {
 			respondWithError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		fmt.Printf("Time Monitor fetchEnergyReport. %v\n", time.Now().Sub(startMonitor))
-		//resp := struct {
-		//	Eeg *model.ReportResponse `json:"eeg"`
-		//}{Eeg: energy}
-
+		glog.V(4).Infof("Time Monitor fetchEnergyReport. %v\n", time.Now().Sub(startMonitor))
 		respondWithJSON(w, http.StatusOK, &energy)
 	}
 }
@@ -167,7 +163,7 @@ func fetchIntraDayReportV2() middleware.JWTHandlerFunc {
 		ecid := vars["ecid"]
 
 		startMonitor := time.Now()
-		fmt.Printf("Start Time Monitor fetchIntraDayReport. %d\n", startMonitor.UnixMilli())
+		glog.V(4).Infof("Start Time Monitor fetchIntraDayReport. %d\n", startMonitor.UnixMilli())
 		var request struct {
 			Start int64 `json:"start"`
 			End   int64 `json:"end"`
@@ -180,7 +176,7 @@ func fetchIntraDayReportV2() middleware.JWTHandlerFunc {
 		}
 
 		resp, err := store.QueryIntraDayReport(tenant, ecid, time.UnixMilli(request.Start), time.UnixMilli(request.End))
-		fmt.Printf("Time Monitor fetchIntraDayReport. %v\n", time.Now().Sub(startMonitor))
+		glog.V(4).Infof("Time Monitor fetchIntraDayReport. %v\n", time.Now().Sub(startMonitor))
 		if err != nil {
 			respondWithError(w, http.StatusBadRequest, err.Error())
 			return
@@ -195,7 +191,7 @@ func fetchSummaryReportV2() middleware.JWTHandlerFunc {
 		ecid := vars["ecid"]
 
 		startMonitor := time.Now()
-		fmt.Printf("Start Time Monitor fetchSummaryReport. %d\n", startMonitor.UnixMilli())
+		glog.V(4).Infof("Start Time Monitor fetchSummaryReport. %d\n", startMonitor.UnixMilli())
 
 		var request model.EnergyReportRequest
 
@@ -206,7 +202,7 @@ func fetchSummaryReportV2() middleware.JWTHandlerFunc {
 		}
 
 		resp, err := calculation.EnergySummary(tenant, ecid, request.Year, request.Segment, request.Period)
-		fmt.Printf("Time Monitor fetchSummaryReport. %v\n", time.Now().Sub(startMonitor))
+		glog.V(4).Infof("Time Monitor fetchSummaryReport. %v\n", time.Now().Sub(startMonitor))
 		if err != nil {
 			respondWithError(w, http.StatusBadRequest, err.Error())
 			return

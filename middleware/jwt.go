@@ -8,6 +8,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"github.com/golang-jwt/jwt"
+	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
 	"io/ioutil"
@@ -77,14 +78,14 @@ func (m *JwtValidateMiddleware) WrapHandler(secured SecHandlerFunc) http.Handler
 
 		jwtToken := r.Header.Get("access_token")
 		if len(jwtToken) == 0 {
-			log.Printf("No Access_token in request!")
+			glog.Error("No Access_token in request!")
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
 
 		claims, err := m.jwtUtil.ExtractClaims(jwtToken)
 		if err != nil {
-			fmt.Printf("Error while parsing token: %s\n", err)
+			glog.Errorf("Error while parsing token: %s\n", err)
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}

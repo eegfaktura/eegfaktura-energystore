@@ -2,8 +2,8 @@ package store
 
 import (
 	"at.ourproject/energystore/model"
+	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
-	"errors"
 	"fmt"
 	"time"
 )
@@ -173,8 +173,9 @@ func (e *Engine) Query(tenant, ecid string, start, end time.Time) error {
 	var _lineG1 model.RawSourceLine
 	g1Ok := iterCP.Next(&_lineG1)
 	if !g1Ok {
-		return errors.New("no Rows found")
+		return ebow.ErrNoRows
 	}
+
 	_, lineStart, err := utils.ConvertRowIdToTimeString("CP", _lineG1.Id, time.Local)
 	if err != nil {
 		return err

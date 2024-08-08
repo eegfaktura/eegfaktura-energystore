@@ -11,3 +11,4 @@ mqtt:
   inverterSubscriptionTopic: "eda/response/+/protocol/inverter_msg"
 services:
   mail-server: "localhost:9090"
+  master-server: "localhost:9092"

@@ -65,7 +65,6 @@ func init() {
 
 	ctx := context.Background()
 	providerUriApp := fmt.Sprintf("%s/realms/%s", hostApp, realmApp)
-	println(providerUriApp)
 	provider, err := oidc.NewProvider(ctx, providerUriApp)
 	if err != nil {
 		logrus.Errorf("E: %v", err)

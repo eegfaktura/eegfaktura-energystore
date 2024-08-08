@@ -22,7 +22,7 @@ var numberPattern = regexp.MustCompile(`^[0-9\\.,]+$`)
 func OpenExceFile(path string) (*excelize.File, error) {
 	f, err := excelize.OpenFile(path)
 	if err != nil {
-		fmt.Println(err)
+		glog.Error(err)
 		return nil, err
 	}
 	return f, nil
@@ -531,7 +531,6 @@ func isDate(cell string) bool {
 			return true
 		}
 	}
-	println(cell)
 	return false
 }
 

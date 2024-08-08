@@ -5,6 +5,7 @@ import (
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
 	"at.ourproject/energystore/utils"
+	"fmt"
 
 	"flag"
 	"os"
@@ -31,7 +32,7 @@ func main() {
 	var configPath = flag.String("configPath", ".", "Configfile Path")
 	flag.Parse()
 
-	println("-> \nRead Config")
+	fmt.Printf("-> Read Config\n")
 	config.ReadConfig(*configPath)
 
 	if tenant == nil || len(*tenant) == 0 {

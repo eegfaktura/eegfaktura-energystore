@@ -64,7 +64,7 @@ func TestAllocDynamic2(t *testing.T) {
 			assert.Equal(t, tt.rows, result.CountRows())
 			sum := 0.0
 			for i := 0; i < tt.rows; i++ {
-				value := utils.RoundFloat(result.GetElm(i, 0), 6)
+				value := utils.RoundToFixed(result.GetElm(i, 0), 6)
 				assert.Equal(t, tt.result[i], value)
 				sum += value
 			}

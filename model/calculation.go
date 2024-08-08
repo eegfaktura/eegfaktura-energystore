@@ -44,12 +44,12 @@ type IntermediateRecord struct {
 
 }
 
-func (ir *IntermediateRecord) RoundToFixed(precision uint) {
-	ratio := math.Pow(10, float64(precision))
-	for _, v := range ir.Utilization {
-		v = math.Round(v*ratio) / ratio
-	}
-}
+//func (ir *IntermediateRecord) RoundToFixed(precision uint) {
+//	ratio := math.Pow(10, float64(precision))
+//	for _, v := range ir.Utilization {
+//		v = math.Round(v*ratio) / ratio
+//	}
+//}
 
 type Report struct {
 	Id      string `json:"id"`
@@ -60,10 +60,6 @@ type Report struct {
 
 func (report *Report) RoundToFixed(precision uint) {
 	report.Summary.RoundToFixed(precision)
-	//report.Intermediate.RoundToFixed(precision)
-	//for _, i := range report.Intermediate {
-	//	i.RoundToFixed(precision)
-	//}
 }
 
 type MeterReport struct {

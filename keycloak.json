@@ -23,13 +23,13 @@
   },
   "api" : {
     "realm": "EEGFaktura",
-    "auth-server-url": "https://login.eegfaktura.at/",
+    "auth-server-url": "http://localhost:7080/",
     "ssl-required": "external",
     "resource": "at.ourproject.vfeeg.api",
     "public-client": true,
     "verify-token-audience": true,
     "use-resource-role-mappings": true,
     "confidential-port": 0,
-    "secret": "7Rhr9Upoh6klOk6mgqr9jnGIWYuP3GBh"
+    "secret": "Gfg4UrzKM3cddvlmEYbCbp0mdyQMcEoM"
   }
 }

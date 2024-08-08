@@ -47,7 +47,6 @@ func (miv *MqttInverterImporter) Execute(msg mqtt.Message) {
 var testInvCounter = 0
 
 func (miv *MqttInverterImporter) process() {
-	glog.Info("Start MQTT Queue")
 	for {
 		select {
 		case msg := <-miv.msgChan:
@@ -95,14 +94,13 @@ func (mw *MqttEnergyImporter) Execute(msg mqtt.Message) {
 	}
 
 	mw.msgChan <- MqttMessage{data: data, tenant: tenant, ecId: data.EcId}
-	fmt.Printf("Received Messages %d\n", gloablReceivedMsg)
+	glog.V(4).Infof("Received Messages %d\n", gloablReceivedMsg)
 	//msg.Ack()
 }
 
 var testCounter int64 = 0
 
 func (mw *MqttEnergyImporter) process() {
-	glog.Info("Start MQTT Queue")
 	for {
 		select {
 		case msg := <-mw.msgChan:
@@ -144,11 +142,6 @@ func decodeMessage(msg []byte) *model.MqttEnergyMessage {
 //var importLook = sync.Mutex{}
 
 func importEnergyV2(tenant, ecid string, data *model.MqttEnergyMessage) error {
-	// GetMetaData from tenant
-
-	//importLook.Lock()
-	//defer importLook.Unlock()
-
 	db, err := store.OpenStorage(tenant, ecid)
 	if err != nil {
 		return err
@@ -189,15 +182,16 @@ func importEnergyV2(tenant, ecid string, data *model.MqttEnergyMessage) error {
 			//	}
 			//}
 			if d.MeterCode == model.CODE_CON_TF || d.MeterCode == model.CODE_GEN_TF || d.MeterCode == model.CODE_COVER_TF || d.MeterCode == model.CODE_PLUS_TF {
-				if strings.ToUpper(tenant[:2]) != "CC" && d.MeterCode == model.CODE_COVER_TF {
-					continue
-				}
+				//if strings.ToUpper(tenant[:2]) != "CC" && d.MeterCode == model.CODE_COVER_TF {
+				//	continue
+				//}
 				meterCodeMetaExt[meterMeta.Type] = meterMeta
 				continue
 			}
 			meterCodeMeta[meterMeta.Type] = meterMeta
 		}
 	}
+	optimizeMeterCodeImport(tenant, metaCP.Dir, meterCodeMeta, meterCodeMetaExt)
 
 	var resources map[string]*model.RawSourceLine = map[string]*model.RawSourceLine{}
 	begin := time.UnixMilli(data.Energy.Start)
@@ -208,7 +202,7 @@ func importEnergyV2(tenant, ecid string, data *model.MqttEnergyMessage) error {
 	for _, v := range meterCodeMeta {
 		resources, err = importEnergyValuesV2(v, data.Energy, metaCP, consumerCount, producerCount, resources, false)
 		// Store updated RawDataStructure
-		glog.Infof("Update CP %s energy values (%d) from %s to %s",
+		glog.V(5).Infof("Update CP %s energy values (%d) from %s to %s",
 			data.Meter.MeteringPoint,
 			len(resources),
 			time.UnixMilli(data.Energy.Start).Format(time.RFC822),
@@ -222,7 +216,7 @@ func importEnergyV2(tenant, ecid string, data *model.MqttEnergyMessage) error {
 	for _, v := range meterCodeMetaExt {
 		resources, err = importEnergyValuesV2(v, data.Energy, metaCP, consumerCount, producerCount, resources, true)
 		// Store updated RawDataStructure
-		glog.Infof("Update/Override CP %s (%x) energy values (%d) from %s to %s",
+		glog.V(5).Infof("Update/Override CP %s (%x) energy values (%d) from %s to %s",
 			data.Meter.MeteringPoint,
 			v.Code,
 			len(resources),
@@ -249,6 +243,47 @@ func importEnergyV2(tenant, ecid string, data *model.MqttEnergyMessage) error {
 		err = updateMeta(db, metaCP, data.Meter.MeteringPoint)
 	}
 	return nil
+}
+
+func optimizeMeterCodeImport(tenant string, direction model.MeterDirection, metaCode, metaCodeExt map[string]*model.MeterCodeMeta) {
+
+	if direction == model.CONSUMER_DIRECTION {
+		if _, exists := metaCode["COVER"]; exists == false {
+			if _, e := metaCodeExt["COVER"]; e {
+				metaCode["COVER"] = metaCodeExt["COVER"]
+				delete(metaCodeExt, "COVER")
+			}
+		}
+
+		if _, exists := metaCode["CON"]; exists == false {
+			if _, e := metaCodeExt["CON"]; e {
+				metaCode["CON"] = metaCodeExt["CON"]
+				delete(metaCodeExt, "CON")
+			}
+		}
+
+		if _, exists := metaCodeExt["COVER"]; exists {
+			if strings.ToUpper(tenant[:2]) != "CC" {
+				delete(metaCodeExt, "COVER")
+			}
+		}
+
+	} else {
+		if _, exists := metaCode["GEN"]; exists == false {
+			if _, e := metaCodeExt["GEN"]; e {
+				metaCode["GEN"] = metaCodeExt["GEN"]
+				delete(metaCodeExt, "GEN")
+			}
+		}
+
+		if _, exists := metaCode["PLUS"]; exists == false {
+			if _, e := metaCodeExt["PLUS"]; e {
+				metaCode["PLUS"] = metaCodeExt["PLUS"]
+				delete(metaCodeExt, "PLUS")
+			}
+		}
+
+	}
 }
 
 func importEnergyValuesV2(

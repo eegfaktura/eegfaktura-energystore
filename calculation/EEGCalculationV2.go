@@ -368,7 +368,7 @@ func appendEnergyToParticipantMeter(
 				}
 			}
 		} else {
-			glog.Warningf("Metering point %s has no energy values received yet", meterId)
+			glog.V(4).Infof("Metering point %s has no energy values received yet", meterId)
 		}
 	}
 	return nil

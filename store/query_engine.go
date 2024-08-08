@@ -2,6 +2,7 @@ package store
 
 import (
 	"at.ourproject/energystore/model"
+	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
 	"errors"
 	"fmt"
@@ -79,7 +80,7 @@ func QueryIntraDayReport(tenant, ecid string, start, end time.Time) ([]*ReportDa
 	c, _ := NewIntraDayFunction()
 	e := &Engine{c}
 
-	if err := e.Query(tenant, ecid, start, end); err != nil {
+	if err := e.Query(tenant, ecid, start, end); err != nil && !errors.Is(err, ebow.ErrNoRows) {
 		return nil, err
 	}
 	return (c.(*IntraDay)).GetResult(), nil
@@ -90,6 +91,9 @@ func QueryRawData(tenant, ecid string, start, end time.Time, cps []TargetMP, par
 	e := &Engine{c}
 
 	if err := e.Query(tenant, ecid, start, end); err != nil {
+		if errors.Is(err, ebow.ErrNoRows) {
+			return make(map[string]*RawDataResult), nil
+		}
 		return nil, err
 	}
 	return c.function.GetResult(), nil

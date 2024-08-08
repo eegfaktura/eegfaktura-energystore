@@ -2,6 +2,7 @@ package rest
 
 import (
 	"at.ourproject/energystore/model"
+	"at.ourproject/energystore/store"
 	"encoding/json"
 	log "github.com/sirupsen/logrus"
 	"net/http"
@@ -46,4 +47,16 @@ func respondWith(w http.ResponseWriter, httpCode int, tenant, data interface{}) 
 	default:
 		respondWithJSON(w, httpCode, data)
 	}
+}
+
+func responseWithCsv(w http.ResponseWriter, data map[string]*store.RawDataResult, convert func(input map[string]*store.RawDataResult) (output []byte, err error)) {
+	content, err := convert(data)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/csv")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(content)
 }

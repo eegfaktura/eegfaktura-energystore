@@ -41,7 +41,7 @@ func (es *EnergySheet) initSheet(ctx *RunnerContext) error {
 		return err
 	}
 
-	numFmt := "#,##0.000000"
+	numFmt := "#,##0.0000000"
 	styleIdNumFmt, err := f.NewStyle(&excelize.Style{
 		CustomNumFmt: &numFmt,
 	})

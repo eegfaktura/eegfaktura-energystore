@@ -193,7 +193,6 @@ func (ss *SummarySheet) closeSheet(ctx *RunnerContext) error {
 }
 
 func (ss *SummarySheet) summaryMeteringPoints(ctx *RunnerContext) (*SummaryResult, error) {
-
 	summary := &SummaryResult{Consumer: []SummaryMeterResult{}, Producer: []SummaryMeterResult{}}
 	for _, cp := range ctx.cps.Cps {
 		m, ok := ctx.metaMap[cp.MeteringPoint]
@@ -206,7 +205,7 @@ func (ss *SummarySheet) summaryMeteringPoints(ctx *RunnerContext) (*SummaryResul
 				Name:          cp.Name,
 				BeginDate:     m.PeriodStart,
 				EndDate:       m.PeriodEnd,
-				DataOk:        ss.qovConsumerSlice[m.SourceIdx],
+				DataOk:        utils.GetBool(ss.qovConsumerSlice, m.SourceIdx),
 				Total:         returnFloatValue(ss.report.Consumed, m.SourceIdx),
 				Coverage:      returnFloatValue(ss.report.Shared, m.SourceIdx),
 				Share:         returnFloatValue(ss.report.Allocated, m.SourceIdx),
@@ -217,7 +216,7 @@ func (ss *SummarySheet) summaryMeteringPoints(ctx *RunnerContext) (*SummaryResul
 				Name:          cp.Name,
 				BeginDate:     m.PeriodStart,
 				EndDate:       m.PeriodEnd,
-				DataOk:        ss.qovProducerSlice[m.SourceIdx],
+				DataOk:        utils.GetBool(ss.qovProducerSlice, m.SourceIdx),
 				Total:         returnFloatValue(ss.report.Produced, m.SourceIdx),
 				Coverage:      returnFloatValue(ss.report.Produced, m.SourceIdx) - returnFloatValue(ss.report.Distributed, m.SourceIdx),
 				Share:         returnFloatValue(ss.report.Distributed, m.SourceIdx),
@@ -233,5 +232,7 @@ func sumMeterResult(s []SummaryMeterResult, elem func(e *SummaryMeterResult) flo
 	for _, e := range s {
 		sum = sum + elem(&e)
 	}
-	return utils.RoundFloat(sum, 6)
+	//return utils.RoundFloat(sum, 6)
+	fmt.Printf("Calc: SUM: %v\n", sum)
+	return sum
 }
