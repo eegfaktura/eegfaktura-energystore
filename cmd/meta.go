@@ -156,5 +156,5 @@ func checkDateValue(date string) error {
 	if dateLine.MatchString(date) {
 		return nil
 	}
-	return errors.New("Wrong Date Format: Expected 'MM.DD.YYYY HH:MM:SS'")
+	return errors.New("Wrong Date Format: Expected 'DD.MM.YYYY HH:MM:SS'")
 }

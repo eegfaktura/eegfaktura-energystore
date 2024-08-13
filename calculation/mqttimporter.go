@@ -155,7 +155,7 @@ func importEnergyV2(tenant, ecid string, data *model.MqttEnergyMessage) error {
 	var metaCP *model.CounterPointMeta
 
 	determineMeta := func() error {
-		meta, info, err := store.GetMetaInfoMap(db, data.Meter.MeteringPoint, defaultDirection)
+		meta, info, err := store.PrepareMetaInfoMap(db, data.Meter.MeteringPoint, defaultDirection)
 		if err != nil {
 			return err
 		}

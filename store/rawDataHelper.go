@@ -42,8 +42,7 @@ func GetConsumerMetaMap(db *BowStorage) (map[string]*model.CounterPointMeta, err
 	return metaMap, nil
 }
 
-func GetMetaInfoMap(db *BowStorage, meterpoint string, direction model.MeterDirection) (map[string]*model.CounterPointMeta, *model.CounterPointMetaInfo, error) {
-	modified := false
+func CalcMetaInfo(db *BowStorage) (*model.CounterPointMetaInfo, map[string]*model.CounterPointMeta, error) {
 	meta, err := GetMetaMap(db)
 	if err != nil {
 		return nil, nil, err
@@ -63,6 +62,36 @@ func GetMetaInfoMap(db *BowStorage, meterpoint string, direction model.MeterDire
 			info.ProducerCount += 1
 			info.MaxProducerIdx = int(math.Max(float64(v.SourceIdx), float64(info.MaxProducerIdx)))
 		}
+	}
+	return info, meta, nil
+}
+
+func PrepareMetaInfoMap(db *BowStorage, meterpoint string, direction model.MeterDirection) (map[string]*model.CounterPointMeta, *model.CounterPointMetaInfo, error) {
+	modified := false
+	//meta, err := GetMetaMap(db)
+	//if err != nil {
+	//	return nil, nil, err
+	//}
+	//
+	//info := &model.CounterPointMetaInfo{
+	//	ConsumerCount: 0, ProducerCount: 0,
+	//	MaxConsumerIdx: -1, MaxProducerIdx: -1,
+	//}
+	//
+	//for _, v := range meta {
+	//	switch v.Dir {
+	//	case model.CONSUMER_DIRECTION:
+	//		info.ConsumerCount += 1
+	//		info.MaxConsumerIdx = int(math.Max(float64(v.SourceIdx), float64(info.MaxConsumerIdx)))
+	//	case model.PRODUCER_DIRECTION:
+	//		info.ProducerCount += 1
+	//		info.MaxProducerIdx = int(math.Max(float64(v.SourceIdx), float64(info.MaxProducerIdx)))
+	//	}
+	//}
+
+	info, meta, err := CalcMetaInfo(db)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	_, ok := meta[meterpoint]

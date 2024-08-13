@@ -62,6 +62,10 @@ func (A *Matrix) CountCols() int {
 }
 
 func (A *Matrix) GetElm(row int, col int) float64 {
+	if len(A.Elements) <= row*A.step+col {
+		peter := 1
+		_ = peter
+	}
 	return A.Elements[row*A.step+col]
 }
 

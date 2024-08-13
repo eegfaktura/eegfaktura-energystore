@@ -12,10 +12,11 @@ import (
 )
 
 var (
-	meter string
-	begin string
-	end   string
-	count int16
+	meter          string
+	begin          string
+	end            string
+	count          int16
+	onlyBadQuality bool
 )
 
 func init() {
@@ -27,7 +28,9 @@ func init() {
 	dataCmd.Flags().StringVar(&end, "end", "",
 		"Consider only energy data until end date")
 	dataCmd.Flags().Int16Var(&count, "count", 100,
-		"Consider only energy data until end date")
+		"Take count of begin date. Default 100")
+	dataCmd.Flags().BoolVar(&onlyBadQuality, "onlyBad", false,
+		"Consider only energy data with bad quality. Default false")
 }
 
 var dataCmd = &cobra.Command{
@@ -71,7 +74,7 @@ func handleData(cmd *cobra.Command, args []string) error {
 		preceedCnt := false
 		for i := 0; i < consumerMatrix.Rows; i += 1 {
 			meta, ok := mapConsumers[i]
-			if ok && filter(meter, meta) {
+			if ok && filter(meter, meta) && selectBadQual(onlyBadQuality, meta, &_line) {
 				fmt.Printf("%10s|%33s|%14s|>%4.6f [%s]; %4.6f [%s]; %4.6f [%s]\n", _line.Id, meta.Name, meta.Dir,
 					consumerMatrix.GetElm(i, 0), getQoV(_line.QoVConsumers, i, 0, 3),
 					consumerMatrix.GetElm(i, 1), getQoV(_line.QoVConsumers, i, 1, 3),
@@ -81,8 +84,10 @@ func handleData(cmd *cobra.Command, args []string) error {
 		}
 		for i := 0; i < producerMatrix.Rows; i += 1 {
 			meta, ok := mapProducers[i]
-			if ok && filter(meter, meta) {
-				fmt.Printf("%10s|%33s|%14s|>%4.5f; %4.5f\n", _line.Id, meta.Name, meta.Dir, producerMatrix.GetElm(i, 0), producerMatrix.GetElm(i, 1))
+			if ok && filter(meter, meta) && selectBadQual(onlyBadQuality, meta, &_line) {
+				fmt.Printf("%10s|%33s|%14s|>%4.6f [%s]; %4.6f [%s]\n", _line.Id, meta.Name, meta.Dir,
+					producerMatrix.GetElm(i, 0), getQoV(_line.QoVProducers, i, 0, 2),
+					producerMatrix.GetElm(i, 1), getQoV(_line.QoVProducers, i, 1, 2))
 				preceedCnt = true
 			}
 		}
@@ -165,5 +170,33 @@ func filter(meter string, meta *model.CounterPointMeta) bool {
 }
 
 func getQoV(arr []int, line, pos, base int) string {
+	if ((line * base) + pos) == 569 {
+		peter := 1
+		_ = peter
+	}
+	if len(arr) <= ((line * base) + pos) {
+		return "eIdx"
+	}
 	return fmt.Sprintf("L%d", arr[(line*base)+pos])
+}
+
+func selectBadQual(enabled bool, meta *model.CounterPointMeta, line *model.RawSourceLine) bool {
+	if !enabled {
+		return true
+	}
+	if meta.Dir == model.PRODUCER_DIRECTION {
+		return !QqVIs(1, line.QoVProducers[meta.SourceIdx*2:meta.SourceIdx*2+2]...)
+	} else {
+		return !QqVIs(1, line.QoVConsumers[meta.SourceIdx*3:meta.SourceIdx*3+3]...)
+	}
+}
+
+func QqVIs(val int, vars ...int) bool {
+	valid := true
+	for _, i := range vars {
+		if i != val {
+			valid = false
+		}
+	}
+	return valid
 }
