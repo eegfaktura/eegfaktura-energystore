@@ -123,3 +123,12 @@ type EnergyReport struct {
 	Shared        []float64 `bow:"shared" json:"shared"`
 	TotalProduced float64   `bow:"totalProduced" json:"total_produced"`
 }
+
+type EnergyDescription struct {
+	Id          string  `json:"id"`
+	Allocated   float64 `json:"allocated"`
+	Consumed    float64 `json:"consumed"`
+	Produced    float64 `json:"produced"`
+	Distributed float64 `json:"distributed"`
+	Shared      float64 `json:"shared"`
+}

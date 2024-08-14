@@ -25,6 +25,22 @@ type InvestigatorCP struct {
 	Name          string `json:"name"`
 }
 
+type ExportParticipantEnergy struct {
+	Start       int64           `json:"start"`
+	End         int64           `json:"end"`
+	CommunityId string          `json:"communityId"`
+	Cps         []ParticipantCp `json:"cps"`
+}
+
+type ParticipantCp struct {
+	MeteringPoint string                   `json:"meteringPoint"`
+	Direction     string                   `json:"direction"`
+	ActiveSince   int64                    `json:"activeSince"`
+	InactiveSince int64                    `json:"inactiveSince"`
+	Name          string                   `json:"name"`
+	Report        *model.EnergyDescription `json:"report"`
+}
+
 type SummaryMeterResult struct {
 	MeteringPoint string
 	Name          string
