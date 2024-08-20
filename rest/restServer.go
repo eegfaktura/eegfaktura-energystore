@@ -131,7 +131,7 @@ func exportReport() middleware.JWTHandlerFunc {
 		vars := mux.Vars(r)
 		ecid := vars["ecid"]
 
-		var cps excel.ExportCPs
+		var cps excel.ExportParticipantEnergy
 		err := json.NewDecoder(r.Body).Decode(&cps)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)

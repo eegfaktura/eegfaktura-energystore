@@ -15,7 +15,7 @@ func TestEnergySheet(t *testing.T) {
 	var tests = []struct {
 		name     string
 		metaData *model.RawSourceMeta
-		cps      *ExportCPs
+		cps      *ExportParticipantEnergy
 		entries  []*model.RawSourceLine
 		check    func(t *testing.T, f *excelize.File)
 	}{

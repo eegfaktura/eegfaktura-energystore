@@ -33,12 +33,13 @@ type ExportParticipantEnergy struct {
 }
 
 type ParticipantCp struct {
-	MeteringPoint string                   `json:"meteringPoint"`
-	Direction     string                   `json:"direction"`
-	ActiveSince   int64                    `json:"activeSince"`
-	InactiveSince int64                    `json:"inactiveSince"`
-	Name          string                   `json:"name"`
-	Report        *model.EnergyDescription `json:"report"`
+	MeteringPoint string                  `json:"meteringPoint"`
+	Direction     model.MeterDirection    `json:"direction"`
+	ActiveSince   int64                   `json:"activeSince"`
+	InactiveSince int64                   `json:"inactiveSince"`
+	Name          string                  `json:"name"`
+	Report        model.EnergyDescription `json:"report"`
+	QoV           bool                    `json:"qov"`
 }
 
 type SummaryMeterResult struct {
@@ -64,7 +65,7 @@ func returnFloatValue(array []float64, idx int) float64 {
 	return 0
 }
 
-func ExportEnergyDataToMail(tenant, ecid, to string, year, month int, cps *ExportCPs) error {
+func ExportEnergyDataToMail(tenant, ecid, to string, year, month int, cps *ExportParticipantEnergy) error {
 
 	buf, err := ExportExcel(tenant, ecid, year, month, cps)
 	if err != nil {
@@ -75,7 +76,7 @@ func ExportEnergyDataToMail(tenant, ecid, to string, year, month int, cps *Expor
 	return utils.SendMail(tenant, to, fmt.Sprintf("EEG (%s) - Excel Report", tenant), nil, &filename, buf)
 }
 
-func ExportExcel(tenant, ecid string, year, month int, cps *ExportCPs) (*bytes.Buffer, error) {
+func ExportExcel(tenant, ecid string, year, month int, cps *ExportParticipantEnergy) (*bytes.Buffer, error) {
 	start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.Local)
 	end := time.Date(year, time.Month(month)+1, 0, 0, 0, 0, 0, time.Local)
 
@@ -97,7 +98,11 @@ type Sheet interface {
 type RunnerContext struct {
 	start           time.Time
 	end             time.Time
-	cps             *ExportCPs
+	communityId     string
+	cps             []*ParticipantCp
+	producers       []*ParticipantCp
+	consumers       []*ParticipantCp
+	orderedCps      []*ParticipantCp
 	metaMap         map[string]*model.CounterPointMeta
 	meta            []*model.CounterPointMeta
 	info            *model.CounterPointMetaInfo
@@ -109,7 +114,7 @@ type RunnerContext struct {
 	checkBegin      func(lineDate, mDate time.Time) bool
 }
 
-func createRunnerContext(db store.IBowStorage, start, end time.Time, cps *ExportCPs) (*RunnerContext, error) {
+func createRunnerContext(db store.IBowStorage, start, end time.Time, cps *ExportParticipantEnergy) (*RunnerContext, error) {
 	metaMap, info, err := store.GetMetaInfo(db)
 	if err != nil {
 		return nil, err
@@ -139,17 +144,33 @@ func createRunnerContext(db store.IBowStorage, start, end time.Time, cps *Export
 		}
 	}
 	meta := append(metaCon, metaPro...)
-	countCons, countProd := utils.CountConsumerProducer(meta)
+	//countCons, countProd := utils.CountConsumerProducer(meta)
+
+	var _cps []*ParticipantCp
+	var producers []*ParticipantCp
+	var consumers []*ParticipantCp
+	for i, _ := range cps.Cps {
+		if cps.Cps[i].Direction == model.PRODUCER_DIRECTION {
+			producers = append(producers, &cps.Cps[i])
+		} else {
+			consumers = append(consumers, &cps.Cps[i])
+		}
+		_cps = append(_cps, &cps.Cps[i])
+	}
 
 	return &RunnerContext{
 		start:           start,
 		end:             end,
-		cps:             cps,
+		cps:             _cps,
+		orderedCps:      append(consumers, producers...),
+		communityId:     cps.CommunityId,
+		consumers:       consumers,
+		producers:       producers,
 		metaMap:         metaMap,
 		meta:            meta,
 		info:            info,
-		countProd:       countProd,
-		countCons:       countCons,
+		countProd:       len(producers),
+		countCons:       len(consumers),
 		periodsConsumer: metaRangeConsumer,
 		periodsProducer: metaRangeProducer,
 		checkBegin: func(lineDate, mDate time.Time) bool {
@@ -203,7 +224,7 @@ func (er *EnergyRunner) closeSheets(ctx *RunnerContext) error {
 	return nil
 }
 
-func (er *EnergyRunner) run(db store.IBowStorage, f *excelize.File, start, end time.Time, cps *ExportCPs) (*bytes.Buffer, error) {
+func (er *EnergyRunner) run(db store.IBowStorage, f *excelize.File, start, end time.Time, cps *ExportParticipantEnergy) (*bytes.Buffer, error) {
 	rCxt, err := createRunnerContext(db, start, end, cps)
 	if err != nil {
 		return nil, err
@@ -265,7 +286,7 @@ func (er *EnergyRunner) run(db store.IBowStorage, f *excelize.File, start, end t
 	return f.WriteToBuffer()
 }
 
-func ExportEnergyToExcel(tenant, ecid string, start, end time.Time, cps *ExportCPs) (*bytes.Buffer, error) {
+func ExportEnergyToExcel(tenant, ecid string, start, end time.Time, cps *ExportParticipantEnergy) (*bytes.Buffer, error) {
 	db, err := store.OpenStorage(tenant, ecid)
 	if err != nil {
 		return nil, err
@@ -287,69 +308,120 @@ func ExportEnergyToExcel(tenant, ecid string, start, end time.Time, cps *ExportC
 	return runner.run(db, f, start, end, cps)
 }
 
-func addLine(g1 *model.RawSourceLine, countCon int, meta []*model.CounterPointMeta, stylesQoV []int) []interface{} {
+func addLine(ctx *RunnerContext, line *model.RawSourceLine, stylesQoV []int) []interface{} {
 
-	lineData := make([]interface{}, len(meta)*3)
-	//line := map[string][]float64{}
-	setCellValue := func(length, sourceIdx int, raw []float64, qov []int) excelize.Cell {
-		if length > sourceIdx {
-			_qov := 1
-			if len(qov) > sourceIdx {
-				_qov = qov[sourceIdx]
-			}
-			if _qov == 1 {
-				return excelize.Cell{Value: utils.RoundToFixed(raw[sourceIdx], 6), StyleID: stylesQoV[0]}
-			} else if _qov == 2 {
-				return excelize.Cell{Value: utils.RoundToFixed(raw[sourceIdx], 6), StyleID: stylesQoV[1]}
-			} else if _qov == 3 {
-				return excelize.Cell{Value: utils.RoundToFixed(raw[sourceIdx], 6), StyleID: stylesQoV[2]}
-			} else {
-				//fmt.Printf("Quality of Value is %d Value: %f\n", _qov, utils.RoundToFixed(raw[sourceIdx], 6))
-				return excelize.Cell{Value: ""}
-			}
+	//lineData := make([]interface{}, len(meta)*3)
+	////line := map[string][]float64{}
+	//setCellValue := func(length, sourceIdx int, raw []float64, qov []int) excelize.Cell {
+	//	if length > sourceIdx {
+	//		_qov := 1
+	//		if len(qov) > sourceIdx {
+	//			_qov = qov[sourceIdx]
+	//		}
+	//		if _qov == 1 {
+	//			return excelize.Cell{Value: utils.RoundToFixed(raw[sourceIdx], 6), StyleID: stylesQoV[0]}
+	//		} else if _qov == 2 {
+	//			return excelize.Cell{Value: utils.RoundToFixed(raw[sourceIdx], 6), StyleID: stylesQoV[1]}
+	//		} else if _qov == 3 {
+	//			return excelize.Cell{Value: utils.RoundToFixed(raw[sourceIdx], 6), StyleID: stylesQoV[2]}
+	//		} else {
+	//			//fmt.Printf("Quality of Value is %d Value: %f\n", _qov, utils.RoundToFixed(raw[sourceIdx], 6))
+	//			return excelize.Cell{Value: ""}
+	//		}
+	//	} else {
+	//		return excelize.Cell{Value: ""}
+	//	}
+	//}
+	//
+	//cCnt := 0
+	//pCnt := 0
+	//for _, m := range meta {
+	//	if m.Dir == model.CONSUMER_DIRECTION {
+	//		baseIdx := cCnt * 3
+	//		cCnt += 1
+	//		lineData[baseIdx] = setCellValue(len(g1.Consumers), m.SourceIdx*3, g1.Consumers, g1.QoVConsumers)
+	//		lineData[baseIdx+1] = setCellValue(len(g1.Consumers), (m.SourceIdx*3)+1, g1.Consumers, g1.QoVConsumers)
+	//		lineData[baseIdx+2] = setCellValue(len(g1.Consumers), (m.SourceIdx*3)+2, g1.Consumers, g1.QoVConsumers)
+	//	} else if m.Dir == model.PRODUCER_DIRECTION {
+	//		//baseIdx := (countCon * 3) + (m.SourceIdx * 2)
+	//		baseIdx := (countCon * 3) + (pCnt * 2)
+	//		pCnt += 1
+	//		lineData[baseIdx] = setCellValue(len(g1.Producers), m.SourceIdx*2, g1.Producers, g1.QoVProducers) //excelize.Cell{Value: g1.Producers[m.SourceIdx]}
+	//		lineData[baseIdx+1] = setCellValue(len(g1.Producers), (m.SourceIdx*2)+1, g1.Producers, g1.QoVProducers)
+	//	}
+	//}
+
+	lineDate, _ := utils.ConvertRowIdToTime("CP", line.Id)
+	consumerMatrix, producerMatrix := utils.ConvertLineToMatrix(line)
+	setCellValue1 := func(row, col int, matrix *model.Matrix, qov int) excelize.Cell {
+		_qov := qov
+		if _qov == 1 {
+			return excelize.Cell{Value: utils.RoundToFixed(matrix.GetElm(row, col), 6), StyleID: stylesQoV[0]}
+		} else if _qov == 2 {
+			return excelize.Cell{Value: utils.RoundToFixed(matrix.GetElm(row, col), 6), StyleID: stylesQoV[1]}
+		} else if _qov == 3 {
+			return excelize.Cell{Value: utils.RoundToFixed(matrix.GetElm(row, col), 6), StyleID: stylesQoV[2]}
 		} else {
+			//fmt.Printf("Quality of Value is %d Value: %f\n", _qov, utils.RoundToFixed(raw[sourceIdx], 6))
 			return excelize.Cell{Value: ""}
 		}
 	}
 
-	cCnt := 0
-	pCnt := 0
-	for _, m := range meta {
-		if m.Dir == model.CONSUMER_DIRECTION {
-			baseIdx := cCnt * 3
-			cCnt += 1
-			lineData[baseIdx] = setCellValue(len(g1.Consumers), m.SourceIdx*3, g1.Consumers, g1.QoVConsumers)
-			lineData[baseIdx+1] = setCellValue(len(g1.Consumers), (m.SourceIdx*3)+1, g1.Consumers, g1.QoVConsumers)
-			lineData[baseIdx+2] = setCellValue(len(g1.Consumers), (m.SourceIdx*3)+2, g1.Consumers, g1.QoVConsumers)
-		} else if m.Dir == model.PRODUCER_DIRECTION {
-			//baseIdx := (countCon * 3) + (m.SourceIdx * 2)
-			baseIdx := (countCon * 3) + (pCnt * 2)
-			pCnt += 1
-			lineData[baseIdx] = setCellValue(len(g1.Producers), m.SourceIdx*2, g1.Producers, g1.QoVProducers) //excelize.Cell{Value: g1.Producers[m.SourceIdx]}
-			lineData[baseIdx+1] = setCellValue(len(g1.Producers), (m.SourceIdx*2)+1, g1.Producers, g1.QoVProducers)
+	participantCells := func(p *ParticipantCp, m *model.CounterPointMeta) []interface{} {
+		if p.Direction == model.CONSUMER_DIRECTION {
+			if lineDate.Before(time.UnixMilli(p.ActiveSince)) || lineDate.After(time.UnixMilli(p.InactiveSince)) {
+				return []interface{}{
+					excelize.Cell{Value: ""},
+					excelize.Cell{Value: ""},
+					excelize.Cell{Value: ""},
+				}
+			}
+			return []interface{}{
+				setCellValue1(m.SourceIdx, 0, consumerMatrix, utils.GetInt(line.QoVConsumers, (m.SourceIdx*3)+0)),
+				setCellValue1(m.SourceIdx, 1, consumerMatrix, utils.GetInt(line.QoVConsumers, (m.SourceIdx*3)+1)),
+				setCellValue1(m.SourceIdx, 2, consumerMatrix, utils.GetInt(line.QoVConsumers, (m.SourceIdx*3)+2)),
+			}
+		} else {
+			if lineDate.Before(time.UnixMilli(p.ActiveSince)) || lineDate.After(time.UnixMilli(p.InactiveSince)) {
+				return []interface{}{
+					excelize.Cell{Value: ""},
+					excelize.Cell{Value: ""},
+				}
+			}
+			return []interface{}{
+				setCellValue1(m.SourceIdx, 0, producerMatrix, utils.GetInt(line.QoVProducers, (m.SourceIdx*2)+0)),
+				setCellValue1(m.SourceIdx, 1, producerMatrix, utils.GetInt(line.QoVProducers, (m.SourceIdx*2)+1)),
+			}
 		}
 	}
-	return lineData
+
+	lines := []interface{}{}
+	for i := 0; i < len(ctx.orderedCps); i++ {
+		p := ctx.orderedCps[i]
+		lines = append(lines, participantCells(ctx.orderedCps[i], ctx.metaMap[p.MeteringPoint])...)
+	}
+	return lines
 }
 
 func addHeaderV2(ctx *RunnerContext, cellCon, cellProd int,
-	value func(meta *model.CounterPointMeta, cellOffset int) interface{},
-	style func(meta *model.CounterPointMeta, cellOffset int) int) []interface{} {
+	value func(meta *model.CounterPointMeta, p *ParticipantCp, cellOffset int) interface{},
+	style func(meta *model.CounterPointMeta, p *ParticipantCp, cellOffset int) int) []interface{} {
 	cCnt := 0
 	pCnt := 0
 	lineData := make([]interface{}, (ctx.countCons*cellCon)+(ctx.countProd*cellProd))
-	for _, m := range ctx.meta {
+	for _, cp := range ctx.orderedCps {
+		m := ctx.metaMap[cp.MeteringPoint]
 		if m.Dir == model.CONSUMER_DIRECTION {
 			baseIdx := cCnt * cellCon
 			cCnt += 1
 			for i := 0; i < cellCon; i++ {
-				lineData[baseIdx+i] = excelize.Cell{Value: value(m, i), StyleID: style(m, i)}
+				lineData[baseIdx+i] = excelize.Cell{Value: value(m, cp, i), StyleID: style(m, cp, i)}
 			}
 		} else if m.Dir == model.PRODUCER_DIRECTION {
 			baseIdx := (ctx.countCons * cellCon) + (pCnt * cellProd)
 			pCnt += 1
 			for i := 0; i < cellProd; i++ {
-				lineData[baseIdx+i] = excelize.Cell{Value: value(m, i), StyleID: style(m, i)}
+				lineData[baseIdx+i] = excelize.Cell{Value: value(m, cp, i), StyleID: style(m, cp, i)}
 			}
 		}
 	}

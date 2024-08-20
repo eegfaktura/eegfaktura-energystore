@@ -17,10 +17,10 @@ type EnergySheet struct {
 }
 
 func (es *EnergySheet) initSheet(ctx *RunnerContext) error {
-	participantMeterMap := map[string]string{}
-	for _, m := range ctx.cps.Cps {
-		participantMeterMap[m.MeteringPoint] = m.Name
-	}
+	//participantMeterMap := map[string]string{}
+	//for _, m := range ctx.cps {
+	//	participantMeterMap[m.MeteringPoint] = m.Name
+	//}
 
 	f := es.excel
 	_, err := f.NewSheet(es.name)
@@ -61,48 +61,50 @@ func (es *EnergySheet) initSheet(ctx *RunnerContext) error {
 
 	_ = es.writer.SetRow("A2",
 		append([]interface{}{excelize.Cell{Value: "MeteringpointID"}},
-			addHeaderV2(ctx, 3, 2, func(m *model.CounterPointMeta, i int) interface{} { return m.Name }, func(m *model.CounterPointMeta, i int) int { return 0 })...))
+			addHeaderV2(ctx, 3, 2, func(m *model.CounterPointMeta, p *ParticipantCp, i int) interface{} { return m.Name },
+				func(m *model.CounterPointMeta, p *ParticipantCp, i int) int { return 0 })...))
 
 	_ = es.writer.SetRow("A3",
 		append([]interface{}{excelize.Cell{Value: "Name"}},
-			addHeaderV2(ctx, 3, 2, func(m *model.CounterPointMeta, i int) interface{} {
-				if p, ok := participantMeterMap[m.Name]; ok {
-					return p
-				}
-				return "unknown"
-			}, func(m *model.CounterPointMeta, i int) int { return 0 })...))
+			addHeaderV2(ctx, 3, 2,
+				func(m *model.CounterPointMeta, p *ParticipantCp, i int) interface{} {
+					return p.Name
+				},
+				func(m *model.CounterPointMeta, p *ParticipantCp, i int) int { return 0 })...))
 
 	_ = es.writer.SetRow("A4",
 		append([]interface{}{excelize.Cell{Value: "Energy direction"}},
-			addHeaderV2(ctx, 3, 2, func(m *model.CounterPointMeta, i int) interface{} { return m.Dir }, func(m *model.CounterPointMeta, i int) int { return 0 })...))
+			addHeaderV2(ctx, 3, 2,
+				func(m *model.CounterPointMeta, p *ParticipantCp, i int) interface{} { return m.Dir },
+				func(m *model.CounterPointMeta, p *ParticipantCp, i int) int { return 0 })...))
 
 	sYear, sMonth, sDay := ctx.start.Year(), int(ctx.start.Month()), ctx.start.Day()
 	eYear, eMonth, eDay := ctx.end.Year(), int(ctx.end.Month()), ctx.end.Day()
 
 	_ = es.writer.SetRow("A5",
 		append([]interface{}{excelize.Cell{Value: "Period start"}},
-			addHeaderV2(ctx, 3, 2, func(m *model.CounterPointMeta, i int) interface{} {
+			addHeaderV2(ctx, 3, 2, func(m *model.CounterPointMeta, p *ParticipantCp, i int) interface{} {
 				d := ctx.getPeriodRange(m).start
 				if d.After(ctx.start) {
 					return fmt.Sprintf("%.2d.%.2d.%.4d 00:00:00", d.Day(), int(d.Month()), d.Year())
 				}
 				return fmt.Sprintf("%.2d.%.2d.%.4d 00:00:00", sDay, sMonth, sYear)
-			}, func(m *model.CounterPointMeta, i int) int { return 0 })...))
+			}, func(m *model.CounterPointMeta, p *ParticipantCp, i int) int { return 0 })...))
 
 	_ = es.writer.SetRow("A6",
 		append([]interface{}{excelize.Cell{Value: "Period end"}},
-			addHeaderV2(ctx, 3, 2, func(m *model.CounterPointMeta, i int) interface{} {
+			addHeaderV2(ctx, 3, 2, func(m *model.CounterPointMeta, p *ParticipantCp, i int) interface{} {
 				d := ctx.getPeriodRange(m).end
 				if d.Before(ctx.end) {
 					return fmt.Sprintf("%.2d.%.2d.%.4d 23:45:00", d.Day(), int(d.Month()), d.Year())
 				}
 				return fmt.Sprintf("%.2d.%.2d.%.4d 23:45:00", eDay, eMonth, eYear)
-			}, func(m *model.CounterPointMeta, i int) int { return 0 })...))
+			}, func(m *model.CounterPointMeta, p *ParticipantCp, i int) int { return 0 })...))
 
 	_ = es.writer.SetRow("A7",
 		append([]interface{}{excelize.Cell{Value: "Metercode"}},
 			addHeaderV2(ctx, 3, 2,
-				func(m *model.CounterPointMeta, i int) interface{} {
+				func(m *model.CounterPointMeta, p *ParticipantCp, i int) interface{} {
 					if m.Dir == model.CONSUMER_DIRECTION {
 						switch i {
 						case 0:
@@ -125,7 +127,7 @@ func (es *EnergySheet) initSheet(ctx *RunnerContext) error {
 						}
 					}
 				},
-				func(m *model.CounterPointMeta, i int) int { return 0 })...))
+				func(m *model.CounterPointMeta, p *ParticipantCp, i int) int { return 0 })...))
 
 	return nil
 }
@@ -137,9 +139,9 @@ func (es *EnergySheet) handleLine(ctx *RunnerContext, line *model.RawSourceLine)
 		return err
 	}
 	_ = es.writer.SetRow(fmt.Sprintf("A%d", es.lineNum+10),
-		append([]interface{}{excelize.Cell{Value: lineDate}}, addLine(line, ctx.countCons, ctx.meta, es.stylesQoV)...))
+		append([]interface{}{excelize.Cell{Value: lineDate}}, addLine(ctx, line, es.stylesQoV)...))
 
-	if !checkQoV(line, ctx.meta) {
+	if !checkQoV(ctx, line) {
 		ctx.qovLogArray = append(ctx.qovLogArray, line.Copy(0))
 	}
 
@@ -150,31 +152,49 @@ func (es *EnergySheet) closeSheet(ctx *RunnerContext) error {
 	return es.writer.Flush()
 }
 
-func checkQoV(line *model.RawSourceLine, meta []*model.CounterPointMeta) bool {
+func checkQoV(ctx *RunnerContext, line *model.RawSourceLine) bool {
 	lineDate, _ := utils.ConvertRowIdToTime("CP", line.Id)
 
-	checkDate := func(periodStart string, lineDate time.Time) bool {
-		mDate, _ := utils.ParseTime(periodStart, 0)
-		if lineDate.Before(mDate) {
+	//checkDate := func(periodStart string, lineDate time.Time) bool {
+	//	mDate, _ := utils.ParseTime(periodStart, 0)
+	//	if lineDate.Before(mDate) {
+	//		return true
+	//	}
+	//	return false
+	//}
+
+	checkDate := func(start, end int64, lineDate time.Time) bool {
+		if lineDate.Before(time.UnixMilli(start)) || lineDate.After(time.UnixMilli(end)) {
 			return true
 		}
 		return false
 	}
 
-	check := false
-	for _, m := range meta {
-		if m.Dir == model.CONSUMER_DIRECTION {
-			if checkDate(m.PeriodStart, lineDate) || !(len(line.QoVConsumers) > (m.SourceIdx + 2)) {
-				continue
-			}
-			check = line.QoVConsumers[m.SourceIdx] != 1 || line.QoVConsumers[m.SourceIdx+1] != 1 || line.QoVConsumers[m.SourceIdx+2] != 1
-		} else {
-			if checkDate(m.PeriodStart, lineDate) || !(len(line.QoVProducers) > (m.SourceIdx + 1)) {
-				continue
-			}
-			check = line.QoVProducers[m.SourceIdx] != 1 || line.QoVProducers[m.SourceIdx+1] != 1
+	nok := false
+	for _, cp := range ctx.cps {
+		m, ok := ctx.metaMap[cp.MeteringPoint]
+		if !ok {
+			continue
 		}
-		if check {
+		if m.Dir == model.CONSUMER_DIRECTION {
+			baseIdx := m.SourceIdx * 3
+			if checkDate(cp.ActiveSince, cp.InactiveSince, lineDate) {
+				continue
+			}
+			nok =
+				utils.GetInt(line.QoVConsumers, baseIdx) != 1 ||
+					utils.GetInt(line.QoVConsumers, baseIdx+1) != 1 ||
+					utils.GetInt(line.QoVConsumers, baseIdx+2) != 1
+		} else {
+			baseIdx := m.SourceIdx * 2
+			if checkDate(cp.ActiveSince, cp.InactiveSince, lineDate) {
+				continue
+			}
+			nok =
+				utils.GetInt(line.QoVProducers, baseIdx) != 1 ||
+					utils.GetInt(line.QoVProducers, baseIdx+1) != 1
+		}
+		if nok {
 			return false
 		}
 	}

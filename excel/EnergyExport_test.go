@@ -96,70 +96,85 @@ var (
 		},
 	}, NumberOfMetering: 10}
 
-	exportCps = &ExportCPs{
+	exportCps = &ExportParticipantEnergy{
 		CommunityId: "ATSEPPHUBER",
-		Cps: []InvestigatorCP{
+		Cps: []ParticipantCp{
 			{
 				MeteringPoint: "AT0030000000000000000000000351391",
 				Direction:     "CONSUMPTION",
 				Name:          "Stefan Maier",
+				ActiveSince:   1672527600000,
+				InactiveSince: 4102441199000,
 			},
 			{
 				MeteringPoint: "AT0030000000000000000000000379812",
 				Direction:     "CONSUMPTION",
 				Name:          "Michael Schauer",
+				ActiveSince:   1672527600000,
+				InactiveSince: 4102441199000,
 			},
 			{
 				MeteringPoint: "AT0030000000000000000000030043080",
 				Direction:     "GENERATION",
 				Name:          "Michael Schauer",
+				ActiveSince:   1672527600000,
+				InactiveSince: 4102441199000,
 			},
 			{
 				MeteringPoint: "AT0030000000000000000000000381701",
 				Direction:     "GENERATION",
 				Name:          "Stefan Maier",
+				ActiveSince:   1672527600000,
+				InactiveSince: 4102441199000,
 			},
 		},
 	}
 
 	exportEntries = []*model.RawSourceLine{
-		&model.RawSourceLine{Id: "CP/2023/01/01/00/00/00/",
+		&model.RawSourceLine{
+			Id:           "CP/2023/01/01/00/00/00/",
 			Consumers:    []float64{1, 1, 1, 2, 2, 2},
 			Producers:    []float64{1, 1, 0.5, 0.5},
 			QoVConsumers: []int{1, 1, 1, 1, 1, 1},
 			QoVProducers: []int{1, 1, 1, 1},
 		},
-		&model.RawSourceLine{Id: "CP/2023/01/01/00/15/00/",
+		&model.RawSourceLine{
+			Id:           "CP/2023/01/01/00/15/00/",
 			Consumers:    []float64{0.1, 0.5, 0.01, 0.2, 0.5, 0.1},
 			Producers:    []float64{0.5, 0.8, 0.5, 1.2},
 			QoVConsumers: []int{1, 1, 1, 1, 1, 1},
 			QoVProducers: []int{1, 1, 1, 1},
 		},
-		&model.RawSourceLine{Id: "CP/2023/01/01/00/30/00/",
+		&model.RawSourceLine{
+			Id:           "CP/2023/01/01/00/30/00/",
 			Consumers:    []float64{0, 0, 0, 0, 0, 0},
 			Producers:    []float64{0, 0, 0, 0},
 			QoVConsumers: []int{1, 1, 1, 1, 1, 1},
 			QoVProducers: []int{1, 1, 1, 1},
 		},
-		&model.RawSourceLine{Id: "CP/2023/01/01/00/45/00/",
+		&model.RawSourceLine{
+			Id:           "CP/2023/01/01/00/45/00/",
 			Consumers:    []float64{0, 0, 0, 0, 0, 0},
 			Producers:    []float64{0, 0, 0, 0},
 			QoVConsumers: []int{1, 1, 1, 1, 1, 1},
 			QoVProducers: []int{1, 1, 1, 1},
 		},
-		&model.RawSourceLine{Id: "CP/2023/01/01/01/00/00/",
+		&model.RawSourceLine{
+			Id:           "CP/2023/01/01/01/00/00/",
 			Consumers:    []float64{0, 0, 0, 0, 0, 0},
 			Producers:    []float64{0, 0, 0, 0},
 			QoVConsumers: []int{1, 1, 1, 1, 1, 1},
 			QoVProducers: []int{1, 1, 1, 1},
 		},
-		&model.RawSourceLine{Id: "CP/2023/01/01/01/15/00/",
+		&model.RawSourceLine{
+			Id:           "CP/2023/01/01/01/15/00/",
 			Consumers:    []float64{0, 0, 0, 0, 0, 0},
 			Producers:    []float64{0, 0, 0, 0},
 			QoVConsumers: []int{1, 1, 1, 1, 1, 1},
 			QoVProducers: []int{1, 1, 1, 1},
 		},
-		&model.RawSourceLine{Id: "CP/2023/01/01/01/30/00/",
+		&model.RawSourceLine{
+			Id:           "CP/2023/01/01/01/30/00/",
 			Consumers:    []float64{0, 0, 0, 0, 0, 0},
 			Producers:    []float64{0, 0, 0, 0},
 			QoVConsumers: []int{1, 1, 1, 1, 1, 1},
@@ -172,7 +187,8 @@ var (
 			QoVConsumers: []int{1, 1, 1, 1, 1, 1},
 			QoVProducers: []int{1, 1, 1, 1},
 		},
-		&model.RawSourceLine{Id: "CP/2023/01/01/02/00/00/",
+		&model.RawSourceLine{
+			Id:           "CP/2023/01/01/02/00/00/",
 			Consumers:    []float64{0, 0, 0, 0, 0, 0},
 			Producers:    []float64{0, 0, 0, 0},
 			QoVConsumers: []int{1, 1, 1, 1, 1, 1},

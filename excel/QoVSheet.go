@@ -10,10 +10,10 @@ import (
 
 func generateLogDataSheet(ctx *RunnerContext, f *excelize.File) error {
 	sheetName := "QoV Log"
-	participantMeterMap := map[string]string{}
-	for _, m := range ctx.cps.Cps {
-		participantMeterMap[m.MeteringPoint] = m.Name
-	}
+	//participantMeterMap := map[string]string{}
+	//for _, m := range ctx.cps {
+	//	participantMeterMap[m.MeteringPoint] = m.Name
+	//}
 
 	// Create a new sheet.
 	_, err := f.NewSheet(sheetName)
@@ -62,46 +62,43 @@ func generateLogDataSheet(ctx *RunnerContext, f *excelize.File) error {
 	_ = sw.SetRow("A2",
 		append([]interface{}{excelize.Cell{Value: "MeteringpointID"}},
 			addHeaderV2(ctx, 6, 4,
-				func(m *model.CounterPointMeta, i int) interface{} {
+				func(m *model.CounterPointMeta, p *ParticipantCp, i int) interface{} {
 					if i%2 == 0 {
 						return m.Name
 					} else {
 						return "QoV"
 					}
 				},
-				func(m *model.CounterPointMeta, i int) int { return 0 })...))
+				func(m *model.CounterPointMeta, p *ParticipantCp, i int) int { return 0 })...))
 
 	_ = sw.SetRow("A3",
 		append([]interface{}{excelize.Cell{Value: "Name"}},
 			addHeaderV2(ctx, 6, 4,
-				func(m *model.CounterPointMeta, i int) interface{} {
+				func(m *model.CounterPointMeta, p *ParticipantCp, i int) interface{} {
 					if i%2 == 0 {
-						if p, ok := participantMeterMap[m.Name]; ok {
-							return p
-						}
-						return "unknown"
+						return p.Name
 					} else {
 						return ""
 					}
 				},
-				func(m *model.CounterPointMeta, i int) int { return 0 })...))
+				func(m *model.CounterPointMeta, p *ParticipantCp, i int) int { return 0 })...))
 
 	_ = sw.SetRow("A4",
 		append([]interface{}{excelize.Cell{Value: "Energy direction"}},
 			addHeaderV2(ctx, 6, 4,
-				func(m *model.CounterPointMeta, i int) interface{} {
+				func(m *model.CounterPointMeta, p *ParticipantCp, i int) interface{} {
 					if i%2 == 0 {
 						return m.Dir
 					} else {
 						return ""
 					}
 				},
-				func(m *model.CounterPointMeta, i int) int { return 0 })...))
+				func(m *model.CounterPointMeta, p *ParticipantCp, i int) int { return 0 })...))
 
 	_ = sw.SetRow("A7",
 		append([]interface{}{excelize.Cell{Value: "Metercode"}},
 			addHeaderV2(ctx, 6, 4,
-				func(m *model.CounterPointMeta, i int) interface{} {
+				func(m *model.CounterPointMeta, p *ParticipantCp, i int) interface{} {
 					if m.Dir == model.CONSUMER_DIRECTION {
 						switch i {
 						case 0:
@@ -124,7 +121,7 @@ func generateLogDataSheet(ctx *RunnerContext, f *excelize.File) error {
 						}
 					}
 				},
-				func(m *model.CounterPointMeta, i int) int { return 0 })...))
+				func(m *model.CounterPointMeta, p *ParticipantCp, i int) int { return 0 })...))
 
 	lineNum := 0
 	for _, l := range ctx.qovLogArray {

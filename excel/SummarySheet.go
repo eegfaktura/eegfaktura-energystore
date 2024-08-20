@@ -9,21 +9,21 @@ import (
 )
 
 type SummarySheet struct {
-	name             string
-	excel            *excelize.File
-	report           *model.EnergyReport
+	name  string
+	excel *excelize.File
+	//report           *model.EnergyReport
 	qovConsumerSlice []bool
 	qovProducerSlice []bool
 }
 
 func (ss *SummarySheet) initSheet(ctx *RunnerContext) error {
-	ss.report = &model.EnergyReport{
-		Consumed:    make([]float64, ctx.info.ConsumerCount),
-		Allocated:   make([]float64, ctx.info.ConsumerCount),
-		Shared:      make([]float64, ctx.info.ConsumerCount),
-		Produced:    make([]float64, ctx.info.ProducerCount),
-		Distributed: make([]float64, ctx.info.ProducerCount),
-	}
+	//ss.report = &model.EnergyReport{
+	//	Consumed:    make([]float64, ctx.info.ConsumerCount),
+	//	Allocated:   make([]float64, ctx.info.ConsumerCount),
+	//	Shared:      make([]float64, ctx.info.ConsumerCount),
+	//	Produced:    make([]float64, ctx.info.ProducerCount),
+	//	Distributed: make([]float64, ctx.info.ProducerCount),
+	//}
 
 	ss.qovConsumerSlice = model.CreateInitializedBoolSlice(ctx.info.ConsumerCount, true)
 	ss.qovProducerSlice = model.CreateInitializedBoolSlice(ctx.info.ProducerCount, true)
@@ -39,20 +39,53 @@ func (ss *SummarySheet) initSheet(ctx *RunnerContext) error {
 func (ss *SummarySheet) handleLine(ctx *RunnerContext, line *model.RawSourceLine) error {
 	lineDate, _ := utils.ConvertRowIdToTime("CP", line.Id)
 	consumerMatrix, producerMatrix := utils.ConvertLineToMatrix(line)
-	for i := 0; i < consumerMatrix.Rows && i < ctx.info.ConsumerCount; i += 1 {
-		ss.report.Consumed[i] += consumerMatrix.GetElm(i, 0)
-		ss.report.Shared[i] += consumerMatrix.GetElm(i, 1)
-		ss.report.Allocated[i] += consumerMatrix.GetElm(i, 2)
-		if (i*3)+2 < len(line.QoVConsumers) {
-			ss.qovConsumerSlice[i] = ss.qovConsumerSlice[i] && (ctx.checkBegin(lineDate, ctx.periodsConsumer[i].start) || ((line.QoVConsumers[(i*3)] == 1) && (line.QoVConsumers[(i*3)+1] == 1) && (line.QoVConsumers[(i*3)+2] == 1)))
-		}
+
+	for _, p := range ctx.cps {
+		_ = ss.handleParticipantReport(ctx, p, consumerMatrix, producerMatrix, lineDate, line.QoVConsumers, line.QoVProducers)
 	}
-	for i := 0; i < producerMatrix.Rows && i < ctx.info.ProducerCount; i += 1 {
-		ss.report.Produced[i] += producerMatrix.GetElm(i, 0)
-		ss.report.Distributed[i] += producerMatrix.GetElm(i, 1)
-		if (i*2)+1 < len(line.QoVProducers) {
-			ss.qovProducerSlice[i] = ss.qovProducerSlice[i] && (ctx.checkBegin(lineDate, ctx.periodsProducer[i].start) || ((line.QoVProducers[(i*2)] == 1) && (line.QoVProducers[(i*2)+1] == 1)))
+
+	//for i := 0; i < consumerMatrix.Rows && i < ctx.info.ConsumerCount; i += 1 {
+	//	ss.report.Consumed[i] += consumerMatrix.GetElm(i, 0)
+	//	ss.report.Shared[i] += consumerMatrix.GetElm(i, 1)
+	//	ss.report.Allocated[i] += consumerMatrix.GetElm(i, 2)
+	//	if (i*3)+2 < len(line.QoVConsumers) {
+	//		ss.qovConsumerSlice[i] = ss.qovConsumerSlice[i] && (ctx.checkBegin(lineDate, ctx.periodsConsumer[i].start) || ((line.QoVConsumers[(i*3)] == 1) && (line.QoVConsumers[(i*3)+1] == 1) && (line.QoVConsumers[(i*3)+2] == 1)))
+	//	}
+	//}
+	//for i := 0; i < producerMatrix.Rows && i < ctx.info.ProducerCount; i += 1 {
+	//	ss.report.Produced[i] += producerMatrix.GetElm(i, 0)
+	//	ss.report.Distributed[i] += producerMatrix.GetElm(i, 1)
+	//	if (i*2)+1 < len(line.QoVProducers) {
+	//		ss.qovProducerSlice[i] = ss.qovProducerSlice[i] && (ctx.checkBegin(lineDate, ctx.periodsProducer[i].start) || ((line.QoVProducers[(i*2)] == 1) && (line.QoVProducers[(i*2)+1] == 1)))
+	//	}
+	//}
+	return nil
+}
+
+func (ss *SummarySheet) handleParticipantReport(ctx *RunnerContext, participant *ParticipantCp,
+	consumerMatrix, producerMatrix *model.Matrix, lineDate time.Time, QoVConsumers, QoVProducers []int) error {
+
+	if lineDate.Before(time.UnixMilli(participant.ActiveSince)) || lineDate.After(time.UnixMilli(participant.InactiveSince)) {
+		return nil
+	}
+
+	meta := ctx.metaMap[participant.MeteringPoint]
+	idx := meta.SourceIdx
+	if participant.Direction == model.CONSUMER_DIRECTION {
+		participant.Report.Consumed += consumerMatrix.GetElm(meta.SourceIdx, 0)
+		participant.Report.Shared += consumerMatrix.GetElm(meta.SourceIdx, 1)
+		participant.Report.Allocated += consumerMatrix.GetElm(meta.SourceIdx, 2)
+		if (idx*3)+2 < len(QoVConsumers) {
+			participant.QoV = participant.QoV &&
+				(ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) ||
+					((QoVConsumers[(idx*3)] == 1) && (QoVConsumers[(idx*3)+1] == 1) && (QoVConsumers[(idx*3)+2] == 1)))
 		}
+	} else {
+		participant.Report.Produced += producerMatrix.GetElm(meta.SourceIdx, 0)
+		participant.Report.Distributed += producerMatrix.GetElm(meta.SourceIdx, 1)
+		//if (i*2)+1 < len(line.QoVProducers) {
+		//	ss.qovProducerSlice[i] = ss.qovProducerSlice[i] && (ctx.checkBegin(lineDate, ctx.periodsProducer[i].start) || ((line.QoVProducers[(i*2)] == 1) && (line.QoVProducers[(i*2)+1] == 1)))
+		//}
 	}
 	return nil
 }
@@ -110,7 +143,7 @@ func (ss *SummarySheet) closeSheet(ctx *RunnerContext) error {
 
 	rowOpts := excelize.RowOpts{StyleID: styleIdRowSummary}
 	err = sw.SetRow("A2",
-		[]interface{}{excelize.Cell{Value: "Gemeinschafts-ID", StyleID: styleIdBold}, excelize.Cell{Value: ctx.cps.CommunityId}}, rowOpts)
+		[]interface{}{excelize.Cell{Value: "Gemeinschafts-ID", StyleID: styleIdBold}, excelize.Cell{Value: ctx.communityId}}, rowOpts)
 	err = sw.SetRow("A3",
 		[]interface{}{excelize.Cell{Value: "Zeitraum von", StyleID: styleIdBold}, excelize.Cell{Value: utils.DateToString(beginDate)}}, rowOpts)
 	err = sw.SetRow("A4",
@@ -194,7 +227,7 @@ func (ss *SummarySheet) closeSheet(ctx *RunnerContext) error {
 
 func (ss *SummarySheet) summaryMeteringPoints(ctx *RunnerContext) (*SummaryResult, error) {
 	summary := &SummaryResult{Consumer: []SummaryMeterResult{}, Producer: []SummaryMeterResult{}}
-	for _, cp := range ctx.cps.Cps {
+	for _, cp := range ctx.cps {
 		m, ok := ctx.metaMap[cp.MeteringPoint]
 		if !ok {
 			continue
@@ -206,9 +239,9 @@ func (ss *SummarySheet) summaryMeteringPoints(ctx *RunnerContext) (*SummaryResul
 				BeginDate:     m.PeriodStart,
 				EndDate:       m.PeriodEnd,
 				DataOk:        utils.GetBool(ss.qovConsumerSlice, m.SourceIdx),
-				Total:         returnFloatValue(ss.report.Consumed, m.SourceIdx),
-				Coverage:      returnFloatValue(ss.report.Shared, m.SourceIdx),
-				Share:         returnFloatValue(ss.report.Allocated, m.SourceIdx),
+				Total:         cp.Report.Consumed,  //returnFloatValue(ss.report.Consumed, m.SourceIdx),
+				Coverage:      cp.Report.Shared,    //returnFloatValue(ss.report.Shared, m.SourceIdx),
+				Share:         cp.Report.Allocated, //returnFloatValue(ss.report.Allocated, m.SourceIdx),
 			})
 		} else {
 			summary.Producer = append(summary.Producer, SummaryMeterResult{
@@ -217,9 +250,9 @@ func (ss *SummarySheet) summaryMeteringPoints(ctx *RunnerContext) (*SummaryResul
 				BeginDate:     m.PeriodStart,
 				EndDate:       m.PeriodEnd,
 				DataOk:        utils.GetBool(ss.qovProducerSlice, m.SourceIdx),
-				Total:         returnFloatValue(ss.report.Produced, m.SourceIdx),
-				Coverage:      returnFloatValue(ss.report.Produced, m.SourceIdx) - returnFloatValue(ss.report.Distributed, m.SourceIdx),
-				Share:         returnFloatValue(ss.report.Distributed, m.SourceIdx),
+				Total:         cp.Report.Produced,                         //returnFloatValue(ss.report.Produced, m.SourceIdx),
+				Coverage:      cp.Report.Produced - cp.Report.Distributed, //returnFloatValue(ss.report.Produced, m.SourceIdx) - returnFloatValue(ss.report.Distributed, m.SourceIdx),
+				Share:         cp.Report.Distributed,                      //returnFloatValue(ss.report.Distributed, m.SourceIdx),
 			})
 		}
 	}
@@ -233,6 +266,6 @@ func sumMeterResult(s []SummaryMeterResult, elem func(e *SummaryMeterResult) flo
 		sum = sum + elem(&e)
 	}
 	//return utils.RoundFloat(sum, 6)
-	fmt.Printf("Calc: SUM: %v\n", sum)
+	//fmt.Printf("Calc: SUM: %v\n", sum)
 	return sum
 }
