@@ -3,12 +3,14 @@ package store
 import (
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store/ebow"
+	"errors"
 	"fmt"
 	"github.com/golang/glog"
-	"github.com/spf13/viper"
-	"path/filepath"
-	"strings"
 	"sync"
+)
+
+var (
+	connectionPool = ebow.NewPool(20)
 )
 
 type ebowLogger struct {
@@ -68,27 +70,42 @@ type IBowStorage interface {
 }
 
 type BowStorage struct {
-	db     *ebow.DB
-	unlock func()
+	db       *ebow.DB
+	dbObject *ebow.DbObject
+	ecId     string
+	unlock   func()
 }
 
 var turns = newTurns()
 
+//func OpenStorage(tenant, ecId string) (*BowStorage, error) {
+//	t := strings.ToLower(tenant)
+//	basePath := viper.GetString("persistence.path")
+//	unlock := turns.lock(t)
+//	db, err := ebow.Open(filepath.Join(fmt.Sprintf("%s/%s", basePath, t), ecId), ebow.SetLogger(ebowLogger{5}))
+//	if err != nil {
+//		unlock()
+//		return nil, err
+//	}
+//	return &BowStorage{db, unlock}, nil
+//}
+//
+//func (b *BowStorage) Close() {
+//	_ = b.db.Close()
+//	b.unlock()
+//	return
+//}
+
 func OpenStorage(tenant, ecId string) (*BowStorage, error) {
-	t := strings.ToLower(tenant)
-	basePath := viper.GetString("persistence.path")
-	unlock := turns.lock(t)
-	db, err := ebow.Open(filepath.Join(fmt.Sprintf("%s/%s", basePath, t), ecId), ebow.SetLogger(ebowLogger{5}))
-	if err != nil {
-		unlock()
-		return nil, err
+	db := connectionPool.Get(tenant, ecId)
+	if db == nil {
+		return nil, errors.New("failed to connect to database")
 	}
-	return &BowStorage{db, unlock}, nil
+	return &BowStorage{db.Db, db, ecId, nil}, nil
 }
 
 func (b *BowStorage) Close() {
-	_ = b.db.Close()
-	b.unlock()
+	connectionPool.Put(b.ecId, b.dbObject)
 	return
 }
 

@@ -23,7 +23,9 @@ func NewRestServer() *mux.Router {
 	//r.HandleFunc("/eeg/{year}/{month}", jwtWrapper(fetchEnergy())).Methods("GET")
 	r.HandleFunc("/eeg/report", middleware.ProtectApp(fetchEnergyReport())).Methods("POST")
 	r.HandleFunc("/eeg/v2/{ecid}/report", middleware.ProtectApp(fetchEnergyReportV2())).Methods("POST")
-	r.HandleFunc("/eeg/v2/{ecid}/intradayreport", middleware.ProtectApp(fetchIntraDayReportV2())).Methods("POST")
+	r.HandleFunc("/eeg/v2/{ecid}/intra-day-report", middleware.ProtectApp(fetchIntraDayReportV2())).Methods("POST")
+	r.HandleFunc("/eeg/v2/{ecid}/load-curve-report", middleware.ProtectApp(fetchLoadCurveReportV2())).Methods("POST")
+	r.HandleFunc("/eeg/v2/{ecid}/combined-report", middleware.ProtectApp(fetchCombinedReportV2())).Methods("POST")
 	r.HandleFunc("/eeg/v2/{ecid}/summary", middleware.ProtectApp(fetchSummaryReportV2())).Methods("POST")
 	r.HandleFunc("/eeg/{ecid}/lastRecordDate", middleware.ProtectApp(lastRecordDate())).Methods("GET")
 	r.HandleFunc("/eeg/{ecid}/excel/export/{year}/{month}", middleware.ProtectApp(exportMeteringData())).Methods("POST")
@@ -64,7 +66,7 @@ func fetchEnergyReportV2() middleware.JWTHandlerFunc {
 		vars := mux.Vars(r)
 		ecid := vars["ecid"]
 		startMonitor := time.Now()
-		glog.V(4).Infof("Start Time Monitor fetchEnergyReport. %d\n", startMonitor.UnixMilli())
+		glog.V(4).Infof("Start Time Monitor fetchEnergyReport. %s\n", tenant)
 		energy := &model.ReportResponse{}
 
 		var request model.ReportRequest
@@ -163,7 +165,7 @@ func fetchIntraDayReportV2() middleware.JWTHandlerFunc {
 		ecid := vars["ecid"]
 
 		startMonitor := time.Now()
-		glog.V(4).Infof("Start Time Monitor fetchIntraDayReport. %d\n", startMonitor.UnixMilli())
+		glog.V(4).Infof("Start Time Monitor fetchIntraDayReport. %s\n", tenant)
 		var request struct {
 			Start int64 `json:"start"`
 			End   int64 `json:"end"`
@@ -185,13 +187,70 @@ func fetchIntraDayReportV2() middleware.JWTHandlerFunc {
 	}
 }
 
+func fetchLoadCurveReportV2() middleware.JWTHandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request, claims *middleware.PlatformClaims, tenant string) {
+		vars := mux.Vars(r)
+		ecid := vars["ecid"]
+
+		startMonitor := time.Now()
+		glog.V(4).Infof("Start Time Monitor fetchLoadCurveReport. %s\n", tenant)
+		var request struct {
+			Start int64 `json:"start"`
+			End   int64 `json:"end"`
+		}
+
+		err := json.NewDecoder(r.Body).Decode(&request)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		resp, err := store.QueryLoadCurveReport(tenant, ecid, time.UnixMilli(request.Start), time.UnixMilli(request.End))
+		glog.V(4).Infof("Time Monitor fetchLoadCurveReport. %v\n", time.Now().Sub(startMonitor))
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		respondWithJSON(w, http.StatusOK, &resp)
+	}
+}
+
+func fetchCombinedReportV2() middleware.JWTHandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request, claims *middleware.PlatformClaims, tenant string) {
+		vars := mux.Vars(r)
+		ecid := vars["ecid"]
+
+		startMonitor := time.Now()
+		glog.V(4).Infof("Start Time Monitor fetchCombinedReport. %s\n", tenant)
+		var request struct {
+			Reports []string `json:"reports"`
+			Start   int64    `json:"start"`
+			End     int64    `json:"end"`
+		}
+
+		err := json.NewDecoder(r.Body).Decode(&request)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		resp, err := store.QueryCombinedReports(tenant, ecid, request.Reports, time.UnixMilli(request.Start), time.UnixMilli(request.End))
+		glog.V(4).Infof("Time Monitor fetchCombinedReport. %v\n", time.Now().Sub(startMonitor))
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		respondWithJSON(w, http.StatusOK, &resp)
+	}
+}
+
 func fetchSummaryReportV2() middleware.JWTHandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request, claims *middleware.PlatformClaims, tenant string) {
 		vars := mux.Vars(r)
 		ecid := vars["ecid"]
 
 		startMonitor := time.Now()
-		glog.V(4).Infof("Start Time Monitor fetchSummaryReport. %d\n", startMonitor.UnixMilli())
+		glog.V(4).Infof("Start Time Monitor fetchSummaryReport. %s\n", tenant)
 
 		var request model.EnergyReportRequest
 

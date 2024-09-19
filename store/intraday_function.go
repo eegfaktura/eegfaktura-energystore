@@ -12,7 +12,7 @@ type IntraDay struct {
 }
 
 func NewIntraDayFunction() (EnergyConsumer, error) {
-	return &IntraDay{Cache: Cache{cacheTs: time.Hour}, Result: make(map[int]*ReportData)}, nil
+	return &IntraDay{Cache: Cache{cacheTs: AddDuration(time.Hour)}, Result: make(map[int]*ReportData)}, nil
 }
 
 func (id *IntraDay) HandleStart(ctx *EngineContext) error {
@@ -29,11 +29,11 @@ func (id *IntraDay) HandleLine(ctx *EngineContext, line *model.RawSourceLine) er
 }
 
 func (id *IntraDay) HandleEnd(ctx *EngineContext) error {
-	return id.addToResult(ctx, id.cacheTime, &id.cache)
+	return id.addToResult(ctx, id.cacheTime.Time, &id.cache)
 }
 
-func (id *IntraDay) GetResult() []*ReportData {
-	data := make([]*ReportData, 24)
+func (id *IntraDay) GetResult() []interface{} {
+	data := make([]interface{}, 24)
 	for i := range data {
 		if r, ok := id.Result[i]; ok {
 			data[i] = r
@@ -45,7 +45,7 @@ func (id *IntraDay) GetResult() []*ReportData {
 }
 
 func (id *IntraDay) addToResult(ctx *EngineContext, t time.Time, line *model.RawSourceLine) error {
-	hour := t.Add(-1 * id.cacheTs).Hour()
+	hour := t.Add(-1 * CacheTime{time.Now()}.GetDuration(id.cacheTs)).Hour()
 
 	if _, ok := id.Result[hour]; !ok {
 		id.Result[hour] = &ReportData{}

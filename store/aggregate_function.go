@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -33,26 +34,44 @@ func NewAggregateFunction(args []string, cps []TargetMP) (IQueryFunction, error)
 		Cache:          Cache{cacheTs: cacheTs}}, nil
 }
 
-func parseArgument(arg string) (time.Duration, error) {
+func parseArgument(arg string) (AddCacheTimeFunc, error) {
+	arg = strings.TrimSpace(arg)
 	d := arg[len(arg)-1]
 	switch d {
 	case 'h':
-		break
+		duration, err := time.ParseDuration(arg)
+		if err != nil {
+			return nil, err
+		}
+		return AddDuration(duration), nil
 	case 'd':
 		v, err := strconv.ParseInt(arg[:len(arg)-1], 10, 16)
 		if err != nil {
-			return time.Second, err
+			return nil, err
 		}
-		arg = fmt.Sprintf("%dh", v*24)
+		//arg = fmt.Sprintf("%dh", v*24)
+		return AddDate(0, 0, int(v)), nil
+	case 'w':
+		v, err := strconv.ParseInt(arg[:len(arg)-1], 10, 16)
+		if err != nil {
+			return nil, err
+		}
+		return AddDate(0, 0, int(v)*7), nil
+	case 'm':
+		v, err := strconv.ParseInt(arg[:len(arg)-1], 10, 16)
+		if err != nil {
+			return nil, err
+		}
+		return AddDate(0, int(v), 0), nil
 	default:
-		return time.Second, errors.New(fmt.Sprintf("detect wrong duration. Got '%s'. Expected (h..Hour, d..Day)", string(d)))
+		return nil, errors.New(fmt.Sprintf("detect wrong duration. Got '%s'. Expected (h..Hour, d..Day)", string(d)))
 	}
-	return time.ParseDuration(arg)
 }
 
 func (agg *Aggregate) HandleInit(ctx *EngineContext) error {
 	agg.Result = make(map[string]*RawDataResult)
-	agg.cacheTime = ctx.start.Add(agg.cacheTs)
+	agg.cacheTime = CacheTime{ctx.start}
+	agg.cacheTime.AddTs(agg.cacheTs)
 	agg.cache = model.RawSourceLine{
 		Consumers:    make([]float64, ctx.countCons*3),
 		Producers:    make([]float64, ctx.countProd*2),
@@ -71,22 +90,23 @@ func (agg *Aggregate) HandleLine(ctx *EngineContext, line *model.RawSourceLine) 
 		return err
 	}
 
-	if ts.Before(agg.cacheTime) {
-		return agg.addToCache(line)
-	}
-
-	err = agg.addToResult(ctx, agg.cacheTime, &agg.cache)
-	if err != nil {
-		return err
-	}
-
-	agg.cache = line.DeepCopy(ctx.countCons, ctx.countProd)
-	agg.cacheTime = agg.cacheTime.Add(agg.cacheTs)
-	return nil
+	return agg.CacheLine(ctx, ts, line, agg.addToResult)
+	//if ts.Before(agg.cacheTime.Time) {
+	//	return agg.addToCache(line)
+	//}
+	//
+	//err = agg.addToResult(ctx, agg.cacheTime.Time, &agg.cache)
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//agg.cache = line.DeepCopy(ctx.countCons, ctx.countProd)
+	//agg.cacheTime = agg.cacheTime.AddTs(agg.cacheTs)
+	//return nil
 }
 
 func (agg *Aggregate) HandleFinish(ctx *EngineContext) error {
-	return agg.addToResult(ctx, agg.cacheTime, &agg.cache)
+	return agg.addToResult(ctx, agg.cacheTime.Time, &agg.cache)
 }
 
 func calcQoV(current, target int) int {

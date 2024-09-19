@@ -69,23 +69,31 @@ func (ss *SummarySheet) handleParticipantReport(ctx *RunnerContext, participant 
 		return nil
 	}
 
-	meta := ctx.metaMap[participant.MeteringPoint]
-	idx := meta.SourceIdx
+	meta, ok := ctx.metaMap[participant.MeteringPoint]
+	// check metering point in metaMap as well
+	if !ok {
+		return nil
+	}
+
 	if participant.Direction == model.CONSUMER_DIRECTION {
 		participant.Report.Consumed += consumerMatrix.GetElm(meta.SourceIdx, 0)
 		participant.Report.Shared += consumerMatrix.GetElm(meta.SourceIdx, 1)
 		participant.Report.Allocated += consumerMatrix.GetElm(meta.SourceIdx, 2)
-		if (idx*3)+2 < len(QoVConsumers) {
+		if (meta.SourceIdx*3)+2 < len(QoVConsumers) {
 			participant.QoV = participant.QoV &&
 				(ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) ||
-					((QoVConsumers[(idx*3)] == 1) && (QoVConsumers[(idx*3)+1] == 1) && (QoVConsumers[(idx*3)+2] == 1)))
+					((QoVConsumers[(meta.SourceIdx*3)] == 1) && (QoVConsumers[(meta.SourceIdx*3)+1] == 1) && (QoVConsumers[(meta.SourceIdx*3)+2] == 1)))
 		}
 	} else {
 		participant.Report.Produced += producerMatrix.GetElm(meta.SourceIdx, 0)
 		participant.Report.Distributed += producerMatrix.GetElm(meta.SourceIdx, 1)
-		//if (i*2)+1 < len(line.QoVProducers) {
-		//	ss.qovProducerSlice[i] = ss.qovProducerSlice[i] && (ctx.checkBegin(lineDate, ctx.periodsProducer[i].start) || ((line.QoVProducers[(i*2)] == 1) && (line.QoVProducers[(i*2)+1] == 1)))
-		//}
+		if (meta.SourceIdx*2)+1 < len(QoVProducers) {
+			// TODO: check quality of Value calculation. Could be kind of weird!!!
+			//ss.qovProducerSlice[i] = ss.qovProducerSlice[i] && (ctx.checkBegin(lineDate, ctx.periodsProducer[i].start) || ((line.QoVProducers[(i*2)] == 1) && (line.QoVProducers[(i*2)+1] == 1)))
+			participant.QoV = participant.QoV &&
+				(ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) ||
+					((QoVProducers[(meta.SourceIdx*2)] == 1) && (QoVProducers[(meta.SourceIdx*2)+1] == 1)))
+		}
 	}
 	return nil
 }
@@ -135,11 +143,12 @@ func (ss *SummarySheet) closeSheet(ctx *RunnerContext) error {
 	beginDate := time.Date(ctx.start.Year(), ctx.start.Month(), ctx.start.Day(), 0, 0, 0, 0, time.Local)
 	endDate := time.Date(ctx.end.Year(), ctx.end.Month(), ctx.end.Day(), 23, 45, 0, 0, time.Local)
 
-	_ = sw.SetColWidth(1, 1, float64(40))
-	_ = sw.SetColWidth(2, 2, float64(35))
-	_ = sw.SetColWidth(3, 4, float64(22))
-	_ = sw.SetColWidth(5, 5, float64(15))
-	_ = sw.SetColWidth(6, 10, float64(22))
+	_ = sw.SetColWidth(1, 1, 37.5)
+	_ = sw.SetColWidth(2, 2, float64(33))
+	_ = sw.SetColWidth(3, 4, float64(20))
+	_ = sw.SetColWidth(5, 5, 20.78)
+	_ = sw.SetColWidth(6, 6, float64(10))
+	_ = sw.SetColWidth(7, 11, float64(20))
 
 	rowOpts := excelize.RowOpts{StyleID: styleIdRowSummary}
 	err = sw.SetRow("A2",
@@ -151,7 +160,7 @@ func (ss *SummarySheet) closeSheet(ctx *RunnerContext) error {
 	err = sw.SetRow("A5",
 		[]interface{}{excelize.Cell{Value: "Gesamtverbrauch lt. Messung (bei Teilnahme gem. Erzeugung) [KWH]", StyleID: styleIdBold},
 			excelize.Cell{Value: sumMeterResult(counterpoints.Consumer, func(e *SummaryMeterResult) float64 { return e.Total })}},
-		excelize.RowOpts{StyleID: styleIdRowSummary, Height: 0.34 * 72})
+		excelize.RowOpts{StyleID: styleIdRowSummary, Height: 27.6})
 	err = sw.SetRow("A6",
 		[]interface{}{excelize.Cell{Value: "Anteil gemeinschaftliche Erzeugung [KWH]", StyleID: styleIdBold},
 			excelize.Cell{Value: sumMeterResult(counterpoints.Consumer, func(e *SummaryMeterResult) float64 { return e.Coverage })}},
@@ -175,6 +184,7 @@ func (ss *SummarySheet) closeSheet(ctx *RunnerContext) error {
 			excelize.Cell{Value: "Name"},
 			excelize.Cell{Value: "Beginn der Daten"},
 			excelize.Cell{Value: "Ende der Daten"},
+			excelize.Cell{Value: "Aktiviert"},
 			excelize.Cell{Value: "Daten vollständig? Ja/Nein"},
 			excelize.Cell{Value: "Gesamtverbrauch lt. Messung (bei Teilnahme gem. Erzeugung) [KWH]"},
 			excelize.Cell{Value: "Anteil gemeinschaftliche Erzeugung [KWH]"},
@@ -188,6 +198,7 @@ func (ss *SummarySheet) closeSheet(ctx *RunnerContext) error {
 				excelize.Cell{Value: c.Name},
 				excelize.Cell{Value: c.BeginDate},
 				excelize.Cell{Value: c.EndDate},
+				excelize.Cell{Value: c.ActivePeriod},
 				excelize.Cell{Value: c.DataOk, StyleID: styleIdQov[c.DataOk]},
 				excelize.Cell{Value: utils.RoundToFixed(c.Total, 6)},
 				excelize.Cell{Value: utils.RoundToFixed(c.Coverage, 6)},
@@ -202,6 +213,7 @@ func (ss *SummarySheet) closeSheet(ctx *RunnerContext) error {
 			excelize.Cell{Value: "Name"},
 			excelize.Cell{Value: "Beginn der Daten"},
 			excelize.Cell{Value: "Ende der Daten"},
+			excelize.Cell{Value: "Aktiviert"},
 			excelize.Cell{Value: "Daten vollständig? Ja/Nein"},
 			excelize.Cell{Value: "Gesamt/Überschusserzeugung, Gemeinschaftsüberschuss [KWH]"},
 			excelize.Cell{Value: "Gesamte gemeinschaftliche Erzeugung [KWH]"},
@@ -215,6 +227,7 @@ func (ss *SummarySheet) closeSheet(ctx *RunnerContext) error {
 				excelize.Cell{Value: c.Name},
 				excelize.Cell{Value: c.BeginDate},
 				excelize.Cell{Value: c.EndDate},
+				excelize.Cell{Value: c.ActivePeriod},
 				excelize.Cell{Value: c.DataOk, StyleID: styleIdQov[c.DataOk]},
 				excelize.Cell{Value: utils.RoundToFixed(c.Share, 6)},
 				excelize.Cell{Value: utils.RoundToFixed(c.Total, 6)},
@@ -238,10 +251,13 @@ func (ss *SummarySheet) summaryMeteringPoints(ctx *RunnerContext) (*SummaryResul
 				Name:          cp.Name,
 				BeginDate:     m.PeriodStart,
 				EndDate:       m.PeriodEnd,
-				DataOk:        utils.GetBool(ss.qovConsumerSlice, m.SourceIdx),
-				Total:         cp.Report.Consumed,  //returnFloatValue(ss.report.Consumed, m.SourceIdx),
-				Coverage:      cp.Report.Shared,    //returnFloatValue(ss.report.Shared, m.SourceIdx),
-				Share:         cp.Report.Allocated, //returnFloatValue(ss.report.Allocated, m.SourceIdx),
+				ActivePeriod: fmt.Sprintf("%s - %s",
+					time.UnixMilli(cp.ActiveSince).Format("02-01-2006"),
+					time.UnixMilli(cp.InactiveSince).Format("02-01-2006")),
+				DataOk:   cp.QoV,              //utils.GetBool(ss.qovConsumerSlice, m.SourceIdx),
+				Total:    cp.Report.Consumed,  //returnFloatValue(ss.report.Consumed, m.SourceIdx),
+				Coverage: cp.Report.Shared,    //returnFloatValue(ss.report.Shared, m.SourceIdx),
+				Share:    cp.Report.Allocated, //returnFloatValue(ss.report.Allocated, m.SourceIdx),
 			})
 		} else {
 			summary.Producer = append(summary.Producer, SummaryMeterResult{
@@ -249,10 +265,13 @@ func (ss *SummarySheet) summaryMeteringPoints(ctx *RunnerContext) (*SummaryResul
 				Name:          cp.Name,
 				BeginDate:     m.PeriodStart,
 				EndDate:       m.PeriodEnd,
-				DataOk:        utils.GetBool(ss.qovProducerSlice, m.SourceIdx),
-				Total:         cp.Report.Produced,                         //returnFloatValue(ss.report.Produced, m.SourceIdx),
-				Coverage:      cp.Report.Produced - cp.Report.Distributed, //returnFloatValue(ss.report.Produced, m.SourceIdx) - returnFloatValue(ss.report.Distributed, m.SourceIdx),
-				Share:         cp.Report.Distributed,                      //returnFloatValue(ss.report.Distributed, m.SourceIdx),
+				ActivePeriod: fmt.Sprintf("%s - %s",
+					time.UnixMilli(cp.ActiveSince).Format("02-01-2006"),
+					time.UnixMilli(cp.InactiveSince).Format("02-01-2006")),
+				DataOk:   cp.QoV,                                     //utils.GetBool(ss.qovProducerSlice, m.SourceIdx),
+				Total:    cp.Report.Produced,                         //returnFloatValue(ss.report.Produced, m.SourceIdx),
+				Coverage: cp.Report.Produced - cp.Report.Distributed, //returnFloatValue(ss.report.Produced, m.SourceIdx) - returnFloatValue(ss.report.Distributed, m.SourceIdx),
+				Share:    cp.Report.Distributed,                      //returnFloatValue(ss.report.Distributed, m.SourceIdx),
 			})
 		}
 	}

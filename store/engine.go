@@ -87,31 +87,84 @@ type EnergyConsumer interface {
 	HandleEnd(ctx *EngineContext) error
 }
 
+type EnergyReportConsumer interface {
+	EnergyConsumer
+	GetResult() []interface{}
+}
+
 type AddTo func(*EngineContext, time.Time, *model.RawSourceLine) error
 
+type AddCacheTimeFunc func(dir int, ct CacheTime) CacheTime
+type SubCacheTimeFunc func(ct CacheTime) CacheTime
+
+func AddDuration(d time.Duration) AddCacheTimeFunc {
+	duration := d
+	return func(dir int, ct CacheTime) CacheTime {
+		return CacheTime{ct.Add(time.Duration(dir) * duration)}
+	}
+}
+
+func SubDuration(d time.Duration) SubCacheTimeFunc {
+	duration := d
+	return func(ct CacheTime) CacheTime {
+		return CacheTime{ct.Add(-1 * duration)}
+	}
+}
+
+func AddDate(y, m, d int) AddCacheTimeFunc {
+	year, month, day := y, m, d
+	return func(dir int, ct CacheTime) CacheTime {
+		return CacheTime{ct.AddDate(dir*year, dir*month, dir*day)}
+	}
+}
+
+func SubDate(y, m, d int) SubCacheTimeFunc {
+	year, month, day := y, m, d
+	return func(ct CacheTime) CacheTime {
+		return CacheTime{ct.AddDate(year, month, day)}
+	}
+}
+
+type CacheTime struct {
+	time.Time
+}
+
+func (ct CacheTime) AddTs(timeFunc AddCacheTimeFunc) CacheTime {
+	return timeFunc(1, ct)
+}
+
+func (ct CacheTime) SubTs(timeFunc AddCacheTimeFunc) CacheTime {
+	return timeFunc(-1, ct)
+}
+
+func (ct CacheTime) GetDuration(cacheTs AddCacheTimeFunc) time.Duration {
+	return ct.AddTs(cacheTs).Sub(ct.Time)
+}
+
 type Cache struct {
-	cacheTs   time.Duration
+	cacheTs   AddCacheTimeFunc
 	cache     model.RawSourceLine
-	cacheTime time.Time
+	cacheTime CacheTime
 }
 
 func (ca *Cache) CacheLine(ctx *EngineContext, ts time.Time, line *model.RawSourceLine, addTo AddTo) error {
-	if ts.Before(ca.cacheTime) {
+	if ts.Before(ca.cacheTime.Time) {
 		return ca.addToCache(line)
 	}
 
-	err := addTo(ctx, ca.cacheTime, &ca.cache)
+	err := addTo(ctx, ca.cacheTime.Time, &ca.cache)
 	if err != nil {
 		return err
 	}
 
 	ca.cache = line.DeepCopy(ctx.countCons, ctx.countProd)
-	ca.cacheTime = ca.cacheTime.Add(ca.cacheTs)
+	ca.cacheTime = ca.cacheTime.AddTs(ca.cacheTs)
 	return nil
 }
 
 func (ca *Cache) InitCache(ctx *EngineContext) error {
-	ca.cacheTime = ctx.start.Add(ca.cacheTs)
+	ca.cacheTime = CacheTime{ctx.start}.AddTs(ca.cacheTs)
+	//ca.cacheTime.AddTs(ca.cacheTs)
 	ca.cache = model.RawSourceLine{
 		Consumers:    make([]float64, ctx.countCons*3),
 		Producers:    make([]float64, ctx.countProd*2),

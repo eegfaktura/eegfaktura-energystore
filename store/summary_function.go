@@ -31,8 +31,8 @@ func (id *EnergySummary) HandleEnd(ctx *EngineContext) error {
 	return nil
 }
 
-func (id *EnergySummary) GetResult() *ReportData {
-	return id.Result
+func (id *EnergySummary) GetResult() []interface{} {
+	return []interface{}{id.Result}
 }
 
 func (id *EnergySummary) addToResult(ctx *EngineContext, t time.Time, line *model.RawSourceLine) error {

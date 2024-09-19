@@ -132,15 +132,18 @@ func generateLogDataSheet(ctx *RunnerContext, f *excelize.File) error {
 		}
 
 		_ = sw.SetRow(fmt.Sprintf("A%d", lineNum+8),
-			append([]interface{}{excelize.Cell{Value: lineDate}}, addLineQoV(&l, ctx.countCons, ctx.countProd, ctx.meta, stylesQoV)...))
+			append([]interface{}{excelize.Cell{Value: lineDate}}, addLineQoV(ctx, &l, stylesQoV)...))
 	}
 
 	_ = sw.Flush()
 	return nil
 }
 
-func addLineQoV(g1 *model.RawSourceLine, countCon, countProd int, meta []*model.CounterPointMeta, stylesQoV []int) []interface{} {
+func addLineQoV(ctx *RunnerContext, line *model.RawSourceLine, stylesQoV []int) []interface{} {
 
+	countCon := ctx.countCons
+	countProd := ctx.countProd
+	lineDate, _ := utils.ConvertRowIdToTime("CP", line.Id)
 	lineData := make([]interface{}, (countCon*6)+(countProd*4))
 	//line := map[string][]float64{}
 	setCellValue := func(length, sourceIdx int, raw []float64, qov []int) excelize.Cell {
@@ -188,23 +191,38 @@ func addLineQoV(g1 *model.RawSourceLine, countCon, countProd int, meta []*model.
 
 	cCnt := 0
 	pCnt := 0
-	for _, m := range meta {
-		if m.Dir == model.CONSUMER_DIRECTION {
+	//for _, m := range meta {
+	for i := 0; i < len(ctx.orderedCps); i++ {
+		p := ctx.orderedCps[i]
+		m := ctx.metaMap[p.MeteringPoint]
+		if p.Direction == model.CONSUMER_DIRECTION {
 			baseIdx := cCnt * 6
 			cCnt += 1
-			lineData[baseIdx] = setCellValue(len(g1.Consumers), m.SourceIdx*3, g1.Consumers, g1.QoVConsumers)
-			lineData[baseIdx+1] = setCellOoVValue(len(g1.Consumers), m.SourceIdx*3, g1.QoVConsumers)
-			lineData[baseIdx+2] = setCellValue(len(g1.Consumers), (m.SourceIdx*3)+1, g1.Consumers, g1.QoVConsumers)
-			lineData[baseIdx+3] = setCellOoVValue(len(g1.Consumers), (m.SourceIdx*3)+1, g1.QoVConsumers)
-			lineData[baseIdx+4] = setCellValue(len(g1.Consumers), (m.SourceIdx*3)+2, g1.Consumers, g1.QoVConsumers)
-			lineData[baseIdx+5] = setCellOoVValue(len(g1.Consumers), (m.SourceIdx*3)+2, g1.QoVConsumers)
+			if lineDate.Before(time.UnixMilli(p.ActiveSince)) || lineDate.After(time.UnixMilli(p.InactiveSince)) {
+				for n := 0; n < 6; n++ {
+					lineData[baseIdx+n] = excelize.Cell{Value: ""}
+				}
+			} else {
+				lineData[baseIdx] = setCellValue(len(line.Consumers), m.SourceIdx*3, line.Consumers, line.QoVConsumers)
+				lineData[baseIdx+1] = setCellOoVValue(len(line.Consumers), m.SourceIdx*3, line.QoVConsumers)
+				lineData[baseIdx+2] = setCellValue(len(line.Consumers), (m.SourceIdx*3)+1, line.Consumers, line.QoVConsumers)
+				lineData[baseIdx+3] = setCellOoVValue(len(line.Consumers), (m.SourceIdx*3)+1, line.QoVConsumers)
+				lineData[baseIdx+4] = setCellValue(len(line.Consumers), (m.SourceIdx*3)+2, line.Consumers, line.QoVConsumers)
+				lineData[baseIdx+5] = setCellOoVValue(len(line.Consumers), (m.SourceIdx*3)+2, line.QoVConsumers)
+			}
 		} else if m.Dir == model.PRODUCER_DIRECTION {
 			baseIdx := (countCon * 6) + (pCnt * 4)
 			pCnt += 1
-			lineData[baseIdx] = setCellValue(len(g1.Producers), m.SourceIdx*2, g1.Producers, g1.QoVProducers) //excelize.Cell{Value: g1.Producers[m.SourceIdx]}
-			lineData[baseIdx+1] = setCellOoVValue(len(g1.Producers), m.SourceIdx*2, g1.QoVProducers)
-			lineData[baseIdx+2] = setCellValue(len(g1.Producers), (m.SourceIdx*2)+1, g1.Producers, g1.QoVProducers)
-			lineData[baseIdx+3] = setCellOoVValue(len(g1.Producers), (m.SourceIdx*2)+1, g1.QoVProducers)
+			if lineDate.Before(time.UnixMilli(p.ActiveSince)) || lineDate.After(time.UnixMilli(p.InactiveSince)) {
+				for n := 0; n < 4; n++ {
+					lineData[baseIdx+n] = excelize.Cell{Value: ""}
+				}
+			} else {
+				lineData[baseIdx] = setCellValue(len(line.Producers), m.SourceIdx*2, line.Producers, line.QoVProducers) //excelize.Cell{Value: g1.Producers[m.SourceIdx]}
+				lineData[baseIdx+1] = setCellOoVValue(len(line.Producers), m.SourceIdx*2, line.QoVProducers)
+				lineData[baseIdx+2] = setCellValue(len(line.Producers), (m.SourceIdx*2)+1, line.Producers, line.QoVProducers)
+				lineData[baseIdx+3] = setCellOoVValue(len(line.Producers), (m.SourceIdx*2)+1, line.QoVProducers)
+			}
 		}
 	}
 	return lineData

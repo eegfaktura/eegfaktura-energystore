@@ -177,6 +177,10 @@ func checkQoV(ctx *RunnerContext, line *model.RawSourceLine) bool {
 			continue
 		}
 		if m.Dir == model.CONSUMER_DIRECTION {
+			if cp.MeteringPoint == "AT0030000000000000000000000197833" {
+				p := 1
+				_ = p
+			}
 			baseIdx := m.SourceIdx * 3
 			if checkDate(cp.ActiveSince, cp.InactiveSince, lineDate) {
 				continue

@@ -13,5 +13,5 @@ func OpenStorageTest(tenant, ecId string, basedir string) (*BowStorage, error) {
 		unlock()
 		return nil, err
 	}
-	return &BowStorage{db, unlock}, nil
+	return &BowStorage{db, nil, ecId, unlock}, nil
 }

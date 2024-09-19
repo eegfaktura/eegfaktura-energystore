@@ -266,7 +266,6 @@ func calcParticipantReport(iter ebow.IRange,
 	allocFunc AllocationHandlerV2,
 	cpMeta map[string]*model.CounterPointMeta,
 	metaInfo *model.CounterPointMetaInfo, rowPrefix string, startDate time.Time, switchIntermediate func(time.Time) int) error {
-	//intermediateReport := model.Recort{}
 	err := calcDailyScope(iter, allocFunc, metaInfo, startDate, rowPrefix,
 		func(currentDate time.Time, summary *calcResults) error {
 			err := appendEnergyToParticipantMeter(summary, reportValues, cpMeta, currentDate,
@@ -368,7 +367,7 @@ func appendEnergyToParticipantMeter(
 				}
 			}
 		} else {
-			glog.V(4).Infof("Metering point %s has no energy values received yet", meterId)
+			glog.V(6).Infof("Metering point %s has no energy values received yet", meterId)
 		}
 	}
 	return nil

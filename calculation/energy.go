@@ -72,11 +72,11 @@ func EnergyReport(tenant string, year, segment int, periodCode string) (*model.E
 	} else {
 		//metaMap := map[int]*model.CounterPointMeta{}
 		for _, m := range meta.CounterPoints {
-			glog.V(4).Infof("Meta: %+v\n", m)
+			glog.V(6).Infof("Meta: %+v\n", m)
 			if m.Dir == "CONSUMPTION" || m.Dir == "GENERATION" {
 				eegModel.Meta = append(eegModel.Meta, m)
 			} else {
-				glog.V(4).Infof("Omitted Meta: %+v\n", m)
+				glog.V(6).Infof("Omitted Meta: %+v\n", m)
 			}
 		}
 	}
@@ -131,18 +131,18 @@ func EnergyReportV2(tenant, ecid string, participants []model.ParticipantReport,
 		return nil, err
 	} else {
 		for _, m := range meta.CounterPoints {
-			glog.V(4).Infof("Meta: %+v\n", m)
+			glog.V(6).Infof("Meta: %+v\n", m)
 			if m.Dir == "CONSUMPTION" || m.Dir == "GENERATION" {
 				response.Meta = append(response.Meta, m)
 			} else {
-				glog.V(4).Infof("Omitted Meta: %+v\n", m)
+				glog.V(6).Infof("Omitted Meta: %+v\n", m)
 			}
 		}
 	}
 	return response, nil
 }
 
-func EnergySummary(tenant, ecid string, year, segment int, periodCode string) (*store.ReportData, error) {
+func EnergySummary(tenant, ecid string, year, segment int, periodCode string) (interface{}, error) {
 	c, _ := store.NewEnergySummary()
 	e := &store.Engine{c}
 

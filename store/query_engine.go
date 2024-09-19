@@ -6,6 +6,7 @@ import (
 	"at.ourproject/energystore/utils"
 	"errors"
 	"fmt"
+	"github.com/golang/glog"
 	"regexp"
 	"strings"
 	"time"
@@ -20,6 +21,13 @@ type ReportData struct {
 	Produced    float64 `json:"produced"`
 	QoVConsumer int     `json:"qoVConsumer"`
 	QoVProducer int     `json:"qoVProducer"`
+	CntProducer int     `json:"cntProducer"`
+	CntConsumer int     `json:"cntConsumer"`
+}
+
+type ReportNamedData struct {
+	*ReportData
+	Name string `json:"name"`
 }
 
 type RawData struct {
@@ -76,26 +84,54 @@ func (rde *RawDataEngine) HandleEnd(ctx *EngineContext) error {
 	return rde.function.HandleFinish(ctx)
 }
 
-func QueryIntraDayReport(tenant, ecid string, start, end time.Time) ([]*ReportData, error) {
+func QueryIntraDayReport(tenant, ecid string, start, end time.Time) ([]interface{}, error) {
 	c, _ := NewIntraDayFunction()
 	e := &Engine{c}
 
+	sm := time.Now()
 	if err := e.Query(tenant, ecid, start, end); err != nil && !errors.Is(err, ebow.ErrNoRows) {
 		return nil, err
 	}
-	return (c.(*IntraDay)).GetResult(), nil
+	glog.V(5).Infof("Query Intra Day Report took %v (%s)", time.Since(sm).Seconds(), tenant)
+	return (c.(EnergyReportConsumer)).GetResult(), nil
+}
+
+func QueryLoadCurveReport(tenant, ecid string, start, end time.Time) ([]interface{}, error) {
+	c, _ := NewLoadCurveFunction(determineTimeShiftFunction(start, end), determineSeriesNameFunction(start, end))
+	e := &Engine{c}
+
+	sm := time.Now()
+	if err := e.Query(tenant, ecid, start, end); err != nil && !errors.Is(err, ebow.ErrNoRows) {
+		return nil, err
+	}
+	glog.V(5).Infof("Query Load Curve Report took %v (%s)", time.Since(sm).Seconds(), tenant)
+	return (c.(EnergyReportConsumer)).GetResult(), nil
+}
+
+func QueryCombinedReports(tenant, ecid string, reports []string, start, end time.Time) ([]interface{}, error) {
+	c, _ := NewCombinedConsumers(reports, start, end)
+	e := &Engine{c}
+
+	sm := time.Now()
+	if err := e.Query(tenant, ecid, start, end); err != nil && !errors.Is(err, ebow.ErrNoRows) {
+		return nil, err
+	}
+	glog.V(5).Infof("Query Combined Report took %v [%v] (%s)", time.Since(sm).Seconds(), reports, tenant)
+	return (c.(EnergyReportConsumer)).GetResult(), nil
 }
 
 func QueryRawData(tenant, ecid string, start, end time.Time, cps []TargetMP, params map[string][]string) (map[string]*RawDataResult, error) {
 	c := &RawDataEngine{cps: cps, params: params}
 	e := &Engine{c}
 
+	sm := time.Now()
 	if err := e.Query(tenant, ecid, start, end); err != nil {
 		if errors.Is(err, ebow.ErrNoRows) {
 			return make(map[string]*RawDataResult), nil
 		}
 		return nil, err
 	}
+	glog.V(5).Infof("Query Row Data API took %v (%s)", time.Since(sm).Seconds(), tenant)
 	return c.function.GetResult(), nil
 }
 
@@ -106,6 +142,7 @@ func QueryMetaData(tenant, ecid string) (map[string]*MetaData, error) {
 	}
 	defer db.Close()
 
+	sm := time.Now()
 	result := map[string]*MetaData{}
 	metaMap, _, err := GetMetaInfo(db)
 	for k, v := range metaMap {
@@ -117,7 +154,18 @@ func QueryMetaData(tenant, ecid string) (map[string]*MetaData, error) {
 		}
 	}
 
+	glog.V(5).Infof("Query Meta Data API took %v (%s)", time.Since(sm).Seconds(), tenant)
 	return result, err
+}
+
+func determineTimeShiftFunction(start, end time.Time) AddCacheTimeFunc {
+	if start.AddDate(0, 1, 0).Add(time.Minute).After(end) {
+		return AddDate(0, 0, 1)
+	} else if start.AddDate(0, 3, 0).Add(time.Minute).After(end) {
+		return AddDate(0, 0, 7)
+	} else { //start.AddDate(0, 6, 0).Add(time.Minute).After(end) {
+		return AddDate(0, 1, 0)
+	}
 }
 
 func parseFunction(f []string) (fn string, pa string, err error) {
