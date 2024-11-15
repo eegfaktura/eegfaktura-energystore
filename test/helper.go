@@ -1,10 +1,11 @@
 package test
 
 import (
-	"at.ourproject/energystore/excel"
-	"at.ourproject/energystore/store"
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/eegfaktura/eegfaktura-energystore/excel"
+	"github.com/eegfaktura/eegfaktura-energystore/store"
+	"github.com/stretchr/testify/require"
 )
 
 func ImportTestContent(t *testing.T, file, sheet string, db *store.BowStorage) (yearSet []int) {

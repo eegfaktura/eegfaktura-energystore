@@ -1,15 +1,16 @@
 package utils
 
 import (
-	protobuf "at.ourproject/energystore/protoc"
 	"bytes"
 	"context"
 	"errors"
+	"time"
+
+	protobuf "github.com/eegfaktura/eegfaktura-energystore/protoc"
 	"github.com/golang/glog"
 	"github.com/spf13/viper"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"time"
 )
 
 func SendMail(tenant, to, subject string, body *bytes.Buffer, fileName *string, fileContent *bytes.Buffer) error {

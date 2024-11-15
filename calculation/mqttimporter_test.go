@@ -1,17 +1,18 @@
 package calculation
 
 import (
-	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/store"
-	"at.ourproject/energystore/utils"
 	"encoding/json"
 	"fmt"
-	"github.com/spf13/viper"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/eegfaktura/eegfaktura-energystore/model"
+	"github.com/eegfaktura/eegfaktura-energystore/store"
+	"github.com/eegfaktura/eegfaktura-energystore/utils"
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 //var (

@@ -1,7 +1,7 @@
 package store
 
 import (
-	"at.ourproject/energystore/model"
+	"github.com/eegfaktura/eegfaktura-energystore/model"
 )
 
 type IQueryFunction interface {

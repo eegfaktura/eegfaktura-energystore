@@ -1,12 +1,13 @@
 package model
 
 import (
-	"at.ourproject/energystore/model"
 	"encoding/json"
 	"fmt"
-	"github.com/99designs/gqlgen/graphql"
 	"io"
 	"log"
+
+	"github.com/99designs/gqlgen/graphql"
+	"github.com/eegfaktura/eegfaktura-energystore/model"
 )
 
 func UnmarshalEegEnergy(v interface{}) (model.EegEnergy, error) {

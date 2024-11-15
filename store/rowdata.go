@@ -1,14 +1,15 @@
 package store
 
 import (
-	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/store/ebow"
 	"fmt"
-	"github.com/golang/glog"
-	"github.com/spf13/viper"
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/eegfaktura/eegfaktura-energystore/model"
+	"github.com/eegfaktura/eegfaktura-energystore/store/ebow"
+	"github.com/golang/glog"
+	"github.com/spf13/viper"
 )
 
 type ebowLogger struct {

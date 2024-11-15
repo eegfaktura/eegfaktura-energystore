@@ -1,10 +1,11 @@
 package calculation
 
 import (
-	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/store"
-	"at.ourproject/energystore/utils"
 	"fmt"
+
+	"github.com/eegfaktura/eegfaktura-energystore/model"
+	"github.com/eegfaktura/eegfaktura-energystore/store"
+	"github.com/eegfaktura/eegfaktura-energystore/utils"
 )
 
 func GetCalcFunc(id string) CalcHandler {

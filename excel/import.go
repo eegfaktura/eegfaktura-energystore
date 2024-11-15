@@ -1,11 +1,12 @@
 package excel
 
 import (
-	"at.ourproject/energystore/store"
 	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
+
+	"github.com/eegfaktura/eegfaktura-energystore/store"
 
 	"github.com/golang/glog"
 )

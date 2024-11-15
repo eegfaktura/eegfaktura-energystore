@@ -1,13 +1,14 @@
 package store
 
 import (
-	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/utils"
 	"errors"
 	"fmt"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/eegfaktura/eegfaktura-energystore/model"
+	"github.com/eegfaktura/eegfaktura-energystore/utils"
 )
 
 var re = regexp.MustCompile(`^(\w*)[^(]*\(([^)]*)\)$`)

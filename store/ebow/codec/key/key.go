@@ -6,7 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"at.ourproject/energystore/store/ebow/codec"
+	"github.com/eegfaktura/eegfaktura-energystore/store/ebow/codec"
 )
 
 type Codec struct{}

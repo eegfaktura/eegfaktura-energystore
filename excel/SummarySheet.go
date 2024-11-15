@@ -1,11 +1,12 @@
 package excel
 
 import (
-	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/utils"
 	"fmt"
-	"github.com/xuri/excelize/v2"
 	"time"
+
+	"github.com/eegfaktura/eegfaktura-energystore/model"
+	"github.com/eegfaktura/eegfaktura-energystore/utils"
+	"github.com/xuri/excelize/v2"
 )
 
 type SummarySheet struct {

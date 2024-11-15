@@ -1,8 +1,9 @@
 package main
 
 import (
-	"at.ourproject/energystore/cmd"
 	"fmt"
+
+	"github.com/eegfaktura/eegfaktura-energystore/cmd"
 )
 
 func main() {

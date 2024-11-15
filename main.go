@@ -1,21 +1,22 @@
 package main
 
 import (
-	"at.ourproject/energystore/calculation"
-	"at.ourproject/energystore/graph"
-	"at.ourproject/energystore/graph/generated"
-	"at.ourproject/energystore/mqttclient"
-	"at.ourproject/energystore/rest"
 	"context"
 	"flag"
-	"github.com/99designs/gqlgen/graphql/handler"
-	"github.com/gorilla/handlers"
-	"github.com/spf13/viper"
 	"log"
 	"net/http"
 	"os"
 
-	"at.ourproject/energystore/config"
+	"github.com/99designs/gqlgen/graphql/handler"
+	"github.com/eegfaktura/eegfaktura-energystore/calculation"
+	"github.com/eegfaktura/eegfaktura-energystore/graph"
+	"github.com/eegfaktura/eegfaktura-energystore/graph/generated"
+	"github.com/eegfaktura/eegfaktura-energystore/mqttclient"
+	"github.com/eegfaktura/eegfaktura-energystore/rest"
+	"github.com/gorilla/handlers"
+	"github.com/spf13/viper"
+
+	"github.com/eegfaktura/eegfaktura-energystore/config"
 )
 
 const defaultPort = "8080"

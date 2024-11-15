@@ -1,9 +1,10 @@
 package calculation
 
 import (
-	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/store"
 	"fmt"
+
+	"github.com/eegfaktura/eegfaktura-energystore/model"
+	"github.com/eegfaktura/eegfaktura-energystore/store"
 )
 
 func CalcHourSum(db *store.BowStorage, period string) ([]*model.Matrix, []*model.Matrix) {

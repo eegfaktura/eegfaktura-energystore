@@ -1,16 +1,17 @@
 package test
 
 import (
-	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/store"
 	"fmt"
-	"github.com/stretchr/testify/require"
 	"testing"
 	"time"
+
+	"github.com/eegfaktura/eegfaktura-energystore/model"
+	"github.com/eegfaktura/eegfaktura-energystore/store"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTe100110(t *testing.T) {
-	db, err := store.OpenStorageTest("te100110", "../../../rawdata/converted")
+	db, err := store.OpenStorageTest("te100110", "ecIdTest", "../../../rawdata/converted")
 	require.NoError(t, err)
 	defer func() {
 		db.Close()

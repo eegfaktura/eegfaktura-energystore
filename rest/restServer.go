@@ -1,19 +1,20 @@
 package rest
 
 import (
-	"at.ourproject/energystore/calculation"
-	"at.ourproject/energystore/excel"
-	"at.ourproject/energystore/middleware"
-	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/services"
-	"at.ourproject/energystore/store"
 	"encoding/json"
 	"fmt"
-	"github.com/golang/glog"
-	"github.com/gorilla/mux"
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/eegfaktura/eegfaktura-energystore/calculation"
+	"github.com/eegfaktura/eegfaktura-energystore/excel"
+	"github.com/eegfaktura/eegfaktura-energystore/middleware"
+	"github.com/eegfaktura/eegfaktura-energystore/model"
+	"github.com/eegfaktura/eegfaktura-energystore/services"
+	"github.com/eegfaktura/eegfaktura-energystore/store"
+	"github.com/golang/glog"
+	"github.com/gorilla/mux"
 )
 
 func NewRestServer() *mux.Router {

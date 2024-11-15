@@ -1,12 +1,13 @@
 package excel
 
 import (
-	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/store"
 	"fmt"
-	"github.com/stretchr/testify/require"
 	"os"
 	"testing"
+
+	"github.com/eegfaktura/eegfaktura-energystore/model"
+	"github.com/eegfaktura/eegfaktura-energystore/store"
+	"github.com/stretchr/testify/require"
 )
 
 //var (

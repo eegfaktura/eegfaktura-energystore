@@ -1,10 +1,10 @@
 package main
 
 import (
-	"at.ourproject/energystore/config"
-	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/store"
-	"at.ourproject/energystore/utils"
+	"github.com/eegfaktura/eegfaktura-energystore/config"
+	"github.com/eegfaktura/eegfaktura-energystore/model"
+	"github.com/eegfaktura/eegfaktura-energystore/store"
+	"github.com/eegfaktura/eegfaktura-energystore/utils"
 
 	"flag"
 	"os"

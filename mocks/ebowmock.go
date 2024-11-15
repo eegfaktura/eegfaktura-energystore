@@ -1,10 +1,11 @@
 package mocks
 
 import (
-	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/store/ebow"
-	"github.com/stretchr/testify/mock"
 	"reflect"
+
+	"github.com/eegfaktura/eegfaktura-energystore/model"
+	"github.com/eegfaktura/eegfaktura-energystore/store/ebow"
+	"github.com/stretchr/testify/mock"
 )
 
 func Copy(source interface{}, destin interface{}) {

@@ -1,13 +1,14 @@
 package excel
 
 import (
-	"at.ourproject/energystore/mocks"
-	"at.ourproject/energystore/model"
 	"fmt"
+	"testing"
+
+	"github.com/eegfaktura/eegfaktura-energystore/mocks"
+	"github.com/eegfaktura/eegfaktura-energystore/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func setupMock() *mocks.MockBowStorage {

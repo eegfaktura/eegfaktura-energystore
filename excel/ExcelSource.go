@@ -1,19 +1,20 @@
 package excel
 
 import (
-	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/store"
-	"at.ourproject/energystore/utils"
 	"errors"
 	"fmt"
-	"github.com/golang/glog"
-	"github.com/xuri/excelize/v2"
 	"io"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/eegfaktura/eegfaktura-energystore/model"
+	"github.com/eegfaktura/eegfaktura-energystore/store"
+	"github.com/eegfaktura/eegfaktura-energystore/utils"
+	"github.com/golang/glog"
+	"github.com/xuri/excelize/v2"
 )
 
 var dateLine = regexp.MustCompile(`^[0-9]{2}.[0-9]{2}.[0-9]{4}\s[0-9]{2}:[0-9]{2}:[0-9]{2}$`)

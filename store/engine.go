@@ -1,11 +1,12 @@
 package store
 
 import (
-	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/utils"
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/eegfaktura/eegfaktura-energystore/model"
+	"github.com/eegfaktura/eegfaktura-energystore/utils"
 )
 
 type TargetMP struct {

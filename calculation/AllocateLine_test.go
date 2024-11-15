@@ -1,11 +1,12 @@
 package calculation
 
 import (
-	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/utils"
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/eegfaktura/eegfaktura-energystore/model"
+	"github.com/eegfaktura/eegfaktura-energystore/utils"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestAllocDynamic2(t *testing.T) {

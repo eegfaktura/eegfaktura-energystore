@@ -1,9 +1,10 @@
 package calculation
 
 import (
-	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/utils"
 	"math"
+
+	"github.com/eegfaktura/eegfaktura-energystore/model"
+	"github.com/eegfaktura/eegfaktura-energystore/utils"
 )
 
 // AllocDynamic Deprecated: Use AllocDynamic1/*

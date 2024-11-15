@@ -1,10 +1,11 @@
 package store
 
 import (
-	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/store/ebow"
 	"fmt"
 	"math"
+
+	"github.com/eegfaktura/eegfaktura-energystore/model"
+	"github.com/eegfaktura/eegfaktura-energystore/store/ebow"
 )
 
 type MetaMapType map[string]*model.CounterPointMeta

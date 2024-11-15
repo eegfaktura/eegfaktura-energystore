@@ -1,12 +1,13 @@
 package rest
 
 import (
-	"at.ourproject/energystore/middleware"
-	"at.ourproject/energystore/store"
 	"encoding/json"
-	"github.com/gorilla/mux"
 	"net/http"
 	"time"
+
+	"github.com/eegfaktura/eegfaktura-energystore/middleware"
+	"github.com/eegfaktura/eegfaktura-energystore/store"
+	"github.com/gorilla/mux"
 )
 
 func InitQueryApiRouter(r *mux.Router) *mux.Router {

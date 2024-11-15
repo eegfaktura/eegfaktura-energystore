@@ -1,10 +1,11 @@
 package middleware
 
 import (
-	httputil2 "at.ourproject/energystore/middleware/httputil"
 	"context"
-	"github.com/coreos/go-oidc/v3/oidc"
 	"net/http"
+
+	"github.com/coreos/go-oidc/v3/oidc"
+	httputil2 "github.com/eegfaktura/eegfaktura-energystore/middleware/httputil"
 )
 
 type KeycloakClient struct {

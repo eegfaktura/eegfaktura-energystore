@@ -6,14 +6,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/dgraph-io/badger/v3"
 	"math"
 	"math/rand"
 	"sync"
 
-	"at.ourproject/energystore/store/ebow/codec"
-	jsoncodec "at.ourproject/energystore/store/ebow/codec/json"
-	keycodec "at.ourproject/energystore/store/ebow/codec/key"
+	"github.com/dgraph-io/badger/v3"
+
+	"github.com/eegfaktura/eegfaktura-energystore/store/ebow/codec"
+	jsoncodec "github.com/eegfaktura/eegfaktura-energystore/store/ebow/codec/json"
+	keycodec "github.com/eegfaktura/eegfaktura-energystore/store/ebow/codec/key"
 
 	"github.com/sony/sonyflake"
 )

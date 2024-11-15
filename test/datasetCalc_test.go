@@ -1,20 +1,21 @@
 package test
 
 import (
-	"at.ourproject/energystore/calculation"
-	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/store"
 	"fmt"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/eegfaktura/eegfaktura-energystore/calculation"
+	"github.com/eegfaktura/eegfaktura-energystore/model"
+	"github.com/eegfaktura/eegfaktura-energystore/store"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCalculateReports(t *testing.T) {
 
-	db, err := store.OpenStorageTest("excelsource", "../test/rawdata")
+	db, err := store.OpenStorageTest("excelsource", "ecIdTest", "../test/rawdata")
 	require.NoError(t, err)
 	defer func() {
 		db.Close()
@@ -63,7 +64,7 @@ func TestCalculateReports(t *testing.T) {
 		}
 
 		assert.Equal(t, results, expectedResult)
-		fmt.Printf("Duration Annual Report %f\n", time.Now().Sub(timeStart).Seconds())
+		fmt.Printf("Duration Annual Report %f\n", time.Since(timeStart).Seconds())
 	})
 
 	t.Run("calculate weekly report", func(t *testing.T) {
@@ -172,7 +173,7 @@ func TestCalculateReports(t *testing.T) {
 		assert.Equal(t, expectedResult[0], results[0])
 		assert.Equal(t, expectedResult[1], results[1])
 
-		fmt.Printf("Duration: %f\n", time.Now().Sub(begin).Seconds())
+		fmt.Printf("Duration: %f\n", time.Since(begin).Seconds())
 	})
 
 	t.Run("calculate row only report", func(t *testing.T) {
@@ -205,7 +206,7 @@ func TestCalculateReports(t *testing.T) {
 }
 
 func TestCalculateBadImport(t *testing.T) {
-	db, err := store.OpenStorageTest("excelsource", "../test/rawdata")
+	db, err := store.OpenStorageTest("excelsource", "ecIdTest", "../test/rawdata")
 	require.NoError(t, err)
 	defer func() {
 		db.Close()

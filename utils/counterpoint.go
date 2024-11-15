@@ -1,9 +1,10 @@
 package utils
 
 import (
-	"at.ourproject/energystore/model"
 	"math"
 	"strings"
+
+	"github.com/eegfaktura/eegfaktura-energystore/model"
 )
 
 func DetermineDirection(meteringPoint string) model.MeterDirection {

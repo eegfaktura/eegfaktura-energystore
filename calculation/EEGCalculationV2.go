@@ -1,14 +1,15 @@
 package calculation
 
 import (
-	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/store"
-	"at.ourproject/energystore/store/ebow"
-	"at.ourproject/energystore/utils"
 	"fmt"
-	"github.com/golang/glog"
 	"math"
 	"time"
+
+	"github.com/eegfaktura/eegfaktura-energystore/model"
+	"github.com/eegfaktura/eegfaktura-energystore/store"
+	"github.com/eegfaktura/eegfaktura-energystore/store/ebow"
+	"github.com/eegfaktura/eegfaktura-energystore/utils"
+	"github.com/golang/glog"
 )
 
 type reportValues struct {

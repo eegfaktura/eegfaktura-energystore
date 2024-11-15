@@ -42,7 +42,7 @@ resolver:
 # gqlgen will search for any type names in the schema in these go packages
 # if they match it will use them, otherwise it will generate them.
 autobind:
-  - "at.ourproject/energystore/graph/model"
+  - "github.com/eegfaktura/eegfaktura-energystore/graph/model"
 
 # This section declares type mapping between the GraphQL and go type systems
 #
@@ -63,4 +63,4 @@ models:
       - github.com/99designs/gqlgen/graphql.Int32
   EegEnergy:
     model:
-      - at.ourproject/energystore/graph/model.EegEnergy
+      - github.com/eegfaktura/eegfaktura-energystore/graph/model.EegEnergy

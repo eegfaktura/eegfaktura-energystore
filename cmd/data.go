@@ -1,14 +1,15 @@
 package cmd
 
 import (
-	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/services"
-	"at.ourproject/energystore/store"
-	"at.ourproject/energystore/utils"
 	"fmt"
+	"time"
+
+	"github.com/eegfaktura/eegfaktura-energystore/model"
+	"github.com/eegfaktura/eegfaktura-energystore/services"
+	"github.com/eegfaktura/eegfaktura-energystore/store"
+	"github.com/eegfaktura/eegfaktura-energystore/utils"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"time"
 )
 
 var (

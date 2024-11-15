@@ -11,8 +11,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	model1 "at.ourproject/energystore/graph/model"
-	"at.ourproject/energystore/model"
+	model1 "github.com/eegfaktura/eegfaktura-energystore/graph/model"
+	"github.com/eegfaktura/eegfaktura-energystore/model"
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/99designs/gqlgen/graphql/introspection"
 	gqlparser "github.com/vektah/gqlparser/v2"

@@ -6,12 +6,12 @@ package graph
 import (
 	"context"
 
-	"at.ourproject/energystore/calculation"
-	"at.ourproject/energystore/excel"
-	"at.ourproject/energystore/graph/generated"
-	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/services"
 	"github.com/99designs/gqlgen/graphql"
+	"github.com/eegfaktura/eegfaktura-energystore/calculation"
+	"github.com/eegfaktura/eegfaktura-energystore/excel"
+	"github.com/eegfaktura/eegfaktura-energystore/graph/generated"
+	"github.com/eegfaktura/eegfaktura-energystore/model"
+	"github.com/eegfaktura/eegfaktura-energystore/services"
 	"github.com/golang/glog"
 )
 

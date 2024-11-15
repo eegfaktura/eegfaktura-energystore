@@ -1,9 +1,10 @@
 package utils
 
 import (
-	"at.ourproject/energystore/model"
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/eegfaktura/eegfaktura-energystore/model"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestDetermineDirection(t *testing.T) {

@@ -1,14 +1,15 @@
 package excel
 
 import (
-	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/store"
-	"at.ourproject/energystore/utils"
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/xuri/excelize/v2"
 	"time"
+
+	"github.com/eegfaktura/eegfaktura-energystore/model"
+	"github.com/eegfaktura/eegfaktura-energystore/store"
+	"github.com/eegfaktura/eegfaktura-energystore/utils"
+	"github.com/xuri/excelize/v2"
 )
 
 type ExportCPs struct {

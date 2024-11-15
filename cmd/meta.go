@@ -1,14 +1,15 @@
 package cmd
 
 import (
-	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/store"
 	"errors"
 	"fmt"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"regexp"
 	"sort"
+
+	"github.com/eegfaktura/eegfaktura-energystore/model"
+	"github.com/eegfaktura/eegfaktura-energystore/store"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 type flagOptions struct {

@@ -1,4 +1,4 @@
-module at.ourproject/energystore
+module github.com/eegfaktura/eegfaktura-energystore
 
 go 1.19
 

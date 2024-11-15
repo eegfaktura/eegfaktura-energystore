@@ -1,14 +1,15 @@
 package excel
 
 import (
-	"at.ourproject/energystore/mocks"
-	"at.ourproject/energystore/model"
 	"fmt"
+	"testing"
+	"time"
+
+	"github.com/eegfaktura/eegfaktura-energystore/mocks"
+	"github.com/eegfaktura/eegfaktura-energystore/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/xuri/excelize/v2"
-	"testing"
-	"time"
 )
 
 func TestEnergySheet(t *testing.T) {

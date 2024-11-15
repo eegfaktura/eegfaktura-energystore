@@ -1,10 +1,11 @@
 package calculation
 
 import (
-	"at.ourproject/energystore/store"
 	"fmt"
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/eegfaktura/eegfaktura-energystore/store"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCalcHourSum(t *testing.T) {

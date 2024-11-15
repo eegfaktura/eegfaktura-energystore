@@ -3,7 +3,7 @@ package json
 import (
 	"encoding/json"
 
-	"at.ourproject/energystore/store/ebow/codec"
+	"github.com/eegfaktura/eegfaktura-energystore/store/ebow/codec"
 )
 
 type Codec struct{}

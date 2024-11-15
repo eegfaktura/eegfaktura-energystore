@@ -1,10 +1,11 @@
 package services
 
 import (
-	"at.ourproject/energystore/mocks"
-	"at.ourproject/energystore/model"
-	"github.com/stretchr/testify/mock"
 	"testing"
+
+	"github.com/eegfaktura/eegfaktura-energystore/mocks"
+	"github.com/eegfaktura/eegfaktura-energystore/model"
+	"github.com/stretchr/testify/mock"
 )
 
 func buildMock(entries []*model.RawSourceLine) *mocks.MockBowStorage {
@@ -59,6 +60,7 @@ func buildMock(entries []*model.RawSourceLine) *mocks.MockBowStorage {
 func TestGetLastEnergyEntry(t *testing.T) {
 	type args struct {
 		tenant string
+		ecid   string
 	}
 	tests := []struct {
 		name    string
@@ -70,7 +72,7 @@ func TestGetLastEnergyEntry(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := GetLastEnergyEntry(tt.args.tenant)
+			got, err := GetLastEnergyEntry(tt.args.tenant, tt.args.ecid)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetLastEnergyEntry() error = %v, wantErr %v", err, tt.wantErr)
 				return

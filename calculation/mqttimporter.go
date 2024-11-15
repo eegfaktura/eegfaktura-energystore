@@ -1,17 +1,18 @@
 package calculation
 
 import (
-	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/mqttclient"
-	"at.ourproject/energystore/store"
-	"at.ourproject/energystore/utils"
 	"context"
 	"encoding/json"
 	"fmt"
-	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/golang/glog"
 	"sort"
 	"time"
+
+	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/eegfaktura/eegfaktura-energystore/model"
+	"github.com/eegfaktura/eegfaktura-energystore/mqttclient"
+	"github.com/eegfaktura/eegfaktura-energystore/store"
+	"github.com/eegfaktura/eegfaktura-energystore/utils"
+	"github.com/golang/glog"
 )
 
 type MqttInverterMessage struct {
