@@ -2,7 +2,7 @@ package cmd
 
 import (
 	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/store"
+	"at.ourproject/energystore/store/ebow"
 	"errors"
 	"fmt"
 	"github.com/spf13/cobra"
@@ -91,7 +91,7 @@ info.
 
 func handleMeta(cmd *cobra.Command, args []string) error {
 	viper.Set("persistence.path", dir)
-	db, err := store.OpenStorage(tenant, ecId)
+	db, err := ebow.OpenStorage(tenant, ecId)
 	if err != nil {
 		return err
 	}
@@ -117,7 +117,7 @@ func handleMeta(cmd *cobra.Command, args []string) error {
 
 func setMeta(cmd *cobra.Command, args []string) error {
 	viper.Set("persistence.path", dir)
-	db, err := store.OpenStorage(tenant, ecId)
+	db, err := ebow.OpenStorage(tenant, ecId)
 	if err != nil {
 		return err
 	}

@@ -24,9 +24,9 @@ type EnergyMeter struct {
 }
 
 type MqttEnergyMessage struct {
-	Meter  EnergyMeter `json:"meter"`
-	Energy MqttEnergy  `json:"energy"`
-	EcId   string      `json:"ecId"`
+	Meter  EnergyMeter  `json:"meter"`
+	Energy []MqttEnergy `json:"energy"`
+	EcId   string       `json:"ecId"`
 }
 
 type MqttEnergyResponse struct {

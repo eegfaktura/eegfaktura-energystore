@@ -137,3 +137,8 @@ func PeriodToStartEndTime(year, segment int, periodCode string) (time.Time, time
 	}
 	return time.Now(), time.Now(), errors.New(fmt.Sprintf("Wrong Time-Period (year: %d, segment: %d, type: %s)", year, segment, periodCode))
 }
+
+func IsLineDateOutOfRange(lineDate time.Time, rangeTime [2]int64) bool {
+	activeSince, inactiveSince := rangeTime[0], rangeTime[1]+86340000
+	return lineDate.Before(time.UnixMilli(activeSince)) || lineDate.After(time.UnixMilli(inactiveSince))
+}

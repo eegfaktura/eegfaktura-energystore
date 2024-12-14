@@ -198,7 +198,8 @@ func addLineQoV(ctx *RunnerContext, line *model.RawSourceLine, stylesQoV []int) 
 		if p.Direction == model.CONSUMER_DIRECTION {
 			baseIdx := cCnt * 6
 			cCnt += 1
-			if lineDate.Before(time.UnixMilli(p.ActiveSince)) || lineDate.After(time.UnixMilli(p.InactiveSince)) {
+			if utils.IsLineDateOutOfRange(lineDate, [2]int64{p.ActiveSince, p.InactiveSince}) {
+				//if lineDate.Before(time.UnixMilli(p.ActiveSince)) || lineDate.After(time.UnixMilli(p.InactiveSince)) {
 				for n := 0; n < 6; n++ {
 					lineData[baseIdx+n] = excelize.Cell{Value: ""}
 				}
@@ -213,7 +214,8 @@ func addLineQoV(ctx *RunnerContext, line *model.RawSourceLine, stylesQoV []int) 
 		} else if m.Dir == model.PRODUCER_DIRECTION {
 			baseIdx := (countCon * 6) + (pCnt * 4)
 			pCnt += 1
-			if lineDate.Before(time.UnixMilli(p.ActiveSince)) || lineDate.After(time.UnixMilli(p.InactiveSince)) {
+			if utils.IsLineDateOutOfRange(lineDate, [2]int64{p.ActiveSince, p.InactiveSince}) {
+				//if lineDate.Before(time.UnixMilli(p.ActiveSince)) || lineDate.After(time.UnixMilli(p.InactiveSince)) {
 				for n := 0; n < 4; n++ {
 					lineData[baseIdx+n] = excelize.Cell{Value: ""}
 				}

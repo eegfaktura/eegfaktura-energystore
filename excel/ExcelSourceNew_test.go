@@ -82,7 +82,7 @@ func TestImportExcelEnergyFileNew(t *testing.T) {
 	})
 
 	t.Run("Test short energy data file Extention", func(t *testing.T) {
-		excelFile, err := OpenExceFile("../test/ShortTest-Energiedaten Extention.xlsx")
+		excelFile, err := OpenExceFile("../test/ShortTest-EnergiedatenExtention.xlsx")
 		require.NoError(t, err)
 		defer excelFile.Close()
 
@@ -117,7 +117,7 @@ func TestImportExcelEnergyFileNew(t *testing.T) {
 	})
 
 	t.Run("Test short energy data file Extention with TF", func(t *testing.T) {
-		excelFile, err := OpenExceFile("../test/ShortTest-Energiedaten Extention.xlsx")
+		excelFile, err := OpenExceFile("../test/ShortTest-EnergiedatenExtention.xlsx")
 		require.NoError(t, err)
 		defer excelFile.Close()
 
@@ -156,7 +156,7 @@ func TestImportExcelEnergyFileNew(t *testing.T) {
 	})
 
 	t.Run("Test short energy data file Extention with TF - BEG", func(t *testing.T) {
-		excelFile, err := OpenExceFile("../test/ShortTest-Energiedaten Extention.xlsx")
+		excelFile, err := OpenExceFile("../test/ShortTest-EnergiedatenExtention.xlsx")
 		require.NoError(t, err)
 		defer excelFile.Close()
 

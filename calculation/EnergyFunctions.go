@@ -2,11 +2,11 @@ package calculation
 
 import (
 	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/store"
+	"at.ourproject/energystore/store/ebow"
 	"fmt"
 )
 
-func CalcHourSum(db *store.BowStorage, period string) ([]*model.Matrix, []*model.Matrix) {
+func CalcHourSum(db *ebow.BowStorage, period string) ([]*model.Matrix, []*model.Matrix) {
 
 	consHours := []*model.Matrix{}
 	prodHours := []*model.Matrix{}

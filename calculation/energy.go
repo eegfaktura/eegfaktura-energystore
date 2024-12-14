@@ -3,6 +3,7 @@ package calculation
 import (
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
+	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
 	"fmt"
 	"github.com/golang/glog"
@@ -21,7 +22,7 @@ import (
 //   - YM1-YM12: cumulate months
 func EnergyReport(tenant string, year, segment int, periodCode string) (*model.EegEnergy, error) {
 
-	db, err := store.OpenStorage(tenant, "")
+	db, err := ebow.OpenStorage(tenant, "")
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +87,7 @@ func EnergyReport(tenant string, year, segment int, periodCode string) (*model.E
 
 func EnergyReportV2(tenant, ecid string, participants []model.ParticipantReport, year, segment int, periodCode string) (*model.ReportResponse, error) {
 
-	db, err := store.OpenStorage(tenant, ecid)
+	db, err := ebow.OpenStorage(tenant, ecid)
 	if err != nil {
 		return nil, err
 	}

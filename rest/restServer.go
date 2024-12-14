@@ -21,7 +21,7 @@ func NewRestServer() *mux.Router {
 	r := mux.NewRouter()
 	//s := r.PathPrefix("/rest").Subrouter()
 	//r.HandleFunc("/eeg/{year}/{month}", jwtWrapper(fetchEnergy())).Methods("GET")
-	r.HandleFunc("/eeg/report", middleware.ProtectApp(fetchEnergyReport())).Methods("POST")
+	//r.HandleFunc("/eeg/report", middleware.ProtectApp(fetchEnergyReport())).Methods("POST")
 	r.HandleFunc("/eeg/v2/{ecid}/report", middleware.ProtectApp(fetchEnergyReportV2())).Methods("POST")
 	r.HandleFunc("/eeg/v2/{ecid}/intra-day-report", middleware.ProtectApp(fetchIntraDayReportV2())).Methods("POST")
 	r.HandleFunc("/eeg/v2/{ecid}/load-curve-report", middleware.ProtectApp(fetchLoadCurveReportV2())).Methods("POST")
@@ -60,7 +60,7 @@ func fetchEnergyReport() middleware.JWTHandlerFunc {
 	}
 }
 
-// fetchEnergyReport Rest endpoint retrieve energy values of requested participant and period pattern.
+// fetchEnergyReportV2 Rest endpoint retrieve energy values of requested participant and period pattern.
 func fetchEnergyReportV2() middleware.JWTHandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request, claims *middleware.PlatformClaims, tenant string) {
 		vars := mux.Vars(r)
@@ -130,9 +130,11 @@ func exportMeteringData() middleware.JWTHandlerFunc {
 func exportReport() middleware.JWTHandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request, claims *middleware.PlatformClaims, tenant string) {
 
+		start := time.Now()
 		vars := mux.Vars(r)
 		ecid := vars["ecid"]
 
+		glog.Infof("tenant=%s Start Energy Export", tenant)
 		var cps excel.ExportParticipantEnergy
 		err := json.NewDecoder(r.Body).Decode(&cps)
 		if err != nil {
@@ -154,8 +156,13 @@ func exportReport() middleware.JWTHandlerFunc {
 			time.UnixMilli(cps.End).Format("20060102")))
 
 		if _, err := b.WriteTo(w); err != nil {
-			fmt.Fprintf(w, "%s", err)
+			glog.Errorf("tenant=%s error: %v", tenant, err)
+			_, err = fmt.Fprintf(w, "%s", err)
+			if err != nil {
+				glog.Errorf("tenant=%s error: %v", tenant, err)
+			}
 		}
+		glog.Infof("tenant=%s Energy Export finish (%v Sec.)", tenant, time.Now().Sub(start).Seconds())
 	}
 }
 
@@ -165,7 +172,7 @@ func fetchIntraDayReportV2() middleware.JWTHandlerFunc {
 		ecid := vars["ecid"]
 
 		startMonitor := time.Now()
-		glog.V(4).Infof("Start Time Monitor fetchIntraDayReport. %s\n", tenant)
+		glog.V(4).Infof("tenant=%s Start Time Monitor fetchIntraDayReport.", tenant)
 		var request struct {
 			Start int64 `json:"start"`
 			End   int64 `json:"end"`
@@ -178,7 +185,7 @@ func fetchIntraDayReportV2() middleware.JWTHandlerFunc {
 		}
 
 		resp, err := store.QueryIntraDayReport(tenant, ecid, time.UnixMilli(request.Start), time.UnixMilli(request.End))
-		glog.V(4).Infof("Time Monitor fetchIntraDayReport. %v\n", time.Now().Sub(startMonitor))
+		glog.V(4).Infof("tenant=%s Time Monitor fetchIntraDayReport. %v Sec.", tenant, time.Now().Sub(startMonitor).Seconds())
 		if err != nil {
 			respondWithError(w, http.StatusBadRequest, err.Error())
 			return

@@ -2,7 +2,7 @@ package services
 
 import (
 	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/store"
+	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
 	"fmt"
 	"time"
@@ -12,7 +12,7 @@ func GetLastEnergyEntry(tenant, ecid string) (string, error) {
 	var err error
 	var meta *model.RawSourceMeta
 
-	db, err := store.OpenStorage(tenant, ecid)
+	db, err := ebow.OpenStorage(tenant, ecid)
 	if err != nil {
 		return "", err
 	}

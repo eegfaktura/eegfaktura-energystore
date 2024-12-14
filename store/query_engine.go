@@ -136,7 +136,7 @@ func QueryRawData(tenant, ecid string, start, end time.Time, cps []TargetMP, par
 }
 
 func QueryMetaData(tenant, ecid string) (map[string]*MetaData, error) {
-	db, err := OpenStorage(tenant, ecid)
+	db, err := ebow.OpenStorage(tenant, ecid)
 	if err != nil {
 		return nil, err
 	}

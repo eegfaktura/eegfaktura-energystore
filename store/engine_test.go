@@ -9,8 +9,8 @@ import (
 func Test_CacheTime(t *testing.T) {
 	now := time.Now()
 	testCacheT := CacheTime{now}
-	tsFunc := func(ct CacheTime) CacheTime {
-		return CacheTime{ct.AddDate(0, 0, 1)}
+	tsFunc := func(dir int, ct CacheTime) CacheTime {
+		return CacheTime{ct.AddDate(0, 0, dir*1)}
 	}
 	println(testCacheT.Format("2006-01-02 15:04:05"))
 	assert.Equal(t, now, testCacheT.Time)

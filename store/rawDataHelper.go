@@ -3,28 +3,14 @@ package store
 import (
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store/ebow"
+	"at.ourproject/energystore/store/function"
 	"fmt"
 	"math"
 )
 
 type MetaMapType map[string]*model.CounterPointMeta
 
-func GetMetaMap(db IBowStorage) (map[string]*model.CounterPointMeta, error) {
-	var err error
-	var meta *model.RawSourceMeta
-	if meta, err = db.GetMeta("cpmeta/0"); err != nil {
-		if err != ebow.ErrNotFound {
-			return nil, err
-		}
-	}
-	metaMap := map[string]*model.CounterPointMeta{}
-	for _, m := range meta.CounterPoints {
-		metaMap[m.Name] = m
-	}
-	return metaMap, nil
-}
-
-func GetConsumerMetaMap(db *BowStorage) (map[string]*model.CounterPointMeta, error) {
+func GetConsumerMetaMap(db *ebow.BowStorage) (map[string]*model.CounterPointMeta, error) {
 	var err error
 	var meta *model.RawSourceMeta
 	if meta, err = db.GetMeta(fmt.Sprintf("cpmeta/%s", "0")); err != nil {
@@ -42,8 +28,8 @@ func GetConsumerMetaMap(db *BowStorage) (map[string]*model.CounterPointMeta, err
 	return metaMap, nil
 }
 
-func CalcMetaInfo(db *BowStorage) (*model.CounterPointMetaInfo, map[string]*model.CounterPointMeta, error) {
-	meta, err := GetMetaMap(db)
+func CalcMetaInfo(db *ebow.BowStorage) (*model.CounterPointMetaInfo, map[string]*model.CounterPointMeta, error) {
+	meta, err := function.GetMetaMap(db)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -66,7 +52,7 @@ func CalcMetaInfo(db *BowStorage) (*model.CounterPointMetaInfo, map[string]*mode
 	return info, meta, nil
 }
 
-func PrepareMetaInfoMap(db *BowStorage, meterpoint string, direction model.MeterDirection) (map[string]*model.CounterPointMeta, *model.CounterPointMetaInfo, error) {
+func PrepareMetaInfoMap(db *ebow.BowStorage, meterpoint string, direction model.MeterDirection) (map[string]*model.CounterPointMeta, *model.CounterPointMetaInfo, error) {
 	modified := false
 	//meta, err := GetMetaMap(db)
 	//if err != nil {
@@ -128,8 +114,8 @@ func PrepareMetaInfoMap(db *BowStorage, meterpoint string, direction model.Meter
 	return meta, info, nil
 }
 
-func GetMetaInfo(db IBowStorage) (map[string]*model.CounterPointMeta, *model.CounterPointMetaInfo, error) {
-	meta, err := GetMetaMap(db)
+func GetMetaInfo(db ebow.IBowStorage) (map[string]*model.CounterPointMeta, *model.CounterPointMetaInfo, error) {
+	meta, err := function.GetMetaMap(db)
 	if err != nil {
 		return nil, nil, err
 	}

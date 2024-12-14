@@ -3,6 +3,7 @@ package excel
 import (
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
+	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
 	"errors"
 	"fmt"
@@ -72,7 +73,7 @@ type excelCounterPointMeta struct {
 	IdxG3TF int
 }
 
-func ImportExcelEnergyFile(f *excelize.File, sheet string, db *store.BowStorage) ([]int, error) {
+func ImportExcelEnergyFile(f *excelize.File, sheet string, db *ebow.BowStorage) ([]int, error) {
 
 	exp := "DD.MM.YYYY HH:MM:SS"
 	style, err := f.NewStyle(&excelize.Style{CustomNumFmt: &exp})
@@ -251,7 +252,7 @@ func ImportExcelEnergyFile(f *excelize.File, sheet string, db *store.BowStorage)
 	return years, nil
 }
 
-func buildMatrixMetaStruct(db store.IBowStorage, excelHeader excelHeader) (map[int]*excelCounterPointMeta, []*model.CounterPointMeta, error) {
+func buildMatrixMetaStruct(db ebow.IBowStorage, excelHeader excelHeader) (map[int]*excelCounterPointMeta, []*model.CounterPointMeta, error) {
 	glog.V(3).Info("Build Meta Matrix")
 
 	ensureMeteringPoint := func(meter string) (string, error) {

@@ -3,7 +3,7 @@ package cmd
 import (
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/services"
-	"at.ourproject/energystore/store"
+	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
 	"fmt"
 	"github.com/spf13/cobra"
@@ -50,7 +50,7 @@ func handleData(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	db, err := store.OpenStorage(tenant, ecId)
+	db, err := ebow.OpenStorage(tenant, ecId)
 	if err != nil {
 		return err
 	}

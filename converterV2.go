@@ -3,7 +3,7 @@ package main
 import (
 	"at.ourproject/energystore/config"
 	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/store"
+	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
 	"fmt"
 
@@ -42,13 +42,13 @@ func main() {
 	oldTenant := strings.ToUpper(*tenant)
 	newTenant := oldTenant + "_new"
 
-	dbOld, err := store.OpenStorage(oldTenant, *ecId)
+	dbOld, err := ebow.OpenStorage(oldTenant, *ecId)
 	if err != nil {
 		panic(err)
 	}
 	defer func() { dbOld.Close() }()
 
-	dbNew, err := store.OpenStorage(newTenant, *ecId)
+	dbNew, err := ebow.OpenStorage(newTenant, *ecId)
 	if err != nil {
 		panic(err)
 	}

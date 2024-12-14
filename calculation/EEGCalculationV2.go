@@ -65,7 +65,7 @@ var ConvertToMeterMap = func(report *model.ReportResponse) reportValues {
 	return reportValues{meters: meters, totalConsumption: &report.TotalConsumption, totalProduction: &report.TotalProduction}
 }
 
-func CalculateParticipantPeriod(db *store.BowStorage, allocFunc AllocationHandlerV2, year, segment int, meterings map[string][]model.MeterReport) error {
+func CalculateParticipantPeriod(db *ebow.BowStorage, allocFunc AllocationHandlerV2, year, segment int, meterings map[string][]model.MeterReport) error {
 	rowPrefix := "CP"
 	month := 1
 	_, metaInfo, err := store.GetMetaInfo(db)
@@ -165,7 +165,7 @@ func calcDailyScope(iter ValueIterator, allocFunc AllocationHandlerV2, metaInfo 
 	return dayCb(day, daySummary)
 }
 
-func CalculateMonthlyPeriodV2(db *store.BowStorage, report *model.ReportResponse, allocFunc AllocationHandlerV2, year, segment int) error {
+func CalculateMonthlyPeriodV2(db *ebow.BowStorage, report *model.ReportResponse, allocFunc AllocationHandlerV2, year, segment int) error {
 	rowPrefix := "CP"
 	cpMeta, metaInfo, err := store.GetMetaInfo(db)
 	if err != nil {
@@ -183,7 +183,7 @@ func CalculateMonthlyPeriodV2(db *store.BowStorage, report *model.ReportResponse
 	})
 }
 
-func CalculateBiAnnualPeriodV2(db *store.BowStorage, report *model.ReportResponse, allocFunc AllocationHandlerV2, year, segment int) error {
+func CalculateBiAnnualPeriodV2(db *ebow.BowStorage, report *model.ReportResponse, allocFunc AllocationHandlerV2, year, segment int) error {
 	rowPrefix := "CP"
 	cpMeta, metaInfo, err := store.GetMetaInfo(db)
 	if err != nil {
@@ -210,7 +210,7 @@ func CalculateBiAnnualPeriodV2(db *store.BowStorage, report *model.ReportRespons
 	return err
 }
 
-func CalculateQuarterlyPeriodV2(db *store.BowStorage, report *model.ReportResponse, allocFunc AllocationHandlerV2, year, segment int) error {
+func CalculateQuarterlyPeriodV2(db *ebow.BowStorage, report *model.ReportResponse, allocFunc AllocationHandlerV2, year, segment int) error {
 	rowPrefix := "CP"
 	cpMeta, metaInfo, err := store.GetMetaInfo(db)
 	if err != nil {
@@ -237,7 +237,7 @@ func CalculateQuarterlyPeriodV2(db *store.BowStorage, report *model.ReportRespon
 	return err
 }
 
-func CalculateAnnualPeriodV2(db *store.BowStorage, report *model.ReportResponse, allocFunc AllocationHandlerV2, year int) error {
+func CalculateAnnualPeriodV2(db *ebow.BowStorage, report *model.ReportResponse, allocFunc AllocationHandlerV2, year int) error {
 	rowPrefix := "CP"
 	cpMeta, metaInfo, err := store.GetMetaInfo(db)
 	if err != nil {

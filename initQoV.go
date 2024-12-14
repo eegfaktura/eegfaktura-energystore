@@ -3,7 +3,7 @@ package main
 import (
 	"at.ourproject/energystore/config"
 	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/store"
+	"at.ourproject/energystore/store/ebow"
 	"fmt"
 
 	"flag"
@@ -48,7 +48,7 @@ func main() {
 	fmt.Printf("From Date String:  %s\n", dateFrom)
 	fmt.Printf("Until Date String: %s\n", dateTo)
 
-	db, err := store.OpenStorage(*tenant, *ecId)
+	db, err := ebow.OpenStorage(*tenant, *ecId)
 	if err != nil {
 		panic(err)
 	}

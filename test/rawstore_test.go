@@ -2,7 +2,7 @@ package test
 
 import (
 	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/store"
+	"at.ourproject/energystore/store/ebow"
 	"fmt"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -10,10 +10,10 @@ import (
 )
 
 func TestTe100110(t *testing.T) {
-	db, err := store.OpenStorageTest("te100110", "TE0000000000000000001", "../../../rawdata/converted")
+	db, err := ebow.OpenStorageTest("te100110", "TE0000000000000000001", "../../../rawdata/converted")
 	require.NoError(t, err)
 	defer func() {
-		db.Close()
+		db.CloseTestDriver()
 	}()
 
 	start := time.UnixMilli(1691704800000)

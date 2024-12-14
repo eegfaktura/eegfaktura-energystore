@@ -3,6 +3,7 @@ package cmd
 import (
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
+	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
 	"errors"
 	"fmt"
@@ -30,7 +31,7 @@ func handleMove(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("%s, %s, %s, %s\n", viper.GetString("persistence.path"), tenant, meter, ecId)
 
-	db, err := store.OpenStorage(tenant, ecId)
+	db, err := ebow.OpenStorage(tenant, ecId)
 	if err != nil {
 		return err
 	}
@@ -100,7 +101,7 @@ func moveToProducer(line model.RawSourceLine, sourceIdx, targetIdx int) *model.R
 	return &targetLine
 }
 
-func getMetaOf(db *store.BowStorage, meter string) (*model.CounterPointMeta, error) {
+func getMetaOf(db *ebow.BowStorage, meter string) (*model.CounterPointMeta, error) {
 	m, err := db.GetMeta("cpmeta/0")
 	if err != nil {
 		return nil, err
@@ -114,7 +115,7 @@ func getMetaOf(db *store.BowStorage, meter string) (*model.CounterPointMeta, err
 	return nil, errors.New("meter not found")
 }
 
-func getTargetMeta(db *store.BowStorage, meterpoint string, source *model.CounterPointMeta) (*model.CounterPointMeta, error) {
+func getTargetMeta(db *ebow.BowStorage, meterpoint string, source *model.CounterPointMeta) (*model.CounterPointMeta, error) {
 	var direction model.MeterDirection
 	if source.Dir == model.PRODUCER_DIRECTION {
 		direction = model.CONSUMER_DIRECTION
@@ -187,7 +188,7 @@ func resetValue(arr []float64, idx int) {
 	arr[idx] = 0
 }
 
-func updateMeta(db *store.BowStorage, meter string, targetMeta *model.CounterPointMeta) error {
+func updateMeta(db *ebow.BowStorage, meter string, targetMeta *model.CounterPointMeta) error {
 	m, err := db.GetMeta("cpmeta/0")
 	if err != nil {
 		return err

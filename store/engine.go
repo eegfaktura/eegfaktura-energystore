@@ -31,7 +31,7 @@ type EngineContext struct {
 	checkBegin      func(lineDate, mDate time.Time) bool
 }
 
-func createEngineContext(db IBowStorage, start, end time.Time) (*EngineContext, error) {
+func createEngineContext(db ebow.IBowStorage, start, end time.Time) (*EngineContext, error) {
 	metaMap, info, err := GetMetaInfo(db)
 	if err != nil {
 		return nil, err
@@ -211,7 +211,7 @@ type Engine struct {
 
 func (e *Engine) Query(tenant, ecid string, start, end time.Time) error {
 
-	db, err := OpenStorage(tenant, ecid)
+	db, err := ebow.OpenStorage(tenant, ecid)
 	if err != nil {
 		return err
 	}

@@ -118,3 +118,148 @@ func TestMatrix_Add_DifferentSize(t *testing.T) {
 	//assert.Equal(t, 6, m1.CountRows())
 	//assert.Equal(t, []float64{3, 4, 8, 8, 1, 0}, m1.Elements)
 }
+
+func TestMatrix_SetRow(t *testing.T) {
+	type args struct {
+		row    int
+		values []float64
+	}
+	tests := []struct {
+		name   string
+		matrix *Matrix
+		args   args
+		test   func(t *testing.T, matrix *Matrix)
+	}{
+		{
+			name:   "SetRow with adequate size",
+			matrix: NewMatrix(3, 3),
+			args: args{
+				row:    0,
+				values: []float64{0.01, 0.02, 0.03},
+			},
+			test: func(t *testing.T, matrix *Matrix) {
+				assert.Equal(t, []float64{0.01, 0.02, 0.03}, matrix.GetRow(0))
+				fmt.Printf("Result: %+v\n", matrix)
+			},
+		},
+		{
+			name:   "SetRow with larger size",
+			matrix: NewMatrix(3, 3),
+			args: args{
+				row:    2,
+				values: []float64{0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0},
+			},
+			test: func(t *testing.T, matrix *Matrix) {
+				assert.Equal(t, []float64{0.0, 0.0, 0.0}, matrix.GetRow(0))
+				assert.Equal(t, []float64{0.0, 0.0, 0.0}, matrix.GetRow(1))
+				assert.Equal(t, []float64{0.1, 0.2, 0.3}, matrix.GetRow(2))
+				fmt.Printf("Result: %+v\n", matrix)
+			},
+		},
+		{
+			name:   "SetRow with smaler size",
+			matrix: NewMatrix(3, 3),
+			args: args{
+				row:    1,
+				values: []float64{0.1, 0.2},
+			},
+			test: func(t *testing.T, matrix *Matrix) {
+				assert.Equal(t, []float64{0.0, 0.0, 0.0}, matrix.GetRow(0))
+				assert.Equal(t, []float64{0.1, 0.2, 0.0}, matrix.GetRow(1))
+				assert.Equal(t, []float64{0.0, 0.0, 0.0}, matrix.GetRow(2))
+			},
+		},
+		{
+			name:   "SetRow beyond matrix size",
+			matrix: NewMatrix(3, 3),
+			args: args{
+				row:    4,
+				values: []float64{0.1, 0.2},
+			},
+			test: func(t *testing.T, matrix *Matrix) {
+				assert.Equal(t, []float64{0.0, 0.0, 0.0}, matrix.GetRow(0))
+				assert.Equal(t, []float64{0, 0, 0}, matrix.GetRow(1))
+				assert.Equal(t, []float64{0.0, 0.0, 0.0}, matrix.GetRow(2))
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.matrix.SetRow(tt.args.row, tt.args.values)
+			tt.test(t, tt.matrix)
+		})
+	}
+}
+
+func TestMatrix_GetRow(t *testing.T) {
+	type args struct {
+		row    int
+		values []float64
+	}
+	tests := []struct {
+		name   string
+		matrix *Matrix
+		row    int
+		test   func(t *testing.T, row []float64)
+	}{
+		{
+			name:   "GetRow first row",
+			matrix: MakeMatrix([]float64{0.01, 0.02, 0.03, 0.1, 0.2, 0.3, 1.0, 2.0, 3.0}, 3, 3),
+			row:    0,
+			test: func(t *testing.T, row []float64) {
+				assert.Equal(t, []float64{0.01, 0.02, 0.03}, row)
+				fmt.Printf("Result: %+v\n", row)
+			},
+		},
+		{
+			name:   "GetRow last row",
+			matrix: MakeMatrix([]float64{0.01, 0.02, 0.03, 0.1, 0.2, 0.3, 1.0, 2.0, 3.0}, 3, 3),
+			row:    2,
+			test: func(t *testing.T, row []float64) {
+				assert.Equal(t, []float64{1.0, 2.0, 3.0}, row)
+				fmt.Printf("Result: %+v\n", row)
+			},
+		},
+		{
+			name:   "GetRow last + 1 row",
+			matrix: MakeMatrix([]float64{0.01, 0.02, 0.03, 0.1, 0.2, 0.3, 1.0, 2.0, 3.0}, 3, 3),
+			row:    3,
+			test: func(t *testing.T, row []float64) {
+				assert.Equal(t, []float64{0.0, 0.0, 0.0}, row)
+				fmt.Printf("Result: %+v\n", row)
+			},
+		},
+		{
+			name:   "GetRow with messed elements",
+			matrix: MakeMatrix([]float64{0.01, 0.02, 0.03}, 2, 2),
+			row:    1,
+			test: func(t *testing.T, row []float64) {
+				assert.Equal(t, []float64{0.03, 0.0}, row)
+				fmt.Printf("Result: %+v\n", row)
+			},
+		},
+		{
+			name:   "GetRow with messed elements - beginning row",
+			matrix: MakeMatrix([]float64{0.01, 0.02, 0.03}, 2, 2),
+			row:    0,
+			test: func(t *testing.T, row []float64) {
+				assert.Equal(t, []float64{0.01, 0.02}, row)
+				fmt.Printf("Result: %+v\n", row)
+			},
+		},
+		{
+			name:   "GetRow with messed elements - beyond matrix",
+			matrix: MakeMatrix([]float64{0.01, 0.02, 0.03}, 2, 2),
+			row:    2,
+			test: func(t *testing.T, row []float64) {
+				assert.Equal(t, []float64{0.0, 0.0}, row)
+				fmt.Printf("Result: %+v\n", row)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.test(t, tt.matrix.GetRow(tt.row))
+		})
+	}
+}

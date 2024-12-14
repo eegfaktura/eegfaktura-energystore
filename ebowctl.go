@@ -3,7 +3,7 @@ package main
 import (
 	"at.ourproject/energystore/config"
 	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/store"
+	"at.ourproject/energystore/store/ebow"
 	"fmt"
 	"regexp"
 
@@ -33,7 +33,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	db, err := store.OpenStorage(*tenant, *ecId)
+	db, err := ebow.OpenStorage(*tenant, *ecId)
 	if err != nil {
 		panic(err)
 	}

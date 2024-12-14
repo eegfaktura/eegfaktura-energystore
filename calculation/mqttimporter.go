@@ -2,8 +2,9 @@ package calculation
 
 import (
 	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/mqttclient"
+	//"at.ourproject/energystore/mqttclient"
 	"at.ourproject/energystore/store"
+	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
 	"context"
 	"encoding/json"
@@ -11,7 +12,6 @@ import (
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/golang/glog"
 	"sort"
-	"strings"
 	"time"
 )
 
@@ -20,48 +20,48 @@ type MqttInverterMessage struct {
 	tenant string
 }
 
-type MqttInverterImporter struct {
-	msgChan chan MqttInverterMessage
-	ctx     context.Context
-}
-
-func NewMqttInverterImporter(ctx context.Context) *MqttInverterImporter {
-	importer := &MqttInverterImporter{msgChan: make(chan MqttInverterMessage, 20), ctx: ctx}
-	go importer.process()
-	return importer
-}
-
-func (miv *MqttInverterImporter) Execute(msg mqtt.Message) {
-	tenant := mqttclient.TopicType(msg.Topic()).Tenant()
-	if len(tenant) == 0 {
-		return
-	}
-	data := decodeInverterMessage(msg.Payload())
-	if data == nil {
-		return
-	}
-
-	miv.msgChan <- MqttInverterMessage{data: data, tenant: tenant}
-}
+//type MqttInverterImporter struct {
+//	msgChan chan MqttInverterMessage
+//	ctx     context.Context
+//}
+//
+//func NewMqttInverterImporter(ctx context.Context) *MqttInverterImporter {
+//	importer := &MqttInverterImporter{msgChan: make(chan MqttInverterMessage, 20), ctx: ctx}
+//	go importer.process()
+//	return importer
+//}
+//
+//func (miv *MqttInverterImporter) Execute(msg mqtt.Message) {
+//	tenant := mqttclient.TopicType(msg.Topic()).Tenant()
+//	if len(tenant) == 0 {
+//		return
+//	}
+//	data := decodeInverterMessage(msg.Payload())
+//	if data == nil {
+//		return
+//	}
+//
+//	miv.msgChan <- MqttInverterMessage{data: data, tenant: tenant}
+//}
 
 var testInvCounter = 0
 
-func (miv *MqttInverterImporter) process() {
-	for {
-		select {
-		case msg := <-miv.msgChan:
-			glog.Infof("Execute Inverter Data Message for Topic (%v)\n", msg.tenant)
-			err := importEnergyV2(msg.tenant, "inverter", &msg.data.Message)
-			if err != nil {
-				glog.Error(err)
-			}
-			glog.Infof("Execution finished (Inv-Counter: %d)", testInvCounter)
-			testInvCounter += 1
-		case <-miv.ctx.Done():
-			break
-		}
-	}
-}
+//func (miv *MqttInverterImporter) process() {
+//	for {
+//		select {
+//		case msg := <-miv.msgChan:
+//			glog.Infof("Execute Inverter Data Message for Topic (%v)\n", msg.tenant)
+//			err := importEnergyV2(msg.tenant, "inverter", &msg.data.Message)
+//			if err != nil {
+//				glog.Error(err)
+//			}
+//			glog.Infof("Execution finished (Inv-Counter: %d)", testInvCounter)
+//			testInvCounter += 1
+//		case <-miv.ctx.Done():
+//			break
+//		}
+//	}
+//}
 
 type MqttMessage struct {
 	data   *model.MqttEnergyMessage
@@ -74,47 +74,65 @@ type MqttEnergyImporter struct {
 	ctx     context.Context
 }
 
-func NewMqttEnergyImporter(ctx context.Context) *MqttEnergyImporter {
-	importer := &MqttEnergyImporter{msgChan: make(chan MqttMessage, 20), ctx: ctx}
-	go importer.process()
-	return importer
+//func NewMqttEnergyImporter(ctx context.Context) *MqttEnergyImporter {
+//	importer := &MqttEnergyImporter{msgChan: make(chan MqttMessage, 20), ctx: ctx}
+//	go importer.process()
+//	return importer
+//}
+//
+//var gloablReceivedMsg int = 0
+//
+//func (mw *MqttEnergyImporter) Execute(msg mqtt.Message) {
+//	gloablReceivedMsg = gloablReceivedMsg + 1
+//	tenant := mqttclient.TopicType(msg.Topic()).Tenant()
+//	if len(tenant) == 0 {
+//		return
+//	}
+//	data := decodeMessage(msg.Payload())
+//	if data == nil {
+//		return
+//	}
+//
+//	mw.msgChan <- MqttMessage{data: data, tenant: tenant, ecId: data.EcId}
+//	glog.V(4).Infof("Received Messages %d\n", gloablReceivedMsg)
+//	//msg.Ack()
+//}
+//
+//var testCounter int64 = 0
+//
+//func (mw *MqttEnergyImporter) process() {
+//	for {
+//		select {
+//		case msg := <-mw.msgChan:
+//			glog.Infof("Execute Energy Data Message for Topic (%v)", msg.tenant)
+//			err := importEnergyV2(msg.tenant, msg.ecId, msg.data)
+//			if err != nil {
+//				glog.Error(err)
+//			}
+//			glog.Infof("Execution finished (%d - %v)", testCounter, msg.tenant)
+//			testCounter += 1
+//		case <-mw.ctx.Done():
+//			break
+//		}
+//	}
+//}
+
+type TenantEnergyImporter struct {
+	Tenant string
 }
 
-var gloablReceivedMsg int = 0
-
-func (mw *MqttEnergyImporter) Execute(msg mqtt.Message) {
-	gloablReceivedMsg = gloablReceivedMsg + 1
-	tenant := mqttclient.TopicType(msg.Topic()).Tenant()
-	if len(tenant) == 0 {
-		return
-	}
+func (tmw *TenantEnergyImporter) Execute(msg mqtt.Message) {
 	data := decodeMessage(msg.Payload())
 	if data == nil {
 		return
 	}
 
-	mw.msgChan <- MqttMessage{data: data, tenant: tenant, ecId: data.EcId}
-	glog.V(4).Infof("Received Messages %d\n", gloablReceivedMsg)
-	//msg.Ack()
-}
-
-var testCounter int64 = 0
-
-func (mw *MqttEnergyImporter) process() {
-	for {
-		select {
-		case msg := <-mw.msgChan:
-			glog.Infof("Execute Energy Data Message for Topic (%v)\n", msg.tenant)
-			err := importEnergyV2(msg.tenant, msg.ecId, msg.data)
-			if err != nil {
-				glog.Error(err)
-			}
-			glog.Infof("Execution finished (%d)", testCounter)
-			testCounter += 1
-		case <-mw.ctx.Done():
-			break
-		}
+	glog.Infof("Execute Energy Data Message for Topic (%v)", tmw.Tenant)
+	err := importEnergyV2(tmw.Tenant, data.EcId, data)
+	if err != nil {
+		glog.Error(err)
 	}
+	glog.Infof("Execution finished (%v)", tmw.Tenant)
 }
 
 func decodeInverterMessage(msg []byte) *model.MqttEnergyResponse {
@@ -139,23 +157,31 @@ func decodeMessage(msg []byte) *model.MqttEnergyMessage {
 	return &m
 }
 
-//var importLook = sync.Mutex{}
-
 func importEnergyV2(tenant, ecid string, data *model.MqttEnergyMessage) error {
-	db, err := store.OpenStorage(tenant, ecid)
+	db, err := ebow.OpenStorage(tenant, ecid)
 	if err != nil {
 		return err
 	}
 	defer func() { db.Close() }()
 
-	defaultDirection := utils.ExamineDirection(data.Energy.Data)
+	for i := range data.Energy {
+		if err := storeEnergyV2(db, data.Meter.MeteringPoint, &data.Energy[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func storeEnergyV2(db *ebow.BowStorage, meteringPoint string, data *model.MqttEnergy) error {
+
+	defaultDirection := utils.ExamineDirection(data.Data)
 
 	var consumerCount int
 	var producerCount int
 	var metaCP *model.CounterPointMeta
 
 	determineMeta := func() error {
-		meta, info, err := store.PrepareMetaInfoMap(db, data.Meter.MeteringPoint, defaultDirection)
+		meta, info, err := store.PrepareMetaInfoMap(db, meteringPoint, defaultDirection)
 		if err != nil {
 			return err
 		}
@@ -163,7 +189,7 @@ func importEnergyV2(tenant, ecid string, data *model.MqttEnergyMessage) error {
 		consumerCount = info.ConsumerCount
 		producerCount = info.ProducerCount
 
-		metaCP = meta[data.Meter.MeteringPoint]
+		metaCP = meta[meteringPoint]
 		return nil
 	}
 
@@ -172,61 +198,35 @@ func importEnergyV2(tenant, ecid string, data *model.MqttEnergyMessage) error {
 		return err
 	}
 
-	meterCodeMeta := map[string]*model.MeterCodeMeta{}
-	meterCodeMetaExt := map[string]*model.MeterCodeMeta{}
-	for i, d := range data.Energy.Data {
-		if meterMeta := utils.DecodeMeterCode(d.MeterCode, i); meterMeta != nil {
-			//if _, ok := meterCodeMeta[meterMeta.Type]; ok {
-			//	if d.MeterCode == model.CODE_GEN || d.MeterCode == model.CODE_CON {
-			//		continue
-			//	}
-			//}
-			if d.MeterCode == model.CODE_CON_TF || d.MeterCode == model.CODE_GEN_TF || d.MeterCode == model.CODE_COVER_TF || d.MeterCode == model.CODE_PLUS_TF {
-				//if strings.ToUpper(tenant[:2]) != "CC" && d.MeterCode == model.CODE_COVER_TF {
-				//	continue
-				//}
-				meterCodeMetaExt[meterMeta.Type] = meterMeta
-				continue
-			}
-			meterCodeMeta[meterMeta.Type] = meterMeta
-		}
-	}
-	optimizeMeterCodeImport(tenant, metaCP.Dir, meterCodeMeta, meterCodeMetaExt)
-
 	var resources map[string]*model.RawSourceLine = map[string]*model.RawSourceLine{}
-	begin := time.UnixMilli(data.Energy.Start)
-	end := time.UnixMilli(data.Energy.End)
+	begin := time.UnixMilli(data.Start)
+	end := time.UnixMilli(data.End)
 	fetchSourceRange(db, "CP", begin, end, resources)
 
-	///
-	for _, v := range meterCodeMeta {
-		resources, err = importEnergyValuesV2(v, data.Energy, metaCP, consumerCount, producerCount, resources, false)
-		// Store updated RawDataStructure
-		glog.V(5).Infof("Update CP %s energy values (%d) from %s to %s",
-			data.Meter.MeteringPoint,
-			len(resources),
-			time.UnixMilli(data.Energy.Start).Format(time.RFC822),
-			time.UnixMilli(data.Energy.End).Format(time.RFC822))
-		if err != nil {
-			return err
-		}
+	var err error
+	metaMeter := organizeMetaCodeImport(data.Data)
+	if len(metaMeter) > 0 {
+		resources, err = importEnergyValuesV2(metaMeter, data, metaCP, consumerCount, producerCount, resources, false)
+	}
+	glog.V(5).Infof("Update CP %s energy values (%d) from %s to %s",
+		meteringPoint,
+		len(resources),
+		time.UnixMilli(data.Start).Format(time.RFC822),
+		time.UnixMilli(data.End).Format(time.RFC822))
+	if err != nil {
+		return err
 	}
 
-	// Check extended Rows for input - CODE_GEN_TF, CODE_PLUS_TF, ...
-	for _, v := range meterCodeMetaExt {
-		resources, err = importEnergyValuesV2(v, data.Energy, metaCP, consumerCount, producerCount, resources, true)
-		// Store updated RawDataStructure
-		glog.V(5).Infof("Update/Override CP %s (%x) energy values (%d) from %s to %s",
-			data.Meter.MeteringPoint,
-			v.Code,
-			len(resources),
-			time.UnixMilli(data.Energy.Start).Format(time.RFC822),
-			time.UnixMilli(data.Energy.End).Format(time.RFC822))
-		if err != nil {
-			return err
-		}
+	// Store updated RawDataStructure
+	glog.V(5).Infof("Update/Override CP %s (%+v) energy values (%d) from %s to %s",
+		meteringPoint,
+		metaMeter,
+		len(resources),
+		time.UnixMilli(data.Start).Format(time.RFC822),
+		time.UnixMilli(data.End).Format(time.RFC822))
+	if err != nil {
+		return err
 	}
-	///
 
 	updated := make([]*model.RawSourceLine, len(resources))
 	i := 0
@@ -239,92 +239,72 @@ func importEnergyV2(tenant, ecid string, data *model.MqttEnergyMessage) error {
 
 	err = db.SetLines(updated)
 
-	if c := updateMetaCP(metaCP, time.UnixMilli(data.Energy.Start), time.UnixMilli(data.Energy.End)); c {
-		err = updateMeta(db, metaCP, data.Meter.MeteringPoint)
+	if c := updateMetaCP(metaCP, time.UnixMilli(data.Start), time.UnixMilli(data.End)); c {
+		err = updateMeta(db, metaCP, meteringPoint)
 	}
 	return nil
 }
 
-func optimizeMeterCodeImport(tenant string, direction model.MeterDirection, metaCode, metaCodeExt map[string]*model.MeterCodeMeta) {
-
-	if direction == model.CONSUMER_DIRECTION {
-		if _, exists := metaCode["COVER"]; exists == false {
-			if _, e := metaCodeExt["COVER"]; e {
-				metaCode["COVER"] = metaCodeExt["COVER"]
-				delete(metaCodeExt, "COVER")
+func organizeMetaCodeImport(data []model.MqttEnergyData) []*model.MeterCodeMeta {
+	meterCodeMeta := []*model.MeterCodeMeta{}
+	meterCodeMetaExt := []*model.MeterCodeMeta{}
+	for i, d := range data {
+		if meterMeta := utils.DecodeMeterCode(d.MeterCode, i); meterMeta != nil {
+			if d.MeterCode == model.CODE_CON_TF || d.MeterCode == model.CODE_GEN_TF || d.MeterCode == model.CODE_COVER_TF || d.MeterCode == model.CODE_PLUS_TF {
+				if d.MeterCode != model.CODE_COVER_TF {
+					meterCodeMetaExt = append(meterCodeMetaExt, meterMeta)
+				}
+				continue
 			}
+			meterCodeMeta = append(meterCodeMeta, meterMeta)
 		}
-
-		if _, exists := metaCode["CON"]; exists == false {
-			if _, e := metaCodeExt["CON"]; e {
-				metaCode["CON"] = metaCodeExt["CON"]
-				delete(metaCodeExt, "CON")
-			}
-		}
-
-		if _, exists := metaCodeExt["COVER"]; exists {
-			if strings.ToUpper(tenant[:2]) != "CC" {
-				delete(metaCodeExt, "COVER")
-			}
-		}
-
-	} else {
-		if _, exists := metaCode["GEN"]; exists == false {
-			if _, e := metaCodeExt["GEN"]; e {
-				metaCode["GEN"] = metaCodeExt["GEN"]
-				delete(metaCodeExt, "GEN")
-			}
-		}
-
-		if _, exists := metaCode["PLUS"]; exists == false {
-			if _, e := metaCodeExt["PLUS"]; e {
-				metaCode["PLUS"] = metaCodeExt["PLUS"]
-				delete(metaCodeExt, "PLUS")
-			}
-		}
-
 	}
+	return append(meterCodeMeta, meterCodeMetaExt...)
 }
 
 func importEnergyValuesV2(
-	meterCode *model.MeterCodeMeta,
-	data model.MqttEnergy,
+	meterCode []*model.MeterCodeMeta,
+	data *model.MqttEnergy,
 	metaCP *model.CounterPointMeta,
 	consumerCount, producerCount int,
 	resources map[string]*model.RawSourceLine,
 	isExt bool) (map[string]*model.RawSourceLine, error) {
 
-	sort.Slice(data.Data[meterCode.SourceInData].Value, func(i, j int) bool {
-		a := time.UnixMilli(data.Data[meterCode.SourceInData].Value[i].From)
-		b := time.UnixMilli(data.Data[meterCode.SourceInData].Value[j].From)
-		return a.Unix() < b.Unix()
-	})
+	for _, mc := range meterCode {
+		sort.Slice(data.Data[mc.SourceInData].Value, func(i, j int) bool {
+			a := time.UnixMilli(data.Data[mc.SourceInData].Value[i].From)
+			b := time.UnixMilli(data.Data[mc.SourceInData].Value[j].From)
+			return a.Unix() < b.Unix()
+		})
+	}
 
 	var tablePrefix = "CP/"
-	rowIdVisited := map[string]bool{}
-	for _, v := range data.Data[meterCode.SourceInData].Value {
-		//if isExt && v.Value == 0 {
-		//	continue
-		//}
+	for _, mc := range meterCode {
+		if mc.SourceInData < len(data.Data) {
+			rowIdVisited := map[string]bool{}
+			for i := 0; i < len(data.Data[mc.SourceInData].Value); i++ {
+				v := data.Data[mc.SourceInData].Value[i]
 
-		id, err := utils.ConvertUnixTimeToRowId(tablePrefix, time.UnixMilli(v.From))
-		if err != nil {
-			return resources, err
-		}
-		_, ok := resources[id]
-		if !ok {
-			resources[id] = model.MakeRawSourceLine(id, consumerCount, producerCount) //&model.RawSourceLine{Id: id, Consumers: make([]float64, consumerCount), Producers: make([]float64, producerCount)}
-		}
-
-		// Just a specific function for winter-time-switch. If in a energy day file timestamps occur twice add those values.
-		if _, visited := rowIdVisited[id]; visited {
-			// sum value to
-			sumEnergyValueToResource(resources[id], metaCP, meterCode, v, isExt)
+				id, err := utils.ConvertUnixTimeToRowId(tablePrefix, time.UnixMilli(v.From))
+				if err != nil {
+					return resources, err
+				}
+				_, ok := resources[id]
+				if !ok {
+					resources[id] = model.MakeRawSourceLine(id, consumerCount, producerCount) //&model.RawSourceLine{Id: id, Consumers: make([]float64, consumerCount), Producers: make([]float64, producerCount)}
+				}
+				_, visited := rowIdVisited[id]
+				if visited {
+					// Just a specific function for winter-time-switch. If in an energy day file timestamps occur twice add those values.
+					sumEnergyValueToResource(resources[id], metaCP, mc, v, isExt)
+				} else {
+					addEnergyValueToResource(resources[id], metaCP, mc, v, isExt)
+				}
+				rowIdVisited[id] = true
+			}
 		} else {
-			addEnergyValueToResource(resources[id], metaCP, meterCode, v, isExt)
+			glog.Errorf("Energie Values %+v different %+v", mc, metaCP)
 		}
-		rowIdVisited[id] = true
-
 	}
 	return resources, nil
 }
@@ -368,7 +348,7 @@ func addEnergyValueToResource(resource *model.RawSourceLine, metaCP *model.Count
 	}
 }
 
-func fetchSourceRange(db *store.BowStorage, key string, start, end time.Time, resources map[string]*model.RawSourceLine) {
+func fetchSourceRange(db *ebow.BowStorage, key string, start, end time.Time, resources map[string]*model.RawSourceLine) {
 	sYear, sMonth, sDay := start.Year(), int(start.Month()), start.Day()
 	eYear, eMonth, eDay := end.Year(), int(end.Month()), end.Day()
 
@@ -400,7 +380,7 @@ func updateMetaCP(metaCP *model.CounterPointMeta, begin, end time.Time) bool {
 	return changed
 }
 
-func updateMeta(db *store.BowStorage, metaCP *model.CounterPointMeta, cp string) error {
+func updateMeta(db *ebow.BowStorage, metaCP *model.CounterPointMeta, cp string) error {
 	var err error
 	var meta *model.RawSourceMeta
 	if meta, err = db.GetMeta(fmt.Sprintf("cpmeta/%s", "0")); err == nil {

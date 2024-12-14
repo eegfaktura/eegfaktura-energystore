@@ -3,6 +3,7 @@ package excel
 import (
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
+	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
 	"bytes"
 	"errors"
@@ -40,6 +41,7 @@ type ParticipantCp struct {
 	Name          string                  `json:"name"`
 	Report        model.EnergyDescription `json:"report"`
 	QoV           bool                    `json:"qov"`
+	QoVSum        [3]bool                 `json:"qoVSum,omitempty"`
 }
 
 type SummaryMeterResult struct {
@@ -49,6 +51,9 @@ type SummaryMeterResult struct {
 	EndDate       string
 	ActivePeriod  string
 	DataOk        bool
+	DataL0        bool
+	DataL2        bool
+	DataL3        bool
 	Total         float64
 	Coverage      float64
 	Share         float64
@@ -115,7 +120,7 @@ type RunnerContext struct {
 	checkBegin      func(lineDate, mDate time.Time) bool
 }
 
-func createRunnerContext(db store.IBowStorage, start, end time.Time, cps *ExportParticipantEnergy) (*RunnerContext, error) {
+func createRunnerContext(db ebow.IBowStorage, start, end time.Time, cps *ExportParticipantEnergy) (*RunnerContext, error) {
 	metaMap, info, err := store.GetMetaInfo(db)
 	if err != nil {
 		return nil, err
@@ -228,7 +233,7 @@ func (er *EnergyRunner) closeSheets(ctx *RunnerContext) error {
 	return nil
 }
 
-func (er *EnergyRunner) run(db store.IBowStorage, f *excelize.File, start, end time.Time, cps *ExportParticipantEnergy) (*bytes.Buffer, error) {
+func (er *EnergyRunner) run(db ebow.IBowStorage, f *excelize.File, start, end time.Time, cps *ExportParticipantEnergy) (*bytes.Buffer, error) {
 	rCxt, err := createRunnerContext(db, start, end, cps)
 	if err != nil {
 		return nil, err
@@ -294,7 +299,7 @@ func (er *EnergyRunner) run(db store.IBowStorage, f *excelize.File, start, end t
 }
 
 func ExportEnergyToExcel(tenant, ecid string, start, end time.Time, cps *ExportParticipantEnergy) (*bytes.Buffer, error) {
-	db, err := store.OpenStorage(tenant, ecid)
+	db, err := ebow.OpenStorage(tenant, ecid)
 	if err != nil {
 		return nil, err
 	}
@@ -303,7 +308,7 @@ func ExportEnergyToExcel(tenant, ecid string, start, end time.Time, cps *ExportP
 	f := excelize.NewFile()
 	defer func() {
 		if err := f.Close(); err != nil {
-			glog.Error(err)
+			glog.Errorf("tenant=%s err: %v", tenant, err)
 		}
 	}()
 
@@ -311,7 +316,6 @@ func ExportEnergyToExcel(tenant, ecid string, start, end time.Time, cps *ExportP
 		&SummarySheet{name: "Summary", excel: f},
 		&EnergySheet{name: "Energiedaten", excel: f},
 	})
-
 	return runner.run(db, f, start, end, cps)
 }
 
@@ -334,7 +338,8 @@ func addLine(ctx *RunnerContext, line *model.RawSourceLine, stylesQoV []int) []i
 
 	participantCells := func(p *ParticipantCp, m *model.CounterPointMeta) []interface{} {
 		if p.Direction == model.CONSUMER_DIRECTION {
-			if lineDate.Before(time.UnixMilli(p.ActiveSince)) || lineDate.After(time.UnixMilli(p.InactiveSince)) {
+			if utils.IsLineDateOutOfRange(lineDate, [2]int64{p.ActiveSince, p.InactiveSince}) {
+				//if lineDate.Before(time.UnixMilli(p.ActiveSince)) || lineDate.After(time.UnixMilli(p.InactiveSince)) {
 				return []interface{}{
 					excelize.Cell{Value: ""},
 					excelize.Cell{Value: ""},
@@ -347,7 +352,8 @@ func addLine(ctx *RunnerContext, line *model.RawSourceLine, stylesQoV []int) []i
 				setCellValue1(m.SourceIdx, 2, consumerMatrix, utils.GetInt(line.QoVConsumers, (m.SourceIdx*3)+2)),
 			}
 		} else {
-			if lineDate.Before(time.UnixMilli(p.ActiveSince)) || lineDate.After(time.UnixMilli(p.InactiveSince)) {
+			if utils.IsLineDateOutOfRange(lineDate, [2]int64{p.ActiveSince, p.InactiveSince}) {
+				//if lineDate.Before(time.UnixMilli(p.ActiveSince)) || lineDate.After(time.UnixMilli(p.InactiveSince)) {
 				return []interface{}{
 					excelize.Cell{Value: ""},
 					excelize.Cell{Value: ""},

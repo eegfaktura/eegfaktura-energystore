@@ -2,7 +2,7 @@ package excel
 
 import (
 	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/store"
+	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
 	"fmt"
 	"github.com/golang/glog"
@@ -20,7 +20,7 @@ func calcRawDataMatrixLen(a []float64, step int) int {
 	return int(math.Ceil(float64(l) / float64(step)))
 }
 
-func ImportExcelEnergyFileNew(f *excelize.File, sheet string, db store.IBowStorage) error {
+func ImportExcelEnergyFileNew(f *excelize.File, sheet string, db ebow.IBowStorage) error {
 
 	exp := "DD.MM.YYYY HH:MM:SS"
 	style, err := f.NewStyle(&excelize.Style{CustomNumFmt: &exp})

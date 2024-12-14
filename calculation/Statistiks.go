@@ -2,7 +2,7 @@ package calculation
 
 import (
 	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/store"
+	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
 	"fmt"
 )
@@ -15,7 +15,7 @@ func GetCalcFunc(id string) CalcHandler {
 	return nil
 }
 
-func CalcWhenProduced(db *store.BowStorage, period string) (*model.Matrix, *model.Matrix, *model.Matrix, *model.Matrix, *model.Matrix, float64) {
+func CalcWhenProduced(db *ebow.BowStorage, period string) (*model.Matrix, *model.Matrix, *model.Matrix, *model.Matrix, *model.Matrix, float64) {
 	iter := db.GetLinePrefix(fmt.Sprintf("CP/%s", period))
 	defer iter.Close()
 

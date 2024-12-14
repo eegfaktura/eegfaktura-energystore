@@ -1,37 +1,35 @@
-package store
+package ebow
 
 import (
 	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/store/ebow"
 	"errors"
 	"fmt"
-	"github.com/golang/glog"
 	"sync"
 )
 
 var (
-	connectionPool = ebow.NewPool(20)
+	connectionPool = NewPool(20)
 )
 
-type ebowLogger struct {
-	level glog.Level
-}
+//type ebowLogger struct {
+//	level glog.Level
+//}
 
-func (el ebowLogger) Infof(format string, args ...interface{}) {
-	glog.V(el.level).Infof(format, args...)
-}
-
-func (el ebowLogger) Warningf(format string, args ...interface{}) {
-	glog.Warningf(format, args...)
-}
-
-func (el ebowLogger) Errorf(format string, args ...interface{}) {
-	glog.Errorf(format, args...)
-}
-
-func (el ebowLogger) Debugf(format string, args ...interface{}) {
-	glog.V(el.level).Infof(format, args...)
-}
+//func (el ebowLogger) Infof(format string, args ...interface{}) {
+//	glog.V(el.level).Infof(format, args...)
+//}
+//
+//func (el ebowLogger) Warningf(format string, args ...interface{}) {
+//	glog.Warningf(format, args...)
+//}
+//
+//func (el ebowLogger) Errorf(format string, args ...interface{}) {
+//	glog.Errorf(format, args...)
+//}
+//
+//func (el ebowLogger) Debugf(format string, args ...interface{}) {
+//	glog.V(el.level).Infof(format, args...)
+//}
 
 // Prevent multiple goroutines from accessing the same resource at the same time (forces turn taking)
 type Turns struct {
@@ -63,15 +61,15 @@ func (t *Turns) lock(name string) func() {
 type IBowStorage interface {
 	GetMeta(key string) (*model.RawSourceMeta, error)
 	SetMeta(line *model.RawSourceMeta) error
-	GetLineRange(bucket, key, until string) ebow.IRange
+	GetLineRange(bucket, key, until string) IRange
 	SetLines(line []*model.RawSourceLine) error
 	GetLine(line *model.RawSourceLine) error
 	ListBuckets() ([]string, error)
 }
 
 type BowStorage struct {
-	db       *ebow.DB
-	dbObject *ebow.DbObject
+	db       *DB
+	dbObject *DbObject
 	ecId     string
 	unlock   func()
 }
@@ -154,11 +152,11 @@ func (b *BowStorage) GetMeta(key string) (*model.RawSourceMeta, error) {
 	return &rawMeta, err
 }
 
-func (b *BowStorage) GetLinePrefix(key string) *ebow.Iter {
+func (b *BowStorage) GetLinePrefix(key string) *Iter {
 	return b.db.Bucket("rawdata").Prefix(key)
 }
 
-func (b *BowStorage) GetLineRange(bucket, key, until string) ebow.IRange {
+func (b *BowStorage) GetLineRange(bucket, key, until string) IRange {
 	return b.db.Bucket("rawdata").Range(fmt.Sprintf("%s/%s", bucket, key), fmt.Sprintf("%s/%s", bucket, until))
 }
 
@@ -176,7 +174,7 @@ func (b *BowStorage) ListBuckets() ([]string, error) {
 	return b.db.Buckets(), nil
 }
 
-func (b *BowStorage) GetBucket(name string) (*ebow.Iter, error) {
+func (b *BowStorage) GetBucket(name string) (*Iter, error) {
 	return b.db.Bucket(name).Iter(), nil
 }
 

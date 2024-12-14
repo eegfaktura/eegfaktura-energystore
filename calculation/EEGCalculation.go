@@ -20,7 +20,7 @@ Return:
 	Produced: Energy value Produced by generator
 	Share: produced value divided to consumers.
 */
-type CalcHandler func(*store.BowStorage, string) (*model.Matrix, *model.Matrix, *model.Matrix, *model.Matrix, *model.Matrix, float64)
+type CalcHandler func(*ebow.BowStorage, string) (*model.Matrix, *model.Matrix, *model.Matrix, *model.Matrix, *model.Matrix, float64)
 type AllocationHandler func(*model.RawSourceLine) (*model.Matrix, *model.Matrix, *model.Matrix)
 
 type AllocationHandlerV2 func(*model.Matrix, *model.Matrix) (*model.Matrix, *model.Matrix, *model.Matrix)
@@ -49,7 +49,7 @@ func newCalcResult(metaInfo *model.CounterPointMetaInfo) *calcResults {
 	}
 }
 
-func CalculateEEG(db *store.BowStorage, period string) (*model.Matrix, *model.Matrix, *model.Matrix, *model.Matrix, *model.Matrix, float64) {
+func CalculateEEG(db *ebow.BowStorage, period string) (*model.Matrix, *model.Matrix, *model.Matrix, *model.Matrix, *model.Matrix, float64) {
 	metaMap, err := store.GetConsumerMetaMap(db)
 	if err != nil {
 		return nil, nil, nil, nil, nil, 0
@@ -270,7 +270,7 @@ func calculateReport(iter ValueIterator,
 		TotalProduced: results.pSum}, nil
 }
 
-func CalculateMonthlyPeriod(db *store.BowStorage, allocFunc AllocationHandlerV2, year, month int) ([]*model.EnergyReport, *model.EnergyReport, error) {
+func CalculateMonthlyPeriod(db *ebow.BowStorage, allocFunc AllocationHandlerV2, year, month int) ([]*model.EnergyReport, *model.EnergyReport, error) {
 	rowPrefix := "CP"
 	_, metaInfo, err := store.GetMetaInfo(db)
 	if err != nil {
@@ -298,7 +298,7 @@ func CalculateMonthlyPeriod(db *store.BowStorage, allocFunc AllocationHandlerV2,
 	)
 }
 
-func CalculateAnnualPeriod(db *store.BowStorage, allocFunc AllocationHandlerV2, year int) ([]*model.EnergyReport, *model.EnergyReport, error) {
+func CalculateAnnualPeriod(db *ebow.BowStorage, allocFunc AllocationHandlerV2, year int) ([]*model.EnergyReport, *model.EnergyReport, error) {
 	//rowPrefix := "CP-G.01"
 	rowPrefix := "CP"
 	_, metaInfo, err := store.GetMetaInfo(db)
@@ -327,7 +327,7 @@ func CalculateAnnualPeriod(db *store.BowStorage, allocFunc AllocationHandlerV2, 
 	)
 }
 
-func CalculateBiAnnualPeriod(db *store.BowStorage, allocFunc AllocationHandlerV2, year, segment int) ([]*model.EnergyReport, *model.EnergyReport, error) {
+func CalculateBiAnnualPeriod(db *ebow.BowStorage, allocFunc AllocationHandlerV2, year, segment int) ([]*model.EnergyReport, *model.EnergyReport, error) {
 	rowPrefix := "CP"
 	_, metaInfo, err := store.GetMetaInfo(db)
 	if err != nil {
@@ -361,7 +361,7 @@ func CalculateBiAnnualPeriod(db *store.BowStorage, allocFunc AllocationHandlerV2
 	)
 }
 
-func CalculateQuarterlyPeriod(db *store.BowStorage, allocFunc AllocationHandlerV2, year, segment int) ([]*model.EnergyReport, *model.EnergyReport, error) {
+func CalculateQuarterlyPeriod(db *ebow.BowStorage, allocFunc AllocationHandlerV2, year, segment int) ([]*model.EnergyReport, *model.EnergyReport, error) {
 	rowPrefix := "CP"
 	_, metaInfo, err := store.GetMetaInfo(db)
 	if err != nil {
@@ -466,7 +466,7 @@ func CalculateQuarterlyPeriod(db *store.BowStorage, allocFunc AllocationHandlerV
 //	return CalculateReport(db, start, end, calc)
 //}
 
-func CalculateReport(db *store.BowStorage, start, end time.Time, calc CalcHandler) ([]*model.EnergyReport, *model.EnergyReport, error) {
+func CalculateReport(db *ebow.BowStorage, start, end time.Time, calc CalcHandler) ([]*model.EnergyReport, *model.EnergyReport, error) {
 	var report_am, report_cm, report_pm, report_dm, report_sm *model.Matrix = &model.Matrix{}, &model.Matrix{}, &model.Matrix{}, &model.Matrix{}, &model.Matrix{}
 	var report_ps float64 = 0.0
 
@@ -523,7 +523,7 @@ func CalculateReport(db *store.BowStorage, start, end time.Time, calc CalcHandle
 		TotalProduced: report_ps}, nil
 }
 
-func CalculateYearlyReport(db *store.BowStorage, year int, calc CalcHandler) ([]*model.EnergyReport, *model.EnergyReport, error) {
+func CalculateYearlyReport(db *ebow.BowStorage, year int, calc CalcHandler) ([]*model.EnergyReport, *model.EnergyReport, error) {
 	monthReports := []*model.EnergyReport{}
 	resAnnual := &model.EnergyReport{}
 

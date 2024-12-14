@@ -1,7 +1,7 @@
 package excel
 
 import (
-	"at.ourproject/energystore/store"
+	"at.ourproject/energystore/store/ebow"
 	"errors"
 	"io"
 	"path/filepath"
@@ -11,7 +11,7 @@ import (
 
 func ImportFile(tenant, ecId, filename, sheet string, file io.Reader) error {
 	glog.Info("Start Import")
-	db, err := store.OpenStorage(tenant, ecId)
+	db, err := ebow.OpenStorage(tenant, ecId)
 	if err != nil {
 		return err
 	}
@@ -20,7 +20,7 @@ func ImportFile(tenant, ecId, filename, sheet string, file io.Reader) error {
 	return ImportEEG(db, file, filename, sheet, tenant)
 }
 
-func ImportEEG(db *store.BowStorage, r io.Reader, filename, sheet, tenant string) error {
+func ImportEEG(db *ebow.BowStorage, r io.Reader, filename, sheet, tenant string) error {
 	/*
 		Path:  "/home/petero/Downloads/AT00300DUMMY_20210101_20211231_202202181342.xlsx"
 		Sheet: "ConsumptionDataReport"

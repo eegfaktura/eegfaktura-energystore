@@ -163,12 +163,12 @@ func checkQoV(ctx *RunnerContext, line *model.RawSourceLine) bool {
 	//	return false
 	//}
 
-	checkDate := func(start, end int64, lineDate time.Time) bool {
-		if lineDate.Before(time.UnixMilli(start)) || lineDate.After(time.UnixMilli(end)) {
-			return true
-		}
-		return false
-	}
+	//checkDate := func(start, end int64, lineDate time.Time) bool {
+	//	if lineDate.Before(time.UnixMilli(start)) || lineDate.After(time.UnixMilli(end)) {
+	//		return true
+	//	}
+	//	return false
+	//}
 
 	nok := false
 	for _, cp := range ctx.cps {
@@ -182,7 +182,8 @@ func checkQoV(ctx *RunnerContext, line *model.RawSourceLine) bool {
 				_ = p
 			}
 			baseIdx := m.SourceIdx * 3
-			if checkDate(cp.ActiveSince, cp.InactiveSince, lineDate) {
+			if utils.IsLineDateOutOfRange(lineDate, [2]int64{cp.ActiveSince, cp.InactiveSince}) {
+				//if checkDate(cp.ActiveSince, cp.InactiveSince, lineDate) {
 				continue
 			}
 			nok =
@@ -191,7 +192,8 @@ func checkQoV(ctx *RunnerContext, line *model.RawSourceLine) bool {
 					utils.GetInt(line.QoVConsumers, baseIdx+2) != 1
 		} else {
 			baseIdx := m.SourceIdx * 2
-			if checkDate(cp.ActiveSince, cp.InactiveSince, lineDate) {
+			if utils.IsLineDateOutOfRange(lineDate, [2]int64{cp.ActiveSince, cp.InactiveSince}) {
+				//if checkDate(cp.ActiveSince, cp.InactiveSince, lineDate) {
 				continue
 			}
 			nok =

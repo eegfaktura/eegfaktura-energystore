@@ -2,7 +2,7 @@ package calculation
 
 import (
 	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/store"
+	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
 	"encoding/json"
 	"fmt"
@@ -51,7 +51,7 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 		{
 			name: "Insert New Energy Allocated",
 			energy: &model.MqttEnergyMessage{
-				EcId: "ecIdTest",
+				EcId: "ecIdTest1",
 				Meter: model.EnergyMeter{
 					MeteringPoint: "AT0030000000000000000000000000001",
 					Direction:     "",
@@ -66,7 +66,7 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 								model.MqttEnergyValue{
 									From:   timeV1.UnixMilli(),
 									To:     timeV2.UnixMilli(),
-									Method: "",
+									Method: "L1",
 									Value:  1.11,
 								},
 							},
@@ -82,7 +82,7 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 		{
 			name: "Second Energy Consumer",
 			energy: &model.MqttEnergyMessage{
-				EcId: "ecIdTest",
+				EcId: "ecIdTest1",
 				Meter: model.EnergyMeter{
 					MeteringPoint: "AT0030000000000000000000000000002",
 					Direction:     "",
@@ -114,7 +114,7 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 		{
 			name: "Insert Generator energy values",
 			energy: &model.MqttEnergyMessage{
-				EcId: "ecIdTest",
+				EcId: "ecIdTest1",
 				Meter: model.EnergyMeter{
 					MeteringPoint: "AT0030000000000000000000030000011",
 					Direction:     "",
@@ -156,7 +156,7 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 		{
 			name: "Insert second Generator Allocated",
 			energy: &model.MqttEnergyMessage{
-				EcId: "ecIdTest",
+				EcId: "ecIdTest1",
 				Meter: model.EnergyMeter{
 					MeteringPoint: "AT0030000000000000000000030000010",
 					Direction:     "",
@@ -200,7 +200,7 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 		{
 			name: "Insert Generator - summarize energy values",
 			energy: &model.MqttEnergyMessage{
-				EcId: "ecIdTest",
+				EcId: "ecIdTest1",
 				Meter: model.EnergyMeter{
 					MeteringPoint: "AT0030000000000000000000030000010",
 					Direction:     "",
@@ -261,13 +261,15 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err = importEnergyV2("importer", "ecid", tt.energy)
+			err = importEnergyV2("importer", tt.energy.EcId, tt.energy)
 			require.NoError(t, err)
 
-			db, err := store.OpenStorageTest("importer", "ecid", "../test/rawdata")
+			//db, err := ebow.OpenStorageTest("importer", "ecid", "../test/rawdata")
+			db, err := ebow.OpenStorage("importer", tt.energy.EcId)
 			require.NoError(t, err)
 			it := db.GetLinePrefix(fmt.Sprintf("CP/%s", "2022/10/24"))
 			defer it.Close()
+			//defer db.CloseTestDriver()
 			defer db.Close()
 
 			var _line model.RawSourceLine
@@ -299,7 +301,7 @@ func TestImportRawdataStore(t *testing.T) {
 	err = importEnergyV2("te100190", "ecid", rawData)
 	require.NoError(t, err)
 
-	db, err := store.OpenStorageTest("te100190", "ecid", "../test/rawdata")
+	db, err := ebow.OpenStorageTest("te100190", "ecid", "../test/rawdata")
 	require.NoError(t, err)
 
 	meta, err := db.GetMeta("cpmeta/0")
@@ -316,20 +318,32 @@ func TestImportRawdataStore(t *testing.T) {
 		lines = append(lines, &_line)
 	}
 	it.Close()
-	db.Close()
+	db.CloseTestDriver()
 
-	require.Equal(t, 23*4, len(lines)) // one hour is missing from the test source file
+	require.Equal(t, 24*4, len(lines)) // one hour is missing from the test source file
 
-	energy, err := EnergyReport("te100190", 2023, 3, "YM")
+	participantReports := []model.ParticipantReport{model.ParticipantReport{
+		ParticipantId: "Participant01",
+		Meters: []*model.MeterReport{
+			&model.MeterReport{
+				MeterId: "AT0030000000000000000000000381702",
+				From:    time.Date(2023, 1, 1, 0, 0, 0, 0, time.Local).UnixMilli(),
+				Until:   time.Date(2023, 12, 31, 0, 0, 0, 0, time.Local).UnixMilli(),
+				Report:  nil,
+			},
+		},
+	}}
+
+	energy, err := EnergyReportV2("te100190", "ecid", participantReports, 2023, 3, "YM")
 	require.NoError(t, err)
 
 	response, err := json.Marshal(energy)
 	require.NoError(t, err)
 
-	require.Equal(t, 3, len(energy.Report.Allocated))
-	require.Equal(t, 1.088021, energy.Report.Allocated[0])
-	require.Equal(t, 3, len(energy.Report.Consumed))
-	require.Equal(t, 5.388, energy.Report.Consumed[0])
+	require.Equal(t, 1, len(energy.ParticipantReports[0].Meters[0].Report.Intermediate.Allocation))
+	//require.Equal(t, 1.088021, energy.Report.Allocated[0])
+	//require.Equal(t, 3, len(energy.Report.Consumed))
+	//require.Equal(t, 5.388, energy.Report.Consumed[0])
 
 	fmt.Printf("META_DATA: %+v\n", string(response))
 

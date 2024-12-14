@@ -74,6 +74,30 @@ func (A *Matrix) SetElm(row int, col int, v float64) {
 	A.Elements[index] = v
 }
 
+func (A *Matrix) SetRow(row int, values []float64) {
+	if row >= A.Rows || row < 0 {
+		return
+	}
+
+	_values := make([]float64, A.step)
+	copy(_values, values)
+	//copy(A.Elements[row*A.step:], _values) // Speed up set process
+	length := int(math.Min(float64(len(_values)), float64(A.step)))
+	for i := 0; i < length; i += 1 {
+		A.Elements[row*A.step+i] = _values[i]
+	}
+}
+
+func (A *Matrix) GetRow(row int) []float64 {
+	if row >= A.Rows || row < 0 {
+		return make([]float64, A.step)
+	}
+
+	result := make([]float64, A.step)
+	copy(result, A.Elements[row*A.step:])
+	return result
+}
+
 func (A *Matrix) SumElm(row int, col int, v float64) {
 	index := row*A.step + col
 	A.ensureSize(index)

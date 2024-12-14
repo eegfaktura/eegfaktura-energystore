@@ -2,7 +2,7 @@ package excel
 
 import (
 	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/store"
+	"at.ourproject/energystore/store/ebow"
 	"fmt"
 	"github.com/stretchr/testify/require"
 	"os"
@@ -40,10 +40,10 @@ import (
 //}
 
 func TestImportExcelEnergyFile(t *testing.T) {
-	db, err := store.OpenStorageTest("dashboard", "ecid", "../test/rawdata")
+	db, err := ebow.OpenStorageTest("dashboard", "ecid", "../test/rawdata")
 	require.Nil(t, err)
 	defer func() {
-		db.Close()
+		db.CloseTestDriver()
 		os.RemoveAll("../test/rawdata/dashboard")
 	}()
 
@@ -85,10 +85,10 @@ func TestImportExcelEnergyFile(t *testing.T) {
 func TestBuildMatixMetaStruct(t *testing.T) {
 
 	t.Run("Initiate Meta Struct", func(t *testing.T) {
-		db, err := store.OpenStorageTest("excelsource1", "ecid", "../test/rawdata")
+		db, err := ebow.OpenStorageTest("excelsource1", "ecid", "../test/rawdata")
 		require.NoError(t, err)
 		defer func() {
-			db.Close()
+			db.CloseTestDriver()
 			os.RemoveAll("../test/rawdata/excelsource1")
 		}()
 
@@ -244,10 +244,10 @@ func TestBuildMatixMetaStruct(t *testing.T) {
 	})
 
 	t.Run("Check MetaStruct", func(t *testing.T) {
-		db, err := store.OpenStorageTest("excelsource2", "ecid", "../test/rawdata")
+		db, err := ebow.OpenStorageTest("excelsource2", "ecid", "../test/rawdata")
 		require.NoError(t, err)
 		defer func() {
-			db.Close()
+			db.CloseTestDriver()
 			os.RemoveAll("../test/rawdata/excelsource2")
 		}()
 		header := excelHeader{
@@ -407,10 +407,10 @@ func TestBuildMatixMetaStruct(t *testing.T) {
 	})
 
 	t.Run("Initiate Metadata with 32 consumers and 1 producer", func(t *testing.T) {
-		db, err := store.OpenStorageTest("excelsource3", "ecid", "../test/rawdata")
+		db, err := ebow.OpenStorageTest("excelsource3", "ecid", "../test/rawdata")
 		require.NoError(t, err)
 		defer func() {
-			db.Close()
+			db.CloseTestDriver()
 			os.RemoveAll("../test/rawdata/excelsource3")
 		}()
 		header := excelHeader{
@@ -682,10 +682,10 @@ func TestBuildMatixMetaStruct(t *testing.T) {
 	})
 
 	t.Run("Initiate Metadata extended MM field", func(t *testing.T) {
-		db, err := store.OpenStorageTest("excelsource3", "ecid", "../test/rawdata")
+		db, err := ebow.OpenStorageTest("excelsource3", "ecid", "../test/rawdata")
 		require.NoError(t, err)
 		defer func() {
-			db.Close()
+			db.CloseTestDriver()
 			os.RemoveAll("../test/rawdata/excelsource")
 		}()
 		header := excelHeader{

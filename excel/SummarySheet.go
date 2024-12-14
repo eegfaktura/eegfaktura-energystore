@@ -65,7 +65,8 @@ func (ss *SummarySheet) handleLine(ctx *RunnerContext, line *model.RawSourceLine
 func (ss *SummarySheet) handleParticipantReport(ctx *RunnerContext, participant *ParticipantCp,
 	consumerMatrix, producerMatrix *model.Matrix, lineDate time.Time, QoVConsumers, QoVProducers []int) error {
 
-	if lineDate.Before(time.UnixMilli(participant.ActiveSince)) || lineDate.After(time.UnixMilli(participant.InactiveSince)) {
+	if utils.IsLineDateOutOfRange(lineDate, [2]int64{participant.ActiveSince, participant.InactiveSince}) {
+		//if lineDate.Before(time.UnixMilli(participant.ActiveSince)) || lineDate.After(time.UnixMilli(participant.InactiveSince)) {
 		return nil
 	}
 
@@ -83,6 +84,15 @@ func (ss *SummarySheet) handleParticipantReport(ctx *RunnerContext, participant 
 			participant.QoV = participant.QoV &&
 				(ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) ||
 					((QoVConsumers[(meta.SourceIdx*3)] == 1) && (QoVConsumers[(meta.SourceIdx*3)+1] == 1) && (QoVConsumers[(meta.SourceIdx*3)+2] == 1)))
+			participant.QoVSum[0] = participant.QoVSum[0] ||
+				(!ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) &&
+					((QoVConsumers[(meta.SourceIdx*3)] == 0) || (QoVConsumers[(meta.SourceIdx*3)+1] == 0) || (QoVConsumers[(meta.SourceIdx*3)+2] == 0)))
+			participant.QoVSum[1] = participant.QoVSum[1] ||
+				(!ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) &&
+					((QoVConsumers[(meta.SourceIdx*3)] == 2) || (QoVConsumers[(meta.SourceIdx*3)+1] == 2) || (QoVConsumers[(meta.SourceIdx*3)+2] == 2)))
+			participant.QoVSum[2] = participant.QoVSum[2] ||
+				(!ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) &&
+					((QoVConsumers[(meta.SourceIdx*3)] == 3) || (QoVConsumers[(meta.SourceIdx*3)+1] == 3) || (QoVConsumers[(meta.SourceIdx*3)+2] == 3)))
 		}
 	} else {
 		participant.Report.Produced += producerMatrix.GetElm(meta.SourceIdx, 0)
@@ -93,6 +103,16 @@ func (ss *SummarySheet) handleParticipantReport(ctx *RunnerContext, participant 
 			participant.QoV = participant.QoV &&
 				(ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) ||
 					((QoVProducers[(meta.SourceIdx*2)] == 1) && (QoVProducers[(meta.SourceIdx*2)+1] == 1)))
+
+			participant.QoVSum[0] = participant.QoVSum[0] ||
+				(!ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) &&
+					((QoVProducers[(meta.SourceIdx*2)] == 0) || (QoVProducers[(meta.SourceIdx*2)+1] == 0)))
+			participant.QoVSum[1] = participant.QoVSum[1] ||
+				(!ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) &&
+					((QoVProducers[(meta.SourceIdx*2)] == 2) || (QoVProducers[(meta.SourceIdx*2)+1] == 2)))
+			participant.QoVSum[2] = participant.QoVSum[2] ||
+				(!ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) &&
+					((QoVProducers[(meta.SourceIdx*2)] == 3) || (QoVProducers[(meta.SourceIdx*2)+1] == 3)))
 		}
 	}
 	return nil
@@ -133,7 +153,22 @@ func (ss *SummarySheet) closeSheet(ctx *RunnerContext) error {
 		Fill: excelize.Fill{Type: "pattern", Color: []string{"ff4000"}, Pattern: 1},
 	})
 
+	styleIdQoVL0, err := f.NewStyle(&excelize.Style{
+		//Font:      &excelize.Font{Bold: true},
+		//Alignment: &excelize.Alignment{Vertical: "top", WrapText: true},
+		Font: &excelize.Font{Size: 5.0},
+		Fill: excelize.Fill{Type: "pattern", Color: []string{"777777"}, Pattern: 1},
+	})
+	styleIdQoVL2, err := f.NewStyle(&excelize.Style{
+		//Font:      &excelize.Font{Bold: true},
+		//Alignment: &excelize.Alignment{Vertical: "top", WrapText: true},
+		Font: &excelize.Font{Size: 5.0},
+		Fill: excelize.Fill{Pattern: 0},
+	})
+
 	styleIdQov := map[bool]int{true: styleIdQoVGood, false: styleIdQoVBad}
+	styleIdQovSum := map[bool]int{true: styleIdQoVL0, false: styleIdQoVL2}
+	//styleIdQovSum := map[int]int{0: styleIdQoVL0, 1: styleIdQoVL2, 2: styleIdQoVL2}
 
 	sw, err := f.NewStreamWriter(ss.name)
 	if err != nil {
@@ -148,7 +183,8 @@ func (ss *SummarySheet) closeSheet(ctx *RunnerContext) error {
 	_ = sw.SetColWidth(3, 4, float64(20))
 	_ = sw.SetColWidth(5, 5, 20.78)
 	_ = sw.SetColWidth(6, 6, float64(10))
-	_ = sw.SetColWidth(7, 11, float64(20))
+	_ = sw.SetColWidth(7, 9, 2.1)
+	_ = sw.SetColWidth(10, 14, float64(20))
 
 	rowOpts := excelize.RowOpts{StyleID: styleIdRowSummary}
 	err = sw.SetRow("A2",
@@ -186,6 +222,9 @@ func (ss *SummarySheet) closeSheet(ctx *RunnerContext) error {
 			excelize.Cell{Value: "Ende der Daten"},
 			excelize.Cell{Value: "Aktiviert"},
 			excelize.Cell{Value: "Daten vollständig? Ja/Nein"},
+			excelize.Cell{Value: "L0"},
+			excelize.Cell{Value: "L2"},
+			excelize.Cell{Value: "L3"},
 			excelize.Cell{Value: "Gesamtverbrauch lt. Messung (bei Teilnahme gem. Erzeugung) [KWH]"},
 			excelize.Cell{Value: "Anteil gemeinschaftliche Erzeugung [KWH]"},
 			excelize.Cell{Value: "Eigendeckung gemeinschaftliche Erzeugung [KWH]"},
@@ -200,6 +239,9 @@ func (ss *SummarySheet) closeSheet(ctx *RunnerContext) error {
 				excelize.Cell{Value: c.EndDate},
 				excelize.Cell{Value: c.ActivePeriod},
 				excelize.Cell{Value: c.DataOk, StyleID: styleIdQov[c.DataOk]},
+				excelize.Cell{Value: "", StyleID: styleIdQovSum[c.DataL0]},
+				excelize.Cell{Value: "", StyleID: styleIdQovSum[c.DataL2]},
+				excelize.Cell{Value: "", StyleID: styleIdQovSum[c.DataL3]},
 				excelize.Cell{Value: utils.RoundToFixed(c.Total, 6)},
 				excelize.Cell{Value: utils.RoundToFixed(c.Coverage, 6)},
 				excelize.Cell{Value: utils.RoundToFixed(c.Share, 6)},
@@ -215,6 +257,9 @@ func (ss *SummarySheet) closeSheet(ctx *RunnerContext) error {
 			excelize.Cell{Value: "Ende der Daten"},
 			excelize.Cell{Value: "Aktiviert"},
 			excelize.Cell{Value: "Daten vollständig? Ja/Nein"},
+			excelize.Cell{Value: "L0"},
+			excelize.Cell{Value: "L2"},
+			excelize.Cell{Value: "L3"},
 			excelize.Cell{Value: "Gesamt/Überschusserzeugung, Gemeinschaftsüberschuss [KWH]"},
 			excelize.Cell{Value: "Gesamte gemeinschaftliche Erzeugung [KWH]"},
 			excelize.Cell{Value: "Eigendeckung gemeinschaftliche Erzeugung [KWH]"},
@@ -229,6 +274,9 @@ func (ss *SummarySheet) closeSheet(ctx *RunnerContext) error {
 				excelize.Cell{Value: c.EndDate},
 				excelize.Cell{Value: c.ActivePeriod},
 				excelize.Cell{Value: c.DataOk, StyleID: styleIdQov[c.DataOk]},
+				excelize.Cell{Value: "", StyleID: styleIdQovSum[c.DataL0]},
+				excelize.Cell{Value: "", StyleID: styleIdQovSum[c.DataL2]},
+				excelize.Cell{Value: "", StyleID: styleIdQovSum[c.DataL3]},
 				excelize.Cell{Value: utils.RoundToFixed(c.Share, 6)},
 				excelize.Cell{Value: utils.RoundToFixed(c.Total, 6)},
 				excelize.Cell{Value: utils.RoundToFixed(c.Coverage, 6)},
@@ -254,7 +302,10 @@ func (ss *SummarySheet) summaryMeteringPoints(ctx *RunnerContext) (*SummaryResul
 				ActivePeriod: fmt.Sprintf("%s - %s",
 					time.UnixMilli(cp.ActiveSince).Format("02-01-2006"),
 					time.UnixMilli(cp.InactiveSince).Format("02-01-2006")),
-				DataOk:   cp.QoV,              //utils.GetBool(ss.qovConsumerSlice, m.SourceIdx),
+				DataOk:   cp.QoV, //utils.GetBool(ss.qovConsumerSlice, m.SourceIdx),
+				DataL0:   cp.QoVSum[0],
+				DataL2:   cp.QoVSum[1],
+				DataL3:   cp.QoVSum[2],
 				Total:    cp.Report.Consumed,  //returnFloatValue(ss.report.Consumed, m.SourceIdx),
 				Coverage: cp.Report.Shared,    //returnFloatValue(ss.report.Shared, m.SourceIdx),
 				Share:    cp.Report.Allocated, //returnFloatValue(ss.report.Allocated, m.SourceIdx),
@@ -268,7 +319,10 @@ func (ss *SummarySheet) summaryMeteringPoints(ctx *RunnerContext) (*SummaryResul
 				ActivePeriod: fmt.Sprintf("%s - %s",
 					time.UnixMilli(cp.ActiveSince).Format("02-01-2006"),
 					time.UnixMilli(cp.InactiveSince).Format("02-01-2006")),
-				DataOk:   cp.QoV,                                     //utils.GetBool(ss.qovProducerSlice, m.SourceIdx),
+				DataOk:   cp.QoV, //utils.GetBool(ss.qovProducerSlice, m.SourceIdx),
+				DataL0:   cp.QoVSum[0],
+				DataL2:   cp.QoVSum[1],
+				DataL3:   cp.QoVSum[2],
 				Total:    cp.Report.Produced,                         //returnFloatValue(ss.report.Produced, m.SourceIdx),
 				Coverage: cp.Report.Produced - cp.Report.Distributed, //returnFloatValue(ss.report.Produced, m.SourceIdx) - returnFloatValue(ss.report.Distributed, m.SourceIdx),
 				Share:    cp.Report.Distributed,                      //returnFloatValue(ss.report.Distributed, m.SourceIdx),
