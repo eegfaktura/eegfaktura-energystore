@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"time"
 )
@@ -124,12 +125,19 @@ func verifyRequest(handler JWTHandlerFunc) func(w http.ResponseWriter, r *http.R
 		}
 
 		tenant := r.Header.Get("X-Tenant")
-		if contains(claims.Tenants, tenant) == false {
-			logrus.WithField("tenant", tenant).Warnf("Unauthorized access with tenant %s", tenant)
-			w.WriteHeader(http.StatusForbidden)
-			return
+		superuser := hasRole(claims.RealmAccess.Roles, "superuser")
+		if !superuser {
+			if contains(claims.Tenants, tenant) == false {
+				logrus.WithField("tenant", tenant).Warnf("Unauthorized access with tenant %s", tenant)
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
 		}
 
 		handler(w, r, &claims, strings.ToUpper(tenant))
 	}
+}
+
+func hasRole(roles []string, role string) bool {
+	return slices.Contains(roles, role)
 }

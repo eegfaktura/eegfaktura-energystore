@@ -2,6 +2,7 @@ package ebow
 
 import (
 	"fmt"
+	"github.com/dgraph-io/badger/v3"
 	"github.com/golang/glog"
 	"github.com/spf13/viper"
 	"path/filepath"
@@ -36,6 +37,7 @@ type DbObject struct {
 type DbPoolObject struct {
 	pool chan *DbObject
 	mu   sync.Mutex
+	cl   sync.Mutex
 
 	db     *DB
 	ecId   string
@@ -77,16 +79,31 @@ func (dpo *DbPoolObject) Put(obj *DbObject) {
 	select {
 	case dpo.pool <- obj:
 		if len(dpo.pool) == cap(dpo.pool) {
-			_ = dpo.db.Close()
-			dpo.db = nil
-			glog.V(5).Infof("DB connection %s closed ... Object Pool max (%d)", dpo.ecId, len(dpo.pool))
+			dpo.Close()
+			glog.V(3).Infof("DB connection %s closed ... Object Pool max (%d)", dpo.ecId, len(dpo.pool))
 		}
+	}
+}
+
+func (dpo *DbPoolObject) Close() {
+	dpo.cl.Lock()
+	defer dpo.cl.Unlock()
+
+	if dpo.db != nil {
+		_ = dpo.db.Close()
+		dpo.db = nil
 	}
 }
 
 func (dpo *DbPoolObject) OpenStorage() (*DB, error) {
 	basePath := viper.GetString("persistence.path")
-	db, err := Open(filepath.Join(fmt.Sprintf("%s/%s", basePath, dpo.tenant), dpo.ecId), SetLogger(ebowLogger{5}))
+	path := filepath.Join(fmt.Sprintf("%s/%s", basePath, dpo.tenant), dpo.ecId)
+
+	badgerOpts := badger.DefaultOptions(path)
+	badgerOpts.Logger = ebowLogger{5}
+	badgerOpts.BlockCacheSize = 1024 << 20
+
+	db, err := Open(path, SetBadgerOptions(badgerOpts))
 	if err != nil {
 		return nil, err
 	}
@@ -95,9 +112,9 @@ func (dpo *DbPoolObject) OpenStorage() (*DB, error) {
 
 type Pool struct {
 	pool     map[string]*DbPoolObject
-	mu       sync.Mutex
 	poolSize int
 	nextID   int
+	mutex    sync.RWMutex
 }
 
 func NewPool(size int) *Pool {
@@ -105,10 +122,16 @@ func NewPool(size int) *Pool {
 }
 
 func (p *Pool) Put(ecId string, e *DbObject) {
+	p.mutex.RLock()
+	defer p.mutex.RUnlock()
+
 	p.pool[ecId].Put(e)
 }
 
 func (p *Pool) Get(tenant, ecId string) *DbObject {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
 	poolObj, ok := p.pool[ecId]
 	if !ok {
 		poolObj = newDbPoolObject(p.poolSize, ecId, tenant)

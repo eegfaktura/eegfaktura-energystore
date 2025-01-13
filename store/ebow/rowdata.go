@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	connectionPool = NewPool(20)
+	connectionPool = NewPool(10)
 )
 
 //type ebowLogger struct {

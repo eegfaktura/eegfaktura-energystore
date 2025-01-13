@@ -25,7 +25,7 @@ func GetLastEnergyEntry(tenant, ecid string) (string, error) {
 
 	endDate := time.Date(0, 0, 0, 0, 0, 0, 0, time.Local)
 	for _, mcp := range meta.CounterPoints {
-		dcp := utils.StringToTime(mcp.PeriodEnd)
+		dcp := utils.StringToTime(mcp.PeriodEnd, time.Now())
 		if dcp.After(endDate) {
 			endDate = dcp
 		}

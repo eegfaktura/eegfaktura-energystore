@@ -6,6 +6,7 @@ import (
 	"at.ourproject/energystore/utils"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"time"
 )
 
 func init() {
@@ -30,8 +31,8 @@ This command set data to 0 for the appropriate period of the metring key-value s
 func handleReset(cmd *cobra.Command, args []string) error {
 	viper.Set("persistence.path", dir)
 
-	_begin := utils.StringToTime(begin)
-	_end := utils.StringToTime(end)
+	_begin := utils.StringToTime(begin, time.Now())
+	_end := utils.StringToTime(end, time.Now())
 
 	timePeriod, err := function.ToDataTimeRange(_begin, _end)
 	if err != nil {

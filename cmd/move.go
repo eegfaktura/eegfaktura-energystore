@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"time"
 )
 
 func init() {
@@ -159,8 +160,8 @@ func getTargetMeta(db *ebow.BowStorage, meterpoint string, source *model.Counter
 }
 
 func determineTimeRangeOfMeter(meta *model.CounterPointMeta) (string, string, error) {
-	periodBeginDate := utils.StringToTime(meta.PeriodStart)
-	lastEntryDate := utils.StringToTime(meta.PeriodEnd)
+	periodBeginDate := utils.StringToTime(meta.PeriodStart, time.Now())
+	lastEntryDate := utils.StringToTime(meta.PeriodEnd, time.Now())
 
 	beginPeriod, err := utils.ConvertUnixTimeToRowId("", periodBeginDate)
 	if err != nil {

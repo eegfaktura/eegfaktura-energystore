@@ -99,12 +99,20 @@ func DateToString(date time.Time) string {
 	return fmt.Sprintf("%.2d.%.2d.%.4d %.2d:%.2d:%.4d", date.Day(), date.Month(), date.Year(), date.Hour(), date.Minute(), date.Second())
 }
 
-func StringToTime(date string) time.Time {
+//func StringToTime(date string) time.Time {
+//	var d, m, y, hh, mm, ss int
+//	if _, err := fmt.Sscanf(date, "%d.%d.%d %d:%d:%d", &d, &m, &y, &hh, &mm, &ss); err == nil {
+//		return time.Date(y, time.Month(m), d, hh, mm, ss, 0, time.Local)
+//	}
+//	return time.Now()
+//}
+
+func StringToTime(date string, defaultValue time.Time) time.Time {
 	var d, m, y, hh, mm, ss int
 	if _, err := fmt.Sscanf(date, "%d.%d.%d %d:%d:%d", &d, &m, &y, &hh, &mm, &ss); err == nil {
 		return time.Date(y, time.Month(m), d, hh, mm, ss, 0, time.Local)
 	}
-	return time.Now()
+	return defaultValue
 }
 
 func TruncateToDay(t time.Time) time.Time {

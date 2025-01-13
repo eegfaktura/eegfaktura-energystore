@@ -10,9 +10,12 @@ import (
 )
 
 type PlatformClaims struct {
-	Tenants  []string `json:"tenant"`
-	Username string   `json:"preferred_username"`
-	Email    string   `json:"email"`
+	Tenants     []string `json:"tenant"`
+	Username    string   `json:"preferred_username"`
+	Email       string   `json:"email"`
+	RealmAccess struct {
+		Roles []string `json:"roles"`
+	} `json:"realm_access"`
 	jwt.StandardClaims
 }
 

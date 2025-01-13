@@ -1,12 +1,11 @@
 package mqttclient
 
 import (
-	"at.ourproject/energystore/calculation"
 	"context"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/golang/glog"
-	log "github.com/sirupsen/logrus"
 	"sync"
+	"time"
 )
 
 type TagValue struct {
@@ -16,6 +15,7 @@ type TagValue struct {
 
 type Executor interface {
 	Execute(msg mqtt.Message)
+	Close()
 }
 
 type Worker struct {
@@ -78,6 +78,7 @@ type TenantWorker struct {
 	executor   Executor
 	ctx        context.Context
 	wg         *sync.WaitGroup
+	StopChan   chan string
 }
 
 type TenantSubscriber struct {
@@ -87,11 +88,14 @@ type TenantSubscriber struct {
 type TopicDispatcher struct {
 	Inbound  chan mqtt.Message
 	Finished chan bool
-	workers  map[string]*TenantWorker
-	ctx      context.Context
-	quit     chan struct{}
-	wg       sync.WaitGroup
-	stop     context.CancelFunc
+	//workers  map[string]*TenantWorker
+	workers    sync.Map
+	ctx        context.Context
+	quit       chan struct{}
+	stopWorker chan string
+	wg         sync.WaitGroup
+	stop       context.CancelFunc
+	mu         *sync.RWMutex
 }
 
 func NewTopicDispatcher(ctx context.Context, topic string, streamer *MQTTStreamer) *TopicDispatcher {
@@ -100,11 +104,14 @@ func NewTopicDispatcher(ctx context.Context, topic string, streamer *MQTTStreame
 	dispatcher := &TopicDispatcher{
 		Inbound:  make(chan mqtt.Message),
 		Finished: make(chan bool),
-		workers:  make(map[string]*TenantWorker),
-		ctx:      ctx,
-		quit:     make(chan struct{}),
+		//workers:  make(map[string]*TenantWorker),
+		workers:    sync.Map{},
+		ctx:        ctx,
+		quit:       make(chan struct{}),
+		stopWorker: make(chan string),
 		//wg:       sync.WaitGroup,
 		stop: cancel,
+		mu:   &sync.RWMutex{},
 	}
 
 	sub := &TenantSubscriber{}
@@ -130,6 +137,8 @@ func (d *TopicDispatcher) process() {
 			jobChan <- job                 // submit the job on the available jobchannel
 		case <-d.quit:
 			return
+		case workerId := <-d.stopWorker:
+			d.putWorker(workerId)
 		}
 	}
 }
@@ -145,31 +154,59 @@ func (d *TopicDispatcher) Close() {
 }
 
 func (d *TopicDispatcher) getWorker(tenant string) chan mqtt.Message {
-	worker, ok := d.workers[tenant]
+	//d.mu.RLock()
+	//defer d.mu.RUnlock()
+
+	//worker, ok := d.workers[tenant]
+	worker, ok := d.workers.Load(tenant)
 	if !ok {
 		worker = &TenantWorker{
 			tenant:     tenant,
 			JobChannel: make(chan mqtt.Message),
-			executor:   &calculation.TenantEnergyImporter{Tenant: tenant},
+			StopChan:   d.stopWorker,
+			executor:   NewTenantEnergyImporter(tenant),
 			ctx:        d.ctx,
 			wg:         &d.wg,
 		}
-		go worker.Run()
-		d.workers[tenant] = worker
+		go worker.(*TenantWorker).Run()
+		//d.workers[tenant] = worker
+		d.workers.Store(tenant, worker)
 	}
-	return worker.JobChannel
+	return worker.(*TenantWorker).JobChannel
+}
+
+func (d *TopicDispatcher) putWorker(workerId string) {
+	//d.mu.Lock()
+	//defer d.mu.Unlock()
+
+	//if w, ok := d.workers[workerId]; ok {
+	if w, ok := d.workers.Load(workerId); ok {
+		w.(*TenantWorker).executor.Close()
+		//delete(d.workers, workerId)
+		d.workers.Delete(workerId)
+		glog.Infof("Release worker %s.", workerId)
+	}
 }
 
 func (worker *TenantWorker) Run() {
 	worker.wg.Add(1)
 	defer worker.wg.Done()
 
+	timer := time.NewTimer(1 * time.Minute) // 15 seconds timeout
+	defer timer.Stop()
+
 	for {
 		select {
 		case job := <-worker.JobChannel:
 			worker.executor.Execute(job)
+			timer.Reset(1 * time.Minute)
+		case <-timer.C:
+			worker.StopChan <- worker.tenant
+			glog.Infof("No message received for 15 seconds. Stopping worker %s.", worker.tenant)
+			return
 		case <-worker.ctx.Done():
-			log.Infof("Stop Worker %s", worker.tenant)
+			glog.Infof("Stop Worker %s", worker.tenant)
+			worker.executor.Close()
 			return
 		}
 	}

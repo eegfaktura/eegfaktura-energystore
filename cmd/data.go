@@ -24,9 +24,9 @@ func init() {
 	dataCmd.Flags().StringVar(&meter, "meter", "",
 		"Consider only the keys with specified prefix")
 	dataCmd.Flags().StringVar(&begin, "begin", "",
-		"Consider only energy data after begin date")
+		"Consider only energy data after begin date (d.m.yyyy hh:mm:ss)")
 	dataCmd.Flags().StringVar(&end, "end", "",
-		"Consider only energy data until end date")
+		"Consider only energy data until end date (d.m.yyyy hh:mm:ss)")
 	dataCmd.Flags().Int16Var(&count, "count", 100,
 		"Take count of begin date. Default 100")
 	dataCmd.Flags().BoolVar(&onlyBadQuality, "onlyBad", false,
@@ -109,20 +109,20 @@ func determinePeriod() (string, string, error) {
 		return "", "", err
 	}
 
-	lastEntryDate := utils.StringToTime(lastEntry)
+	lastEntryDate := utils.StringToTime(lastEntry, time.Now())
 	periodBeginDate := lastEntryDate.Add(time.Hour * 24 * -1)
 	if begin != "" {
 		if err := checkDateValue(begin); err != nil {
 			return "", "", err
 		}
-		periodBeginDate = utils.StringToTime(begin)
+		periodBeginDate = utils.StringToTime(begin, time.Now())
 	}
 
 	if end != "" {
 		if err := checkDateValue(end); err != nil {
 			return "", "", err
 		}
-		lastEntryDate = utils.StringToTime(end)
+		lastEntryDate = utils.StringToTime(end, time.Now())
 		if begin == "" {
 			periodBeginDate = lastEntryDate.Add(time.Hour * 24 * -1)
 		}

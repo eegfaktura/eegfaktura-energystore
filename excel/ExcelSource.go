@@ -549,7 +549,7 @@ func getExcelDate(cell string) (int, int, int, int, int, int) {
 
 func parseExcelDate(cell string) time.Time {
 	if isDateString(cell) {
-		return utils.StringToTime(cell)
+		return utils.StringToTime(cell, time.Now())
 	} else {
 		var excelEpoch = time.Date(1899, time.December, 30, 0, 0, 0, 0, time.UTC)
 		var days, _ = strconv.ParseFloat(cell, 64)
