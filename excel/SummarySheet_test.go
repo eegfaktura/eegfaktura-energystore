@@ -12,6 +12,7 @@ import (
 )
 
 func TestSummaryResult(t *testing.T) {
+	resetTestData()
 	var tests = []struct {
 		name     string
 		metaData *model.RawSourceMeta

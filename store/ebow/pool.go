@@ -1,7 +1,6 @@
 package ebow
 
 import (
-	"fmt"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/golang/glog"
 	"github.com/spf13/viper"
@@ -27,7 +26,7 @@ func (el ebowLogger) Errorf(format string, args ...interface{}) {
 }
 
 func (el ebowLogger) Debugf(format string, args ...interface{}) {
-	glog.V(el.level).Infof(format, args...)
+	glog.V(el.level+1).Infof(format, args...)
 }
 
 type DbObject struct {
@@ -37,7 +36,7 @@ type DbObject struct {
 type DbPoolObject struct {
 	pool chan *DbObject
 	mu   sync.Mutex
-	cl   sync.Mutex
+	//cl   sync.Mutex
 
 	db     *DB
 	ecId   string
@@ -56,15 +55,19 @@ func (dpo *DbPoolObject) Get() *DbObject {
 	dpo.mu.Lock()
 	defer dpo.mu.Unlock()
 
+	glog.V(4).Infof("B:dpo.Get(): Pool-Size %d of %d tenant=%s", len(dpo.pool), cap(dpo.pool), dpo.tenant)
+
 	select {
 	case dbObject := <-dpo.pool:
 		if dpo.db == nil {
 			var err error
 			dpo.db, err = dpo.OpenStorage()
 			if err != nil {
+				glog.Errorf("%v tenant=%s", err, dpo.tenant)
 				return nil
 			}
 		}
+		glog.V(4).Infof("E:dpo.Get(): Pool-Size %d of %d tenant=%s", len(dpo.pool), cap(dpo.pool), dpo.tenant)
 		dbObject.Db = dpo.db
 		return dbObject
 	}
@@ -75,19 +78,24 @@ func (dpo *DbPoolObject) Put(obj *DbObject) {
 	defer dpo.mu.Unlock()
 
 	obj.Db = nil
-
+	if len(dpo.pool) == cap(dpo.pool) {
+		glog.Warningf("Needless object release! tenant=%s", dpo.tenant)
+		return
+	}
+	glog.V(4).Infof("B:dpo.Put(): Pool-Size %d of %d tenant=%s", len(dpo.pool), cap(dpo.pool), dpo.tenant)
 	select {
 	case dpo.pool <- obj:
 		if len(dpo.pool) == cap(dpo.pool) {
-			dpo.Close()
-			glog.V(3).Infof("DB connection %s closed ... Object Pool max (%d)", dpo.ecId, len(dpo.pool))
+			dpo.close()
+			glog.V(3).Infof("DB connection %s closed ... Object Pool max (%d) tenant=%s", dpo.ecId, len(dpo.pool), dpo.tenant)
 		}
 	}
+	glog.V(4).Infof("E:dpo.Put(): Pool-Size %d of %d tenant=%s", len(dpo.pool), cap(dpo.pool), dpo.tenant)
 }
 
-func (dpo *DbPoolObject) Close() {
-	dpo.cl.Lock()
-	defer dpo.cl.Unlock()
+func (dpo *DbPoolObject) close() {
+	//dpo.cl.Lock()
+	//defer dpo.cl.Unlock()
 
 	if dpo.db != nil {
 		_ = dpo.db.Close()
@@ -97,11 +105,11 @@ func (dpo *DbPoolObject) Close() {
 
 func (dpo *DbPoolObject) OpenStorage() (*DB, error) {
 	basePath := viper.GetString("persistence.path")
-	path := filepath.Join(fmt.Sprintf("%s/%s", basePath, dpo.tenant), dpo.ecId)
+	path := filepath.Join(basePath, dpo.tenant, dpo.ecId)
 
 	badgerOpts := badger.DefaultOptions(path)
-	badgerOpts.Logger = ebowLogger{5}
-	badgerOpts.BlockCacheSize = 1024 << 20
+	badgerOpts.Logger = ebowLogger{4}
+	badgerOpts.BlockCacheSize = 512 << 20
 
 	db, err := Open(path, SetBadgerOptions(badgerOpts))
 	if err != nil {
@@ -114,7 +122,7 @@ type Pool struct {
 	pool     map[string]*DbPoolObject
 	poolSize int
 	nextID   int
-	mutex    sync.RWMutex
+	mutex    sync.Mutex
 }
 
 func NewPool(size int) *Pool {
@@ -122,8 +130,8 @@ func NewPool(size int) *Pool {
 }
 
 func (p *Pool) Put(ecId string, e *DbObject) {
-	p.mutex.RLock()
-	defer p.mutex.RUnlock()
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
 
 	p.pool[ecId].Put(e)
 }
@@ -139,4 +147,12 @@ func (p *Pool) Get(tenant, ecId string) *DbObject {
 	}
 
 	return poolObj.Get()
+}
+
+func (p *Pool) Close() {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	for _, poolObj := range p.pool {
+		poolObj.close()
+	}
 }

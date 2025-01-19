@@ -78,7 +78,6 @@ type TenantWorker struct {
 	executor   Executor
 	ctx        context.Context
 	wg         *sync.WaitGroup
-	StopChan   chan string
 }
 
 type TenantSubscriber struct {
@@ -163,7 +162,6 @@ func (d *TopicDispatcher) getWorker(tenant string) chan mqtt.Message {
 		worker = &TenantWorker{
 			tenant:     tenant,
 			JobChannel: make(chan mqtt.Message),
-			StopChan:   d.stopWorker,
 			executor:   NewTenantEnergyImporter(tenant),
 			ctx:        d.ctx,
 			wg:         &d.wg,
@@ -201,12 +199,13 @@ func (worker *TenantWorker) Run() {
 			worker.executor.Execute(job)
 			timer.Reset(1 * time.Minute)
 		case <-timer.C:
-			worker.StopChan <- worker.tenant
-			glog.Infof("No message received for 15 seconds. Stopping worker %s.", worker.tenant)
-			return
-		case <-worker.ctx.Done():
-			glog.Infof("Stop Worker %s", worker.tenant)
+			glog.Infof("No message received for 1 minute. Close DB tenant=%s.", worker.tenant)
 			worker.executor.Close()
+			glog.V(4).Infof("DB closed after 1 minute. tenant=%s.", worker.tenant)
+		case <-worker.ctx.Done():
+			glog.Infof("Stop Worker tenant=%s", worker.tenant)
+			worker.executor.Close()
+			glog.Infof("Stopped Worker tenant=%s", worker.tenant)
 			return
 		}
 	}

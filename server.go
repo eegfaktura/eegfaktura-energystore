@@ -5,6 +5,7 @@ import (
 	"at.ourproject/energystore/graph/generated"
 	"at.ourproject/energystore/mqttclient"
 	"at.ourproject/energystore/rest"
+	"at.ourproject/energystore/store/ebow"
 	"context"
 	"errors"
 	"flag"
@@ -13,7 +14,6 @@ import (
 	"github.com/golang/glog"
 	"github.com/gorilla/handlers"
 	"github.com/spf13/viper"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -88,7 +88,7 @@ func main() {
 	allowedMethods := handlers.AllowedMethods([]string{"GET", "HEAD", "POST", "PUT", "OPTIONS", "DELETE"})
 	allowedCredentials := handlers.AllowCredentials()
 
-	log.Printf("connect to http://localhost:%s/ for GraphQL playground", port)
+	glog.Infof("connect to http://localhost:%s/ for GraphQL playground", port)
 
 	//log.Fatal(http.ListenAndServe(":"+port, handlers.CORS(allowedOrigins, allowedHeaders, allowedMethods, allowedCredentials)(r)))
 
@@ -102,18 +102,19 @@ func main() {
 
 	go func() {
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("listen and serve returned err: %v", err)
+			glog.Fatalf("listen and serve returned err: %v", err)
 		}
 	}()
 
 	<-quit
-	log.Println("got interruption signal")
+	glog.Info("got interruption signal")
 	if err := server.Shutdown(context.Background()); err != nil {
-		log.Printf("server shutdown returned an err: %v\n", err)
+		glog.Infof("server shutdown returned an err: %v", err)
 	}
 
 	cancel()
 	dispatcher.Close()
+	ebow.ClosePool()
 }
 
 func SetupMqttDispatcher(ctx context.Context) *mqttclient.TopicDispatcher {

@@ -173,7 +173,6 @@ func ImportExcelEnergyFileNew(f *excelize.File, sheet string, db ebow.IBowStorag
 		rawDatas = append(rawDatas, v)
 	}
 
-	glog.Infof("Time taken via read file: %v (%d Rows)", time.Since(t), totalRowCols)
 	if err := db.SetLines(rawDatas); err != nil {
 		return err
 	}
@@ -184,8 +183,8 @@ func ImportExcelEnergyFileNew(f *excelize.File, sheet string, db ebow.IBowStorag
 		glog.Error(err.Error())
 		return err
 	}
-	glog.V(3).Infof("Time taken via write batch: %v", time.Since(t))
-	glog.V(3).Infof("Import <%d> G1 lines", len(rawDatas))
+	glog.V(4).Infof("Import %d lines", len(rawDatas))
+	glog.Infof("Time taken for import energy via excel: %v (%d Rows) tenant=%s", time.Since(t), totalRowCols, db.GetTenant())
 
 	years := []int{}
 	for k, _ := range yearSet {

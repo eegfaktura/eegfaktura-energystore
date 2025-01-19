@@ -57,6 +57,10 @@ func (ms *MockBowStorage) GetLineRange(bucket, key, until string) ebow.IRange {
 	return args.Get(0).(ebow.IRange)
 }
 
+func (mr *MockBowStorage) GetTenant() string {
+	return "te001001"
+}
+
 func (mr *MockBowRange) Next(result interface{}) bool {
 	_ = mr.Called(result)
 	if mr.calls >= len(mr.Entries) {

@@ -10,7 +10,7 @@ import (
 func TestMessage(t *testing.T) {
 	m := MqttEnergyResponse{
 		Message: MqttEnergyMessage{
-			Energy: MqttEnergy{
+			Energy: []MqttEnergy{{
 				Start: 0,
 				End:   0,
 				Data: []MqttEnergyData{
@@ -19,7 +19,7 @@ func TestMessage(t *testing.T) {
 						Value:     nil,
 					},
 				},
-			},
+			}},
 		}}
 
 	b, err := json.Marshal(m)
@@ -46,7 +46,7 @@ func TestJsonStruct(t *testing.T) {
 		Message: MqttEnergyMessage{
 			EcId:  "ecId",
 			Meter: EnergyMeter{MeteringPoint: "AT0030000000000000000000000123456", Direction: ""},
-			Energy: MqttEnergy{Start: 0, End: 0, Data: []MqttEnergyData{{
+			Energy: []MqttEnergy{{Start: 0, End: 0, Data: []MqttEnergyData{{
 				MeterCode: "1-1:1.9.0 G.01",
 				Value: []MqttEnergyValue{{
 					From:   1667948400000,
@@ -54,7 +54,7 @@ func TestJsonStruct(t *testing.T) {
 					Method: "L1",
 					Value:  0.118,
 				}},
-			}}},
+			}}}},
 		},
 	}, m)
 }

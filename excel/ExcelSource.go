@@ -443,13 +443,13 @@ func buildMatrixMetaStruct(db ebow.IBowStorage, excelHeader excelHeader) (map[in
 	sort.Slice(updateCpMeta, func(i, j int) bool {
 		return updateCpMeta[i].SourceIdx < updateCpMeta[j].SourceIdx
 	})
-	glog.V(3).Info("ExcelMeta:")
+	glog.V(4).Info("ExcelMeta:")
 	for k, v := range excelCpMeta {
-		glog.V(3).Infof("Key: %+v Value: %+v\n", k, *v.CounterPointMeta)
+		glog.V(4).Infof("Key: %+v Value: %+v\n", k, *v.CounterPointMeta)
 	}
-	glog.V(3).Info("UpdateMeta:")
+	glog.V(4).Info("UpdateMeta:")
 	for i, v := range updateCpMeta {
-		glog.V(3).Infof("Idx: %+v Value: %+v\n", i, v)
+		glog.V(4).Infof("Idx: %+v Value: %+v\n", i, v)
 	}
 	return excelCpMeta, updateCpMeta, nil
 }

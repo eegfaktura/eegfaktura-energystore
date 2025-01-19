@@ -12,7 +12,7 @@ func OpenStorageTest(tenant, ecId string, basedir string) (*BowStorage, error) {
 		unlock()
 		return nil, err
 	}
-	return &BowStorage{db, nil, ecId, unlock}, nil
+	return &BowStorage{db, nil, tenant, ecId, unlock}, nil
 }
 
 func (b *BowStorage) CloseTestDriver() {

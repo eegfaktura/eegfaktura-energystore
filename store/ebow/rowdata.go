@@ -11,6 +11,10 @@ var (
 	connectionPool = NewPool(10)
 )
 
+func ClosePool() {
+	connectionPool.Close()
+}
+
 //type ebowLogger struct {
 //	level glog.Level
 //}
@@ -65,11 +69,13 @@ type IBowStorage interface {
 	SetLines(line []*model.RawSourceLine) error
 	GetLine(line *model.RawSourceLine) error
 	ListBuckets() ([]string, error)
+	GetTenant() string
 }
 
 type BowStorage struct {
 	db       *DB
 	dbObject *DbObject
+	tenant   string
 	ecId     string
 	unlock   func()
 }
@@ -99,12 +105,19 @@ func OpenStorage(tenant, ecId string) (*BowStorage, error) {
 	if db == nil {
 		return nil, errors.New("failed to connect to database")
 	}
-	return &BowStorage{db.Db, db, ecId, nil}, nil
+	return &BowStorage{db.Db, db, tenant, ecId, nil}, nil
 }
 
 func (b *BowStorage) Close() {
 	connectionPool.Put(b.ecId, b.dbObject)
-	return
+}
+
+func (b *BowStorage) IsOpen() bool {
+	return b.dbObject.Db != nil
+}
+
+func (b *BowStorage) GetTenant() string {
+	return b.tenant
 }
 
 func (b *BowStorage) SetLines(line []*model.RawSourceLine) error {

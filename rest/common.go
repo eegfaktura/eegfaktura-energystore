@@ -4,7 +4,7 @@ import (
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
 	"encoding/json"
-	log "github.com/sirupsen/logrus"
+	"github.com/golang/glog"
 	"net/http"
 )
 
@@ -37,7 +37,7 @@ func respondWithHttpError(w http.ResponseWriter, httpCode int, error *HttpError)
 func respondWith(w http.ResponseWriter, httpCode int, tenant, data interface{}) {
 	switch e := data.(type) {
 	case *model.VfeegError:
-		log.WithField("tenant", tenant).Error(e.Error())
+		glog.Errorf("%v tenant=%s", e.Error(), tenant)
 		httpStatus := e.HttpCode
 		if httpStatus == 0 {
 			httpStatus = httpCode
