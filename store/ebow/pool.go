@@ -87,7 +87,7 @@ func (dpo *DbPoolObject) Put(obj *DbObject) {
 	case dpo.pool <- obj:
 		if len(dpo.pool) == cap(dpo.pool) {
 			dpo.close()
-			glog.V(3).Infof("DB connection %s closed ... Object Pool max (%d) tenant=%s", dpo.ecId, len(dpo.pool), dpo.tenant)
+			glog.V(4).Infof("DB connection %s closed ... Object Pool max (%d) tenant=%s", dpo.ecId, len(dpo.pool), dpo.tenant)
 		}
 	}
 	glog.V(4).Infof("E:dpo.Put(): Pool-Size %d of %d tenant=%s", len(dpo.pool), cap(dpo.pool), dpo.tenant)

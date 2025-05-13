@@ -25,14 +25,18 @@ func (paf *ParentFunction) addToResult(ctx *EngineContext, ts time.Time, line *m
 			result := RawData{Ts: ts.UnixMilli(), Value: make([]float64, 3), Qov: make([]int, 3)}
 			if len(line.Consumers) > m.SourceIdx*3 {
 				copy(result.Value, line.Consumers[m.SourceIdx*3:])
-				copy(result.Qov, line.QoVConsumers[m.SourceIdx*3:])
+				if len(line.QoVConsumers) > m.SourceIdx*3 {
+					copy(result.Qov, line.QoVConsumers[m.SourceIdx*3:])
+				}
 			}
 			paf.Result[cp.MeteringPoint].Data = append(paf.Result[cp.MeteringPoint].Data, result)
 		} else {
 			result := RawData{Ts: ts.UnixMilli(), Value: make([]float64, 2), Qov: make([]int, 2)}
 			if len(line.Producers) > m.SourceIdx*2 {
 				copy(result.Value, line.Producers[m.SourceIdx*2:])
-				copy(result.Qov, line.QoVProducers[m.SourceIdx*2:])
+				if len(line.QoVProducers) > m.SourceIdx*2 {
+					copy(result.Qov, line.QoVProducers[m.SourceIdx*2:])
+				}
 			}
 			paf.Result[cp.MeteringPoint].Data = append(paf.Result[cp.MeteringPoint].Data, result)
 		}
