@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	connectionPool = NewPool(10)
+	connectionPool = NewPool(20)
 )
 
 func ClosePool() {
