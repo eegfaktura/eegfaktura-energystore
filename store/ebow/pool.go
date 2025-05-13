@@ -74,9 +74,6 @@ func (dpo *DbPoolObject) Get() *DbObject {
 }
 
 func (dpo *DbPoolObject) Put(obj *DbObject) {
-	dpo.mu.Lock()
-	defer dpo.mu.Unlock()
-
 	obj.Db = nil
 	if len(dpo.pool) == cap(dpo.pool) {
 		glog.Warningf("Needless object release! tenant=%s", dpo.tenant)
@@ -86,6 +83,9 @@ func (dpo *DbPoolObject) Put(obj *DbObject) {
 	select {
 	case dpo.pool <- obj:
 		if len(dpo.pool) == cap(dpo.pool) {
+			dpo.mu.Lock()
+			defer dpo.mu.Unlock()
+
 			dpo.close()
 			glog.V(3).Infof("DB connection %s closed ... Object Pool max (%d) tenant=%s", dpo.ecId, len(dpo.pool), dpo.tenant)
 		}
@@ -123,6 +123,7 @@ type Pool struct {
 	poolSize int
 	nextID   int
 	mutex    sync.Mutex
+	mutexPut sync.Mutex
 }
 
 func NewPool(size int) *Pool {
@@ -133,12 +134,14 @@ func (p *Pool) Put(ecId string, e *DbObject) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
-	p.pool[ecId].Put(e)
+	if poolObj, ok := p.pool[ecId]; ok {
+		poolObj.Put(e)
+	}
 }
 
 func (p *Pool) Get(tenant, ecId string) *DbObject {
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
+	p.mutexPut.Lock()
+	defer p.mutexPut.Unlock()
 
 	poolObj, ok := p.pool[ecId]
 	if !ok {
