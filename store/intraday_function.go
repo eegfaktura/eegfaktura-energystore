@@ -1,9 +1,10 @@
 package store
 
 import (
+	"time"
+
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/utils"
-	"time"
 )
 
 type IntraDay struct {
@@ -63,6 +64,7 @@ func (id *IntraDay) addToResult(ctx *EngineContext, t time.Time, line *model.Raw
 	pLen = pLen - (pLen % 2)
 	for i := 0; i < pLen; i += 2 {
 		id.Result[hour].Produced += line.Producers[i]
+		id.Result[hour].Unused += line.Producers[i+1]
 		id.Result[hour].QoVProducer = calcQoV(id.Result[hour].QoVProducer, line.QoVProducers[i])
 	}
 	return nil

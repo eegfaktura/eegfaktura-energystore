@@ -47,21 +47,21 @@ func TestOpenObject(t *testing.T) {
 	assert.NotNil(t, db)
 
 	dbObj := connectionPool.pool[testEcId]
-	assert.Equal(t, len(dbObj.pool), 9)
+	assert.Equal(t, len(dbObj.pool), 19)
 
 	connectionPool.Put(testEcId, db)
 	assert.Nil(t, dbObj.db)
-	assert.Equal(t, len(dbObj.pool), 10)
+	assert.Equal(t, len(dbObj.pool), 20)
 
 	fmt.Printf("%+v\n", dbObj)
 }
 
 func TestOpenMaxObject(t *testing.T) {
-	var db [11]*DbObject
-	wg := NewCountedWait(10)
+	var db [21]*DbObject
+	wg := NewCountedWait(20)
 
 	go func() {
-		for i := 0; i < 11; i++ {
+		for i := 0; i < 21; i++ {
 			db[i] = connectionPool.Get(testRc, testEcId)
 			assert.NotNil(t, db[i])
 			assert.NotNil(t, db[i].Db)
@@ -72,18 +72,18 @@ func TestOpenMaxObject(t *testing.T) {
 	wg.Wait()
 	dbObj := connectionPool.pool[testEcId]
 	assert.Equal(t, len(dbObj.pool), 0)
-	assert.Nil(t, db[10])
+	assert.Nil(t, db[20])
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 20; i++ {
 		connectionPool.Put(testEcId, db[i])
 		assert.Nil(t, db[i].Db)
 	}
-	assert.Equal(t, len(dbObj.pool), 9)
+	assert.Equal(t, len(dbObj.pool), 19)
 
 	time.Sleep(500 * time.Microsecond)
-	assert.NotNil(t, db[10].Db)
+	assert.NotNil(t, db[20].Db)
 
-	connectionPool.Put(testEcId, db[10])
-	assert.Nil(t, db[10].Db)
-	assert.Equal(t, len(dbObj.pool), 10)
+	connectionPool.Put(testEcId, db[20])
+	assert.Nil(t, db[20].Db)
+	assert.Equal(t, len(dbObj.pool), 20)
 }

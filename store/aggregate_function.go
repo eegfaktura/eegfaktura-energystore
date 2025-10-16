@@ -1,13 +1,14 @@
 package store
 
 import (
-	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/utils"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
+
+	"at.ourproject/energystore/model"
+	"at.ourproject/energystore/utils"
 )
 
 type Aggregate struct {

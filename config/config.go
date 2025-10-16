@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/viper"
 	"io/ioutil"
 	"log"
+	"strings"
 )
 
 func ReadConfig(path string) {
@@ -15,6 +16,12 @@ func ReadConfig(path string) {
 	viper.AddConfigPath(path)
 	viper.AutomaticEnv()
 	viper.SetConfigType("yml")
+
+	viper.SetEnvPrefix("ENERGYSTORE")
+	replacer := strings.NewReplacer(".", "_")
+	viper.SetEnvKeyReplacer(replacer)
+	viper.AutomaticEnv()
+
 	if err := viper.ReadInConfig(); err != nil {
 		glog.Exitf("Error reading config file, %s", err)
 	}

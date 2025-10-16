@@ -1,11 +1,12 @@
 package store
 
 import (
+	"fmt"
+	"time"
+
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
-	"fmt"
-	"time"
 )
 
 type TargetMP struct {
@@ -148,6 +149,10 @@ type Cache struct {
 }
 
 func (ca *Cache) CacheLine(ctx *EngineContext, ts time.Time, line *model.RawSourceLine, addTo AddTo) error {
+	if ca.cacheTs == nil {
+		return addTo(ctx, ts, line)
+	}
+
 	if ts.Before(ca.cacheTime.Time) {
 		return ca.addToCache(line)
 	}
@@ -163,6 +168,9 @@ func (ca *Cache) CacheLine(ctx *EngineContext, ts time.Time, line *model.RawSour
 }
 
 func (ca *Cache) InitCache(ctx *EngineContext) error {
+	if ca.cacheTs == nil {
+		return nil
+	}
 	ca.cacheTime = CacheTime{ctx.start}.AddTs(ca.cacheTs)
 	//ca.cacheTime.AddTs(ca.cacheTs)
 	ca.cache = model.RawSourceLine{
@@ -246,6 +254,10 @@ func (e *Engine) Query(tenant, ecid string, start, end time.Time) error {
 	var pt *time.Time = nil
 	for g1Ok {
 		_, t, err := utils.ConvertRowIdToTimeString("CP", _lineG1.Id, time.Local)
+		if err != nil {
+			g1Ok = iterCP.Next(&_lineG1)
+			continue
+		}
 		if rowOk := utils.CheckTime(pt, t); !rowOk {
 			diff := ((t.Unix() - pt.Unix()) / (60 * 15)) - 1
 			if diff > 0 {

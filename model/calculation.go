@@ -95,3 +95,9 @@ type ReportResponse struct {
 	TotalProduction    float64             `json:"totalProduction"`
 	TotalConsumption   float64             `json:"totalConsumption"`
 }
+
+type RawDataRequest struct {
+	Meters []string `json:"meters"`
+	Start  int64    `json:"start"`
+	End    int64    `json:"end"`
+}

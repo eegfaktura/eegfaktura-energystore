@@ -4,7 +4,7 @@ persistence:
 
 mqtt:
   host: "localhost:1883"
-  id: "edash-energystore-1"
+  id: "edash-energystore"
   qos: 1
 #  energySubscriptionTopic: "eda/response/energy/+"
   energySubscriptionTopic: "eda/response/+/protocol/cr_msg"

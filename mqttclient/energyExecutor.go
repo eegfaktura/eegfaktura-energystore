@@ -1,14 +1,15 @@
 package mqttclient
 
 import (
+	"encoding/json"
+	"errors"
+	"sync"
+
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
 	"at.ourproject/energystore/store/ebow"
-	"encoding/json"
-	"errors"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/golang/glog"
-	"sync"
 )
 
 type TenantEnergyImporter struct {

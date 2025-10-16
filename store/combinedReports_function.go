@@ -1,9 +1,10 @@
 package store
 
 import (
-	"at.ourproject/energystore/model"
 	"strings"
 	"time"
+
+	"at.ourproject/energystore/model"
 )
 
 func determineReportFunctions(reports []string, start, end time.Time) map[string]EnergyConsumer {
@@ -14,7 +15,7 @@ func determineReportFunctions(reports []string, start, end time.Time) map[string
 			rf[report] = &LoadCurve{
 				Cache:    Cache{cacheTs: determineTimeShiftFunction(start, end)},
 				Result:   make(map[string]*ReportData),
-				NameFunc: determineSeriesNameFunction(start, end)}
+				NameFunc: determineSeriesNameFunction(start, end, nil)}
 			break
 		case "intraday":
 			rf[report] = &IntraDay{Cache: Cache{cacheTs: AddDuration(time.Hour)}, Result: make(map[int]*ReportData)}

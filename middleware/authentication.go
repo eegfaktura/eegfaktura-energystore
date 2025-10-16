@@ -26,10 +26,11 @@ var (
 )
 
 type keycloakConfig struct {
-	ClientId string `json:"resource"`
-	Secret   string `json:"secret,omitempty"`
-	Realm    string `json:"realm"`
-	Host     string `json:"auth-server-url"`
+	ClientId  string `json:"resource"`
+	Secret    string `json:"secret,omitempty"`
+	Realm     string `json:"realm"`
+	Host      string `json:"auth-server-url"`
+	IssuerUrl string `json:"issuer_url,omitempty"`
 }
 
 func init() {
@@ -47,12 +48,13 @@ func init() {
 
 	clientIDApi := kcConfig["api"].ClientId
 	clientSecretApi := kcConfig["api"].Secret
+	issuerUrl := kcConfig["api"].IssuerUrl
 
 	realmApi := kcConfig["api"].Realm
 	host := strings.TrimRight(kcConfig["api"].Host, "/")
 
 	c := &http.Client{Timeout: time.Duration(1) * time.Second}
-	kcClientAPI, err = NewKeycloakClient(fmt.Sprintf("%s/realms/%s", host, realmApi), clientIDApi, clientSecretApi, c)
+	kcClientAPI, err = NewKeycloakClient(fmt.Sprintf("%s/realms/%s", host, realmApi), clientIDApi, clientSecretApi, issuerUrl, c)
 	if err != nil {
 		panic(err)
 	}
@@ -65,6 +67,9 @@ func init() {
 	hostApp := strings.TrimRight(kcConfig["app"].Host, "/")
 
 	ctx := context.Background()
+	if issuerUrl != "" {
+		ctx = oidc.InsecureIssuerURLContext(ctx, issuerUrl)
+	}
 	providerUriApp := fmt.Sprintf("%s/realms/%s", hostApp, realmApp)
 	provider, err := oidc.NewProvider(ctx, providerUriApp)
 	if err != nil {
