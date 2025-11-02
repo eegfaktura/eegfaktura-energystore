@@ -2,8 +2,9 @@ package ebow
 
 import (
 	"bytes"
-	"github.com/dgraph-io/badger/v3"
 	"runtime"
+
+	"github.com/dgraph-io/badger/v4"
 )
 
 type IRange interface {

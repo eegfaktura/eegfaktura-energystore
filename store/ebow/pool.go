@@ -1,12 +1,13 @@
 package ebow
 
 import (
-	"github.com/dgraph-io/badger/v3"
-	"github.com/golang/glog"
-	"github.com/spf13/viper"
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/dgraph-io/badger/v4"
+	"github.com/golang/glog"
+	"github.com/spf13/viper"
 )
 
 type ebowLogger struct {
@@ -107,9 +108,25 @@ func (dpo *DbPoolObject) OpenStorage() (*DB, error) {
 	basePath := viper.GetString("persistence.path")
 	path := filepath.Join(basePath, dpo.tenant, dpo.ecId)
 
-	badgerOpts := badger.DefaultOptions(path)
-	badgerOpts.Logger = ebowLogger{4}
-	badgerOpts.BlockCacheSize = 512 << 20
+	badgerOpts := badger.DefaultOptions(path).
+		WithLogger(ebowLogger{4}).
+		//WithCompression(options.None).
+		WithMemTableSize(32 << 20). // 32 MB write buffer (OK)
+		WithNumMemtables(1).
+		WithBlockCacheSize(256 << 20).
+		////WithBlockCacheSize(0).      // disable block cache
+		////WithIndexCacheSize(0).     // disable index cache
+		WithNumLevelZeroTables(4). // allow a few in-memory tables
+		WithNumLevelZeroTablesStall(8).
+		////WithValueLogFileSize(128 << 20). // reasonable log file size
+		WithValueThreshold(1 << 20). // store values >1MB in vlog
+		WithNumCompactors(2). // fewer background threads = less RAM
+		////WithCompactL0OnClose(false).     // skip final compaction to save time
+		WithMetricsEnabled(false)
+
+	// original Options: 01-11-2025
+	//badgerOpts.Logger = ebowLogger{4}
+	//badgerOpts.BlockCacheSize = 512 << 20
 
 	db, err := Open(path, SetBadgerOptions(badgerOpts))
 	if err != nil {

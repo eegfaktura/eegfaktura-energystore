@@ -1,13 +1,15 @@
 package store
 
 import (
+	"fmt"
+	"sort"
+	"strings"
+	"time"
+
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
-	"fmt"
 	"github.com/golang/glog"
-	"sort"
-	"time"
 )
 
 func StoreEnergyV2(db *ebow.BowStorage, meteringPoint string, data *model.MqttEnergy) error {
@@ -36,7 +38,7 @@ func StoreEnergyV2(db *ebow.BowStorage, meteringPoint string, data *model.MqttEn
 		return err
 	}
 
-	var resources map[string]*model.RawSourceLine = map[string]*model.RawSourceLine{}
+	var resources *map[string]*model.RawSourceLine = &map[string]*model.RawSourceLine{}
 	begin := time.UnixMilli(data.Start)
 	end := time.UnixMilli(data.End)
 	fetchSourceRange(db, "CP", begin, end, resources)
@@ -46,35 +48,36 @@ func StoreEnergyV2(db *ebow.BowStorage, meteringPoint string, data *model.MqttEn
 	if len(metaMeter) > 0 {
 		resources, err = importEnergyValuesV2(metaMeter, data, metaCP, consumerCount, producerCount, resources, false)
 	}
-	glog.V(5).Infof("Update CP %s energy values (%d) from %s to %s",
-		meteringPoint,
-		len(resources),
-		time.UnixMilli(data.Start).Format(time.RFC822),
-		time.UnixMilli(data.End).Format(time.RFC822))
 	if err != nil {
 		return err
 	}
+
+	glog.V(5).Infof("Update CP %s energy values (%d) from %s to %s",
+		meteringPoint,
+		len(*resources),
+		time.UnixMilli(data.Start).Format(time.RFC822),
+		time.UnixMilli(data.End).Format(time.RFC822))
 
 	// Store updated RawDataStructure
 	glog.V(5).Infof("Update/Override CP %s (%+v) energy values (%d) from %s to %s",
 		meteringPoint,
 		metaMeter,
-		len(resources),
+		len(*resources),
 		time.UnixMilli(data.Start).Format(time.RFC822),
 		time.UnixMilli(data.End).Format(time.RFC822))
-	if err != nil {
-		return err
-	}
 
-	updated := make([]*model.RawSourceLine, len(resources))
+	updated := make([]*model.RawSourceLine, len(*resources))
 	i := 0
-	for _, v := range resources {
+	for _, v := range *resources {
 		updated[i] = v
 		i += 1
 
 		glog.V(4).Infof("Update Source Line %+v", v)
 	}
 
+	sort.Slice(updated, func(i, j int) bool {
+		return strings.Compare(updated[i].Id, updated[j].Id) < 0
+	})
 	err = db.SetLines(updated)
 
 	if c := updateMetaCP(metaCP, time.UnixMilli(data.Start), time.UnixMilli(data.End)); c {
@@ -105,8 +108,8 @@ func importEnergyValuesV2(
 	data *model.MqttEnergy,
 	metaCP *model.CounterPointMeta,
 	consumerCount, producerCount int,
-	resources map[string]*model.RawSourceLine,
-	isExt bool) (map[string]*model.RawSourceLine, error) {
+	resources *map[string]*model.RawSourceLine,
+	isExt bool) (*map[string]*model.RawSourceLine, error) {
 
 	for _, mc := range meterCode {
 		sort.Slice(data.Data[mc.SourceInData].Value, func(i, j int) bool {
@@ -127,16 +130,16 @@ func importEnergyValuesV2(
 				if err != nil {
 					return resources, err
 				}
-				_, ok := resources[id]
+				_, ok := (*resources)[id]
 				if !ok {
-					resources[id] = model.MakeRawSourceLine(id, consumerCount, producerCount) //&model.RawSourceLine{Id: id, Consumers: make([]float64, consumerCount), Producers: make([]float64, producerCount)}
+					(*resources)[id] = model.MakeRawSourceLine(id, consumerCount, producerCount) //&model.RawSourceLine{Id: id, Consumers: make([]float64, consumerCount), Producers: make([]float64, producerCount)}
 				}
 				_, visited := rowIdVisited[id]
 				if visited {
 					// Just a specific function for winter-time-switch. If in an energy day file timestamps occur twice add those values.
-					sumEnergyValueToResource(resources[id], metaCP, mc, v, isExt)
+					sumEnergyValueToResource((*resources)[id], metaCP, mc, v, isExt)
 				} else {
-					addEnergyValueToResource(resources[id], metaCP, mc, v, isExt)
+					addEnergyValueToResource((*resources)[id], metaCP, mc, v, isExt)
 				}
 				rowIdVisited[id] = true
 			}
@@ -186,7 +189,7 @@ func addEnergyValueToResource(resource *model.RawSourceLine, metaCP *model.Count
 	}
 }
 
-func fetchSourceRange(db *ebow.BowStorage, key string, start, end time.Time, resources map[string]*model.RawSourceLine) {
+func fetchSourceRange(db *ebow.BowStorage, key string, start, end time.Time, resources *map[string]*model.RawSourceLine) {
 	sYear, sMonth, sDay := start.Year(), int(start.Month()), start.Day()
 	eYear, eMonth, eDay := end.Year(), int(end.Month()), end.Day()
 
@@ -196,7 +199,7 @@ func fetchSourceRange(db *ebow.BowStorage, key string, start, end time.Time, res
 	var _line model.RawSourceLine
 	for iter.Next(&_line) {
 		l := _line.Copy(len(_line.Consumers))
-		resources[_line.Id] = &l
+		(*resources)[_line.Id] = &l
 	}
 }
 

@@ -64,13 +64,13 @@ func (tmw *TenantEnergyImporter) Execute(msg mqtt.Message) {
 		return
 	}
 
-	glog.Infof("Execute Energy Data Message for Topic (%v)", tmw.Tenant)
+	glog.V(3).Infof("Execute Energy Data Message for Topic (%v)", tmw.Tenant)
 	err := tmw.Import(data)
 	if err != nil {
 		glog.Errorf("%v tenant=%s", err, tmw.Tenant)
 		return
 	}
-	glog.Infof("Execution finished (%v)", tmw.Tenant)
+	glog.V(3).Infof("Execution finished (%v)", tmw.Tenant)
 }
 
 func (tmw *TenantEnergyImporter) Import(data *model.MqttEnergyMessage) error {
