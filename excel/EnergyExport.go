@@ -97,9 +97,9 @@ type periodRange struct {
 }
 
 type Sheet interface {
-	initSheet(ctx *RunnerContext) error
-	handleLine(ctx *RunnerContext, line *model.RawSourceLine) error
-	closeSheet(ctx *RunnerContext) error
+	initSheet(ctx *store.EngineContext /*ctx *RunnerContext*/) error
+	handleLine(ctx *store.EngineContext /*ctx *RunnerContext*/, line *model.RawSourceLine) error
+	closeSheet(ctx *store.EngineContext /*ctx *RunnerContext*/) error
 }
 
 type RunnerContext struct {

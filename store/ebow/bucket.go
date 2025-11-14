@@ -33,14 +33,15 @@ func (b *Bucket) PutBatch(batch []interface{}) error {
 		if err := wb.Set(ik, data); err != nil {
 			return err
 		}
+		_wrtCnt++
 
 		if _wrtCnt%100 == 0 {
 			// flush every 100 entries
 			if err := wb.Flush(); err != nil {
 				return err
 			}
+			wb = b.db.db.NewWriteBatch()
 		}
-		_wrtCnt++
 	}
 	if err := wb.Flush(); err != nil {
 		return err

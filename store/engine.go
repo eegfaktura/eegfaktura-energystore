@@ -32,6 +32,29 @@ type EngineContext struct {
 	checkBegin      func(lineDate, mDate time.Time) bool
 }
 
+func (ec EngineContext) Info() *model.CounterPointMetaInfo {
+	return ec.info
+}
+
+func (ec EngineContext) ConsumerCount() int {
+	return ec.info.ConsumerCount
+}
+
+func (ec EngineContext) ProducerCount() int {
+	return ec.info.ProducerCount
+}
+
+func (ec EngineContext) CheckBegin(lineDate, mDate time.Time) bool {
+	if ec.checkBegin == nil {
+		return true
+	}
+	return ec.checkBegin(lineDate, mDate)
+}
+
+func (ec EngineContext) MetaMap() map[string]*model.CounterPointMeta {
+	return ec.metaMap
+}
+
 func createEngineContext(db ebow.IBowStorage, start, end time.Time) (*EngineContext, error) {
 	metaMap, info, err := GetMetaInfo(db)
 	if err != nil {
@@ -95,6 +118,7 @@ type EnergyReportConsumer interface {
 
 type AddTo func(*EngineContext, time.Time, *model.RawSourceLine) error
 
+type InitCacheTimeFunc func(ct CacheTime) CacheTime
 type AddCacheTimeFunc func(dir int, ct CacheTime) CacheTime
 type SubCacheTimeFunc func(ct CacheTime) CacheTime
 
@@ -126,12 +150,40 @@ func SubDate(y, m, d int) SubCacheTimeFunc {
 	}
 }
 
+func InitDefault() InitCacheTimeFunc {
+	return func(dt CacheTime) CacheTime {
+		return dt
+	}
+}
+
+func InitMonth() InitCacheTimeFunc {
+	return func(dt CacheTime) CacheTime {
+		return CacheTime{time.Date(dt.Year(), dt.Month(), 1, 0, 0, 0, 0, time.Local)}
+	}
+}
+
+func InitWeek() InitCacheTimeFunc {
+	return func(dt CacheTime) CacheTime {
+		weekday := time.Duration(dt.Weekday())
+		if weekday == 0 {
+			weekday = 7
+		}
+		year, month, day := dt.Date()
+		currentZeroDay := time.Date(year, month, day, 0, 0, 0, 0, time.Local)
+		return CacheTime{currentZeroDay.Add(-1 * (weekday - 1) * 24 * time.Hour)}
+	}
+}
+
 type CacheTime struct {
 	time.Time
 }
 
 func (ct CacheTime) AddTs(timeFunc AddCacheTimeFunc) CacheTime {
 	return timeFunc(1, ct)
+}
+
+func (ct CacheTime) Init(timeFunc InitCacheTimeFunc) CacheTime {
+	return timeFunc(ct)
 }
 
 func (ct CacheTime) SubTs(timeFunc AddCacheTimeFunc) CacheTime {
@@ -143,17 +195,18 @@ func (ct CacheTime) GetDuration(cacheTs AddCacheTimeFunc) time.Duration {
 }
 
 type Cache struct {
-	cacheTs   AddCacheTimeFunc
+	cacheTsFn AddCacheTimeFunc
+	initTsFn  InitCacheTimeFunc
 	cache     model.RawSourceLine
 	cacheTime CacheTime
 }
 
 func (ca *Cache) CacheLine(ctx *EngineContext, ts time.Time, line *model.RawSourceLine, addTo AddTo) error {
-	if ca.cacheTs == nil {
+	if ca.cacheTsFn == nil {
 		return addTo(ctx, ts, line)
 	}
 
-	if ts.Before(ca.cacheTime.Time) {
+	if ts.Before(ca.cacheTime.AddTs(ca.cacheTsFn).Time) {
 		return ca.addToCache(line)
 	}
 
@@ -163,16 +216,21 @@ func (ca *Cache) CacheLine(ctx *EngineContext, ts time.Time, line *model.RawSour
 	}
 
 	ca.cache = line.DeepCopy(ctx.countCons, ctx.countProd)
-	ca.cacheTime = ca.cacheTime.AddTs(ca.cacheTs)
+	ca.cacheTime = ca.cacheTime.AddTs(ca.cacheTsFn)
 	return nil
 }
 
 func (ca *Cache) InitCache(ctx *EngineContext) error {
-	if ca.cacheTs == nil {
+	if ca.cacheTsFn == nil {
 		return nil
 	}
-	ca.cacheTime = CacheTime{ctx.start}.AddTs(ca.cacheTs)
-	//ca.cacheTime.AddTs(ca.cacheTs)
+
+	if ca.initTsFn != nil {
+		ca.cacheTime = CacheTime{ctx.start}.Init(ca.initTsFn)
+	} else {
+		ca.cacheTime = CacheTime{ctx.start}
+	}
+
 	ca.cache = model.RawSourceLine{
 		Consumers:    make([]float64, ctx.countCons*3),
 		Producers:    make([]float64, ctx.countProd*2),
@@ -253,7 +311,7 @@ func (e *Engine) Query(tenant, ecid string, start, end time.Time) error {
 
 	var pt *time.Time = nil
 	for g1Ok {
-		_, t, err := utils.ConvertRowIdToTimeString("CP", _lineG1.Id, time.Local)
+		_, t, err := utils.ConvertRowIdToTimeString("CP", _lineG1.Id, time.UTC)
 		if err != nil {
 			g1Ok = iterCP.Next(&_lineG1)
 			continue
@@ -263,7 +321,7 @@ func (e *Engine) Query(tenant, ecid string, start, end time.Time) error {
 			if diff > 0 {
 				for i := int64(0); i < diff; i += 1 {
 					nTime := pt.Add(time.Minute * time.Duration(15*(int(i)+1)))
-					newId, _ := utils.ConvertUnixTimeToRowId("CP/", nTime)
+					newId, _ := utils.ConvertUnixTimeToRowId("CP/", nTime.Local())
 					fillLine := model.MakeRawSourceLine(newId,
 						ctx.countCons*3, ctx.countProd*2).Copy(ctx.countCons * 3)
 					if err = e.Consumer.HandleLine(ctx, &fillLine); err != nil {

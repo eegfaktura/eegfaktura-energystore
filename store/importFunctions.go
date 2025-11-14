@@ -3,7 +3,6 @@ package store
 import (
 	"fmt"
 	"sort"
-	"strings"
 	"time"
 
 	"at.ourproject/energystore/model"
@@ -76,14 +75,20 @@ func StoreEnergyV2(db *ebow.BowStorage, meteringPoint string, data *model.MqttEn
 	}
 
 	sort.Slice(updated, func(i, j int) bool {
-		return strings.Compare(updated[i].Id, updated[j].Id) < 0
+		return updated[i].Id < updated[j].Id
 	})
+
 	err = db.SetLines(updated)
+
+	if err != nil {
+		glog.Error(err)
+		return err
+	}
 
 	if c := updateMetaCP(metaCP, time.UnixMilli(data.Start), time.UnixMilli(data.End)); c {
 		err = updateMeta(db, metaCP, meteringPoint)
 	}
-	return nil
+	return err
 }
 
 func organizeMetaCodeImport(data []model.MqttEnergyData) []*model.MeterCodeMeta {

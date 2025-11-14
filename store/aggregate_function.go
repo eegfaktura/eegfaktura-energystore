@@ -14,7 +14,7 @@ import (
 type Aggregate struct {
 	ParentFunction
 	Cache
-	//cacheTs   time.Duration
+	//cacheTsFn   time.Duration
 	//cache     model.RawSourceLine
 	//cacheTime time.Time
 }
@@ -32,7 +32,7 @@ func NewAggregateFunction(args []string, cps []TargetMP) (IQueryFunction, error)
 
 	return &Aggregate{
 		ParentFunction: ParentFunction{cps: cps},
-		Cache:          Cache{cacheTs: cacheTs}}, nil
+		Cache:          Cache{cacheTsFn: cacheTs}}, nil
 }
 
 func parseArgument(arg string) (AddCacheTimeFunc, error) {
@@ -72,7 +72,6 @@ func parseArgument(arg string) (AddCacheTimeFunc, error) {
 func (agg *Aggregate) HandleInit(ctx *EngineContext) error {
 	agg.Result = make(map[string]*RawDataResult)
 	agg.cacheTime = CacheTime{ctx.start}
-	agg.cacheTime.AddTs(agg.cacheTs)
 	agg.cache = model.RawSourceLine{
 		Consumers:    make([]float64, ctx.countCons*3),
 		Producers:    make([]float64, ctx.countProd*2),
@@ -102,7 +101,7 @@ func (agg *Aggregate) HandleLine(ctx *EngineContext, line *model.RawSourceLine) 
 	//}
 	//
 	//agg.cache = line.DeepCopy(ctx.countCons, ctx.countProd)
-	//agg.cacheTime = agg.cacheTime.AddTs(agg.cacheTs)
+	//agg.cacheTime = agg.cacheTime.AddTs(agg.cacheTsFn)
 	//return nil
 }
 

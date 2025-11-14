@@ -44,31 +44,14 @@ var nameFunctionRepo = map[string]SeriesNameFunc{
 	"MONTHDAY":  monthDayNameFunc(),
 }
 
-func determineSeriesNameFunction(start, end time.Time, nameFunc *string) SeriesNameFunc {
-	//if nameFunc == nil {
-	if start.AddDate(0, 0, 1).Add(time.Minute).After(end) {
-		return dayRawNameFunc()
-	} else if start.AddDate(0, 1, 0).Add(time.Minute).After(end) {
-		return monthDayNameFunc()
-	} else if start.AddDate(0, 6, 0).Add(time.Minute).After(end) {
-		return weekYearNameFunc()
-	} else if start.AddDate(0, 12, 0).Add(time.Minute).After(end) {
-		return monthYearNameFunc()
-	} else {
-		return dayRawNameFunc()
-	}
-	//}
-	//return nameFunctionRepo[strings.ToUpper(*nameFunc)]
-}
-
 type LoadCurve struct {
 	Cache
 	Result   map[string]*ReportData
 	NameFunc func(time time.Time) string
 }
 
-func NewLoadCurveFunction(timeShift AddCacheTimeFunc, seriesName SeriesNameFunc) (EnergyConsumer, error) {
-	return &LoadCurve{Cache: Cache{cacheTs: timeShift}, Result: make(map[string]*ReportData), NameFunc: seriesName}, nil
+func NewLoadCurveFunction(timeShift AddCacheTimeFunc, seriesName SeriesNameFunc, initTime InitCacheTimeFunc) (EnergyConsumer, error) {
+	return &LoadCurve{Cache: Cache{cacheTsFn: timeShift, initTsFn: initTime}, Result: make(map[string]*ReportData), NameFunc: seriesName}, nil
 }
 
 func (lc *LoadCurve) HandleStart(ctx *EngineContext) error {
@@ -86,6 +69,9 @@ func (lc *LoadCurve) HandleLine(ctx *EngineContext, line *model.RawSourceLine) e
 }
 
 func (lc *LoadCurve) HandleEnd(ctx *EngineContext) error {
+	if len(lc.cache.Id) == 0 {
+		return nil
+	}
 	return lc.addToResult(ctx, lc.cacheTime.Time, &lc.cache)
 }
 
@@ -102,9 +88,9 @@ func (lc *LoadCurve) GetResult() []interface{} {
 
 func (lc *LoadCurve) addToResult(ctx *EngineContext, t time.Time, line *model.RawSourceLine) error {
 	start := t
-	if lc.cacheTs != nil {
-		start = CacheTime{t}.SubTs(lc.cacheTs).Time
-	}
+	//if lc.cacheTsFn != nil {
+	//	start = CacheTime{t}.SubTs(lc.cacheTsFn).Time
+	//}
 	sn := lc.NameFunc(start)
 
 	if _, ok := lc.Result[sn]; !ok {
@@ -117,14 +103,23 @@ func (lc *LoadCurve) addToResult(ctx *EngineContext, t time.Time, line *model.Ra
 		lc.Result[sn].Consumed += line.Consumers[i]
 		lc.Result[sn].Allocated += line.Consumers[i+1]
 		lc.Result[sn].Distributed += line.Consumers[i+2]
-		lc.Result[sn].QoVConsumer = calcQoV(lc.Result[sn].QoVConsumer, line.QoVConsumers[i])
+		if len(line.QoVConsumers) > i {
+			lc.Result[sn].QoVConsumer = calcQoV(lc.Result[sn].QoVConsumer, line.QoVConsumers[i])
+		} else {
+			lc.Result[sn].QoVConsumer = 0
+		}
 	}
 	pLen := len(line.Producers)
 	pLen = pLen - (pLen % 2)
 	for i := 0; i < pLen; i += 2 {
 		lc.Result[sn].Produced += line.Producers[i]
 		lc.Result[sn].Unused += line.Producers[i+1]
-		lc.Result[sn].QoVProducer = calcQoV(lc.Result[sn].QoVProducer, line.QoVProducers[i])
+		if len(line.QoVProducers) > i {
+			lc.Result[sn].QoVProducer = calcQoV(lc.Result[sn].QoVProducer, line.QoVProducers[i])
+		} else {
+			lc.Result[sn].QoVProducer = 0
+		}
+
 	}
 
 	cCon, cPro := CountMembersPeriod(ctx, start, t)

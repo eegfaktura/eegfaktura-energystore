@@ -1,24 +1,25 @@
 package main
 
 import (
-	"at.ourproject/energystore/graph"
-	"at.ourproject/energystore/graph/generated"
-	"at.ourproject/energystore/mqttclient"
-	"at.ourproject/energystore/rest"
-	"at.ourproject/energystore/store/ebow"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/99designs/gqlgen/graphql/handler"
-	"github.com/golang/glog"
-	"github.com/gorilla/handlers"
-	"github.com/spf13/viper"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"at.ourproject/energystore/graph"
+	"at.ourproject/energystore/graph/generated"
+	"at.ourproject/energystore/mqttclient"
+	"at.ourproject/energystore/rest"
+	"at.ourproject/energystore/store/ebow"
+	"github.com/99designs/gqlgen/graphql/handler"
+	"github.com/golang/glog"
+	"github.com/gorilla/handlers"
+	"github.com/spf13/viper"
 
 	"at.ourproject/energystore/config"
 )
@@ -122,24 +123,6 @@ func SetupMqttDispatcher(ctx context.Context) *mqttclient.TopicDispatcher {
 	if err != nil {
 		panic(err)
 	}
-
-	//worker := map[string]mqttclient.Executor{}
-	//energyTopicPrefix := viper.GetString("mqtt.energySubscriptionTopic")
-	//worker[energyTopicPrefix] = calculation.NewMqttEnergyImporter(ctx)
-	//
-	//inverterTopicPrefix := viper.GetString("mqtt.inverterSubscriptionTopic")
-	//worker[inverterTopicPrefix] = calculation.NewMqttInverterImporter(ctx)
-
-	//dispatcher := mqttclient.NewDispatcher(ctx, streamer, worker)
-	//_ = dispatcher
-	//
-	//if err := streamer.Connect(); err != nil {
-	//	panic(err)
-	//}
-	//
-	//for k, _ := range worker {
-	//	streamer.SubscribeTopic(ctx, k, nil)
-	//}
 
 	energyTopicPrefix := viper.GetString("mqtt.energySubscriptionTopic")
 	dispatcher := mqttclient.NewTopicDispatcher(ctx, energyTopicPrefix, streamer)

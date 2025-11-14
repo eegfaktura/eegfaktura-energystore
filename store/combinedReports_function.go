@@ -12,13 +12,14 @@ func determineReportFunctions(reports []string, start, end time.Time) map[string
 	for _, report := range reports {
 		switch strings.ToLower(report) {
 		case "loadcurve":
+			tsFn, initFn, nameFn := determineTimeShiftFunction(start, end)
 			rf[report] = &LoadCurve{
-				Cache:    Cache{cacheTs: determineTimeShiftFunction(start, end)},
+				Cache:    Cache{cacheTsFn: tsFn, initTsFn: initFn},
 				Result:   make(map[string]*ReportData),
-				NameFunc: determineSeriesNameFunction(start, end, nil)}
+				NameFunc: nameFn}
 			break
 		case "intraday":
-			rf[report] = &IntraDay{Cache: Cache{cacheTs: AddDuration(time.Hour)}, Result: make(map[int]*ReportData)}
+			rf[report] = &IntraDay{Cache: Cache{cacheTsFn: AddDuration(time.Hour)}, Result: make(map[int]*ReportData)}
 			break
 		case "summary":
 			rf[report] = &EnergySummary{Result: &ReportData{}}

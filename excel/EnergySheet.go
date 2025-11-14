@@ -1,11 +1,12 @@
 package excel
 
 import (
+	"fmt"
+	"time"
+
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/utils"
-	"fmt"
 	"github.com/xuri/excelize/v2"
-	"time"
 )
 
 type EnergySheet struct {
@@ -153,22 +154,10 @@ func (es *EnergySheet) closeSheet(ctx *RunnerContext) error {
 }
 
 func checkQoV(ctx *RunnerContext, line *model.RawSourceLine) bool {
-	lineDate, _ := utils.ConvertRowIdToTime("CP", line.Id)
-
-	//checkDate := func(periodStart string, lineDate time.Time) bool {
-	//	mDate, _ := utils.ParseTime(periodStart, 0)
-	//	if lineDate.Before(mDate) {
-	//		return true
-	//	}
-	//	return false
-	//}
-
-	//checkDate := func(start, end int64, lineDate time.Time) bool {
-	//	if lineDate.Before(time.UnixMilli(start)) || lineDate.After(time.UnixMilli(end)) {
-	//		return true
-	//	}
-	//	return false
-	//}
+	_, lineDate, err := utils.ConvertRowIdToTimeString("CP", line.Id, time.Local)
+	if err != nil {
+		return false
+	}
 
 	nok := false
 	for _, cp := range ctx.cps {
@@ -177,13 +166,8 @@ func checkQoV(ctx *RunnerContext, line *model.RawSourceLine) bool {
 			continue
 		}
 		if m.Dir == model.CONSUMER_DIRECTION {
-			if cp.MeteringPoint == "AT0030000000000000000000000197833" {
-				p := 1
-				_ = p
-			}
 			baseIdx := m.SourceIdx * 3
-			if utils.IsLineDateOutOfRange(lineDate, [2]int64{cp.ActiveSince, cp.InactiveSince}) {
-				//if checkDate(cp.ActiveSince, cp.InactiveSince, lineDate) {
+			if utils.IsLineDateOutOfRange(*lineDate, [2]int64{cp.ActiveSince, cp.InactiveSince}) {
 				continue
 			}
 			nok =
@@ -192,8 +176,7 @@ func checkQoV(ctx *RunnerContext, line *model.RawSourceLine) bool {
 					utils.GetInt(line.QoVConsumers, baseIdx+2) != 1
 		} else {
 			baseIdx := m.SourceIdx * 2
-			if utils.IsLineDateOutOfRange(lineDate, [2]int64{cp.ActiveSince, cp.InactiveSince}) {
-				//if checkDate(cp.ActiveSince, cp.InactiveSince, lineDate) {
+			if utils.IsLineDateOutOfRange(*lineDate, [2]int64{cp.ActiveSince, cp.InactiveSince}) {
 				continue
 			}
 			nok =

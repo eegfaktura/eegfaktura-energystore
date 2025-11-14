@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -176,6 +177,7 @@ func getLines() []*model.RawSourceLine {
 		{Id: "CP/2022/11/08/23/15/00", Consumers: []float64{0.1}, Producers: []float64{}},
 		{Id: "CP/2022/11/08/23/30/00", Consumers: []float64{0.1}, Producers: []float64{}},
 		{Id: "CP/2022/11/08/23/45/00", Consumers: []float64{0.1}, Producers: []float64{}},
+
 		{Id: "CP/2022/11/09/00/00/00", Consumers: []float64{0.2}, Producers: []float64{}},
 		{Id: "CP/2022/11/09/00/15/00", Consumers: []float64{0.2}, Producers: []float64{}},
 		{Id: "CP/2022/11/09/00/30/00", Consumers: []float64{0.2}, Producers: []float64{}},
@@ -222,7 +224,7 @@ func TestAggregate_HandleFinish(t *testing.T) {
 			name: "Handle Finish",
 			fields: fields{
 				ParentFunction: ParentFunction{cps: []TargetMP{{MeteringPoint: "AT002000000000000000000011111"}}, Result: make(map[string]*RawDataResult)},
-				Cache:          Cache{cacheTs: AddDuration(1)},
+				Cache:          Cache{cacheTsFn: AddDuration(1)},
 			},
 			args:    args{ctx: ctx},
 			wantErr: assert.NoError,
@@ -261,7 +263,7 @@ func TestAggregate_HandleInit(t *testing.T) {
 		name: "Handle Init",
 		fields: fields{
 			ParentFunction: ParentFunction{cps: []TargetMP{{MeteringPoint: "AT002000000000000000000011111"}}, Result: make(map[string]*RawDataResult)},
-			Cache:          Cache{cacheTs: AddDuration(1)},
+			Cache:          Cache{cacheTsFn: AddDuration(1)},
 		},
 		args:    args{ctx: ctx},
 		wantErr: assert.NoError,
@@ -302,7 +304,7 @@ func TestAggregate_HandleLine(t *testing.T) {
 			name: "Aggregate Hour",
 			fields: fields{
 				ParentFunction: ParentFunction{cps: []TargetMP{{MeteringPoint: "AT002000000000000000000011111"}}, Result: make(map[string]*RawDataResult)},
-				Cache:          Cache{cacheTs: AddDuration(1)},
+				Cache:          Cache{cacheTsFn: AddDuration(1)},
 			},
 			args: args{
 				ctx:  ctx,
@@ -337,7 +339,7 @@ func TestAggregateFunction(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		want    IQueryFunction
+		want    func(t *testing.T, result map[string]*RawDataResult)
 		wantErr assert.ErrorAssertionFunc
 	}{
 		{
@@ -348,7 +350,50 @@ func TestAggregateFunction(t *testing.T) {
 				cps:   []TargetMP{{MeteringPoint: "AT002000000000000000000011111"}},
 				lines: getLines(),
 			},
-			want:    nil,
+			want: func(t *testing.T, result map[string]*RawDataResult) {
+				assert.Equal(t, 1, len(result))
+				assert.Equal(t, 3, len(result["AT002000000000000000000011111"].Data))
+				assert.Equal(t, 0.52, math.Round(result["AT002000000000000000000011111"].Data[0].Value[0]*100)/100)
+				assert.Equal(t, time.Date(2022, 11, 8, 0, 0, 0, 0, time.Local).UnixMilli(), result["AT002000000000000000000011111"].Data[0].Ts)
+				assert.Equal(t, 1.00, math.Round(result["AT002000000000000000000011111"].Data[1].Value[0]*100)/100)
+				assert.Equal(t, time.Date(2022, 11, 8, 12, 0, 0, 0, time.Local).UnixMilli(), result["AT002000000000000000000011111"].Data[1].Ts)
+				assert.Equal(t, 3.60, math.Round(result["AT002000000000000000000011111"].Data[2].Value[0]*100)/100)
+				assert.Equal(t, time.Date(2022, 11, 9, 0, 0, 0, 0, time.Local).UnixMilli(), result["AT002000000000000000000011111"].Data[2].Ts)
+
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "Aggregate Day",
+			args: args{
+				ctx:   ctx,
+				args:  []string{"1d"},
+				cps:   []TargetMP{{MeteringPoint: "AT002000000000000000000011111"}},
+				lines: getLines(),
+			},
+			want: func(t *testing.T, result map[string]*RawDataResult) {
+				assert.Equal(t, 1, len(result))
+				assert.Equal(t, 2, len(result["AT002000000000000000000011111"].Data))
+				assert.Equal(t, 1.52, math.Round(result["AT002000000000000000000011111"].Data[0].Value[0]*100)/100)
+				assert.Equal(t, time.Date(2022, 11, 8, 0, 0, 0, 0, time.Local).UnixMilli(), result["AT002000000000000000000011111"].Data[0].Ts)
+				assert.Equal(t, 3.60, math.Round(result["AT002000000000000000000011111"].Data[1].Value[0]*100)/100)
+				assert.Equal(t, time.Date(2022, 11, 9, 0, 0, 0, 0, time.Local).UnixMilli(), result["AT002000000000000000000011111"].Data[1].Ts)
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "Aggregate Week",
+			args: args{
+				ctx:   ctx,
+				args:  []string{"1w"},
+				cps:   []TargetMP{{MeteringPoint: "AT002000000000000000000011111"}},
+				lines: getLines(),
+			},
+			want: func(t *testing.T, result map[string]*RawDataResult) {
+				assert.Equal(t, 1, len(result))
+				assert.Equal(t, 1, len(result["AT002000000000000000000011111"].Data))
+				assert.Equal(t, 5.12, math.Round(result["AT002000000000000000000011111"].Data[0].Value[0]*100)/100)
+			},
 			wantErr: assert.NoError,
 		},
 	}
@@ -365,6 +410,9 @@ func TestAggregateFunction(t *testing.T) {
 
 			if !tt.wantErr(t, err, fmt.Sprintf("NewAggregateFunction(%v, %v)", tt.args.args, tt.args.cps)) {
 				return
+			}
+			if tt.want != nil {
+				tt.want(t, agg.GetResult())
 			}
 			printResult(agg.GetResult())
 			//assert.Equalf(t, tt.want, agg.GetResult(), "NewAggregateFunction(%v, %v)", tt.args.args, tt.args.cps)
@@ -401,7 +449,42 @@ func Test_parseArgument(t *testing.T) {
 		want    AddCacheTimeFunc
 		wantErr assert.ErrorAssertionFunc
 	}{
-		// TODO: Add test cases.
+		{
+			name:    "Aggregate Function - Day",
+			args:    args{arg: "1d"},
+			want:    AddDate(0, 0, 1),
+			wantErr: assert.NoError,
+		},
+		{
+			name:    "Aggregate Function - Week",
+			args:    args{arg: "1w"},
+			want:    AddDate(0, 0, 7),
+			wantErr: assert.NoError,
+		},
+		{
+			name:    "Aggregate Function - two Weeks",
+			args:    args{arg: "2w"},
+			want:    AddDate(0, 0, 14),
+			wantErr: assert.NoError,
+		},
+		{
+			name:    "Aggregate Function - Month",
+			args:    args{arg: "1m"},
+			want:    AddDate(0, 1, 0),
+			wantErr: assert.NoError,
+		},
+		{
+			name:    "Aggregate Function - Hour",
+			args:    args{arg: "1h"},
+			want:    AddDuration(time.Hour),
+			wantErr: assert.NoError,
+		},
+		{
+			name:    "Aggregate Function - Year (12 Month)",
+			args:    args{arg: "12m"},
+			want:    AddDate(0, 12, 0),
+			wantErr: assert.NoError,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -409,7 +492,8 @@ func Test_parseArgument(t *testing.T) {
 			if !tt.wantErr(t, err, fmt.Sprintf("parseArgument(%v)", tt.args.arg)) {
 				return
 			}
-			assert.Equalf(t, tt.want, got, "parseArgument(%v)", tt.args.arg)
+			ct := CacheTime{time.Now()}
+			assert.Equal(t, tt.want(1, ct), got(1, ct))
 		})
 	}
 }

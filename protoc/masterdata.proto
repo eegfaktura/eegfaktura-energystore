@@ -8,7 +8,7 @@ option go_package = "at.ourproject/energystore/protoc";
 package at.energydash;
 
 service ApiService {
-  // Sends a greeting
+  // Request Masterdata (Meteringpoints) form the master service
   rpc MasterData_MeteringPoint (MeteringRequest) returns (MeteringPointReply) {}
 }
 
