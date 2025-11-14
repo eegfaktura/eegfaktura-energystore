@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/store"
 	"at.ourproject/energystore/utils"
 	"github.com/xuri/excelize/v2"
 )
@@ -18,10 +17,10 @@ type SummarySheet struct {
 	qovProducerSlice []bool
 }
 
-func (ss *SummarySheet) initSheet(ctx *store.EngineContext) error {
+func (ss *SummarySheet) initSheet(ctx *RunnerContext) error {
 
-	ss.qovConsumerSlice = model.CreateInitializedBoolSlice(ctx.Info().ConsumerCount, true)
-	ss.qovProducerSlice = model.CreateInitializedBoolSlice(ctx.Info().ProducerCount, true)
+	ss.qovConsumerSlice = model.CreateInitializedBoolSlice(ctx.info.ConsumerCount, true)
+	ss.qovProducerSlice = model.CreateInitializedBoolSlice(ctx.info.ProducerCount, true)
 
 	_, err := ss.excel.NewSheet(ss.name)
 	if err != nil {
@@ -31,7 +30,7 @@ func (ss *SummarySheet) initSheet(ctx *store.EngineContext) error {
 	return nil
 }
 
-func (ss *SummarySheet) handleLine(ctx *store.EngineContext, line *model.RawSourceLine) error {
+func (ss *SummarySheet) handleLine(ctx *RunnerContext, line *model.RawSourceLine) error {
 	lineDate, _ := utils.ConvertRowIdToTime("CP", line.Id)
 	consumerMatrix, producerMatrix := utils.ConvertLineToMatrix(line)
 
@@ -57,7 +56,7 @@ func (ss *SummarySheet) handleLine(ctx *store.EngineContext, line *model.RawSour
 	return nil
 }
 
-func (ss *SummarySheet) handleParticipantReport(ctx *store.EngineContext, participant *ParticipantCp,
+func (ss *SummarySheet) handleParticipantReport(ctx *RunnerContext, participant *ParticipantCp,
 		consumerMatrix, producerMatrix *model.Matrix, lineDate time.Time, QoVConsumers, QoVProducers []int) error {
 
 	if utils.IsLineDateOutOfRange(lineDate, [2]int64{participant.ActiveSince, participant.InactiveSince}) {
@@ -65,7 +64,7 @@ func (ss *SummarySheet) handleParticipantReport(ctx *store.EngineContext, partic
 		return nil
 	}
 
-	meta, ok := ctx.MetaMap()[participant.MeteringPoint]
+	meta, ok := ctx.metaMap[participant.MeteringPoint]
 	// check metering point in metaMap as well
 	if !ok {
 		return nil
@@ -77,16 +76,16 @@ func (ss *SummarySheet) handleParticipantReport(ctx *store.EngineContext, partic
 		participant.Report.Allocated += consumerMatrix.GetElm(meta.SourceIdx, 2)
 		if (meta.SourceIdx*3)+2 < len(QoVConsumers) {
 			participant.QoV = participant.QoV &&
-					(ctx.CheckBegin(lineDate, time.UnixMilli(participant.ActiveSince)) ||
+					(ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) ||
 							((QoVConsumers[(meta.SourceIdx*3)] == 1) && (QoVConsumers[(meta.SourceIdx*3)+1] == 1) && (QoVConsumers[(meta.SourceIdx*3)+2] == 1)))
 			participant.QoVSum[0] = participant.QoVSum[0] ||
-					(!ctx.CheckBegin(lineDate, time.UnixMilli(participant.ActiveSince)) &&
+					(!ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) &&
 							((QoVConsumers[(meta.SourceIdx*3)] == 0) || (QoVConsumers[(meta.SourceIdx*3)+1] == 0) || (QoVConsumers[(meta.SourceIdx*3)+2] == 0)))
 			participant.QoVSum[1] = participant.QoVSum[1] ||
-					(!ctx.CheckBegin(lineDate, time.UnixMilli(participant.ActiveSince)) &&
+					(!ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) &&
 							((QoVConsumers[(meta.SourceIdx*3)] == 2) || (QoVConsumers[(meta.SourceIdx*3)+1] == 2) || (QoVConsumers[(meta.SourceIdx*3)+2] == 2)))
 			participant.QoVSum[2] = participant.QoVSum[2] ||
-					(!ctx.CheckBegin(lineDate, time.UnixMilli(participant.ActiveSince)) &&
+					(!ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) &&
 							((QoVConsumers[(meta.SourceIdx*3)] == 3) || (QoVConsumers[(meta.SourceIdx*3)+1] == 3) || (QoVConsumers[(meta.SourceIdx*3)+2] == 3)))
 		}
 	} else {
@@ -96,17 +95,17 @@ func (ss *SummarySheet) handleParticipantReport(ctx *store.EngineContext, partic
 			// TODO: check quality of Value calculation. Could be kind of weird!!!
 			//ss.qovProducerSlice[i] = ss.qovProducerSlice[i] && (ctx.checkBegin(lineDate, ctx.periodsProducer[i].start) || ((line.QoVProducers[(i*2)] == 1) && (line.QoVProducers[(i*2)+1] == 1)))
 			participant.QoV = participant.QoV &&
-					(ctx.CheckBegin(lineDate, time.UnixMilli(participant.ActiveSince)) ||
+					(ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) ||
 							((QoVProducers[(meta.SourceIdx*2)] == 1) && (QoVProducers[(meta.SourceIdx*2)+1] == 1)))
 
 			participant.QoVSum[0] = participant.QoVSum[0] ||
-					(!ctx.CheckBegin(lineDate, time.UnixMilli(participant.ActiveSince)) &&
+					(!ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) &&
 							((QoVProducers[(meta.SourceIdx*2)] == 0) || (QoVProducers[(meta.SourceIdx*2)+1] == 0)))
 			participant.QoVSum[1] = participant.QoVSum[1] ||
-					(!ctx.CheckBegin(lineDate, time.UnixMilli(participant.ActiveSince)) &&
+					(!ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) &&
 							((QoVProducers[(meta.SourceIdx*2)] == 2) || (QoVProducers[(meta.SourceIdx*2)+1] == 2)))
 			participant.QoVSum[2] = participant.QoVSum[2] ||
-					(!ctx.CheckBegin(lineDate, time.UnixMilli(participant.ActiveSince)) &&
+					(!ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) &&
 							((QoVProducers[(meta.SourceIdx*2)] == 3) || (QoVProducers[(meta.SourceIdx*2)+1] == 3)))
 		}
 	}

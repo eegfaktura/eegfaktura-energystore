@@ -32,29 +32,6 @@ type EngineContext struct {
 	checkBegin      func(lineDate, mDate time.Time) bool
 }
 
-func (ec EngineContext) Info() *model.CounterPointMetaInfo {
-	return ec.info
-}
-
-func (ec EngineContext) ConsumerCount() int {
-	return ec.info.ConsumerCount
-}
-
-func (ec EngineContext) ProducerCount() int {
-	return ec.info.ProducerCount
-}
-
-func (ec EngineContext) CheckBegin(lineDate, mDate time.Time) bool {
-	if ec.checkBegin == nil {
-		return true
-	}
-	return ec.checkBegin(lineDate, mDate)
-}
-
-func (ec EngineContext) MetaMap() map[string]*model.CounterPointMeta {
-	return ec.metaMap
-}
-
 func createEngineContext(db ebow.IBowStorage, start, end time.Time) (*EngineContext, error) {
 	metaMap, info, err := GetMetaInfo(db)
 	if err != nil {
