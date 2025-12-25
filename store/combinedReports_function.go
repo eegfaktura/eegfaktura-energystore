@@ -24,6 +24,8 @@ func determineReportFunctions(reports []string, start, end time.Time) map[string
 		case "summary":
 			rf[report] = &EnergySummary{Result: &ReportData{}}
 			break
+		case "report":
+			break
 		}
 	}
 	return rf

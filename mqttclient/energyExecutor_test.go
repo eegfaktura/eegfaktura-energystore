@@ -1,18 +1,20 @@
 package mqttclient
 
 import (
-	"at.ourproject/energystore/calculation"
-	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/store/ebow"
-	"at.ourproject/energystore/utils"
 	"encoding/json"
 	"fmt"
-	"github.com/spf13/viper"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"os"
 	"testing"
 	"time"
+
+	"at.ourproject/energystore/calculation"
+	"at.ourproject/energystore/model"
+	"at.ourproject/energystore/store"
+	"at.ourproject/energystore/store/ebow"
+	"at.ourproject/energystore/utils"
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewMqttEnergyImporter(t *testing.T) {
@@ -329,8 +331,56 @@ func TestImportRawdataStore(t *testing.T) {
 	os.RemoveAll("../test/rawdata/rc100190")
 }
 
+func loadTestData() (*model.MqttEnergyMessage, error) {
+	content, err := os.ReadFile("../energy-mass-test-data.json")
+	if err != nil {
+		return nil, err
+	}
+	var obj model.MqttEnergyMessage
+	err = json.Unmarshal(content, &obj)
+	return &obj, err
+}
+
 func TestMassImport(t *testing.T) {
 
 	viper.Set("persistence.path", "../test/rawdata")
+
+	testData, err := loadTestData()
+	require.NoError(t, err)
+
+	tenant := "TE100888"
+	ecId := "AT00300000000RC100181000000956509"
+
+	startTime := int64(1759269600000)
+	endTime := int64(1761951600000)
+
+	importer := NewTenantEnergyImporter("TE100888")
+	err = importer.Import(testData)
+	require.NoError(t, err)
+
+	resp, err := store.QueryRawData(tenant, ecId, time.UnixMilli(startTime), time.UnixMilli(endTime), []store.TargetMP{{MeteringPoint: "AT0030000000000000000000000383545"}}, map[string][]string{})
+	require.NoError(t, err)
+
+	resultEntry := resp["AT0030000000000000000000000383545"]
+	//fmt.Printf("Length: %d\n", len(resultEntry.Data))
+	//fmt.Printf("Data on postition[0000]: %f\n", resultEntry.Data[0].Value)
+	//fmt.Printf("Data on postition[1000]: %d\n", resultEntry.Data[1000].Ts)
+	//fmt.Printf("Data on postition[2975]: %d\n", resultEntry.Data[2975].Ts)
+
+	assert.Equal(t, 2976, len(resultEntry.Data))
+
+	assert.Equal(t, 0.0, resultEntry.Data[0].Value[0])
+
+	assert.Equal(t, int64(1760169600000), resultEntry.Data[1000].Ts)
+	assert.Equal(t, 0.001, resultEntry.Data[1000].Value[0])
+	assert.Equal(t, 0.000077, resultEntry.Data[1000].Value[1])
+	assert.Equal(t, 0.000077, resultEntry.Data[1000].Value[2])
+
+	assert.Equal(t, int64(1761950700000), resultEntry.Data[2975].Ts)
+	assert.Equal(t, 0.001, resultEntry.Data[2975].Value[0])
+	assert.Equal(t, 0.000028, resultEntry.Data[2975].Value[1])
+	assert.Equal(t, 0.000028, resultEntry.Data[2975].Value[2])
+
+	//fmt.Printf("Response: %+v\n", resp["AT0030000000000000000000000383545"])
 
 }

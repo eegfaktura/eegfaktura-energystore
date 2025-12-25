@@ -2,11 +2,12 @@ package mqttclient
 
 import (
 	"context"
+	"strings"
+	"time"
+
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/golang/glog"
 	"github.com/spf13/viper"
-	"strings"
-	"time"
 )
 
 type TopicType string
@@ -37,11 +38,11 @@ func NewMqttStreamer() (*MQTTStreamer, error) {
 	opts.SetAutoAckDisabled(false)
 	opts.SetCleanSession(false)
 
-	opts.SetOrderMatters(false)       // Allow out of order messages (use this option unless in order delivery is essential)
-	opts.ConnectTimeout = time.Second // Minimal delays on connect
-	opts.WriteTimeout = time.Second   // Minimal delays on writes
-	opts.KeepAlive = 10               // Keepalive every 10 seconds so we quickly detect network outages
-	opts.PingTimeout = time.Second    // local broker so response should be quick
+	opts.SetOrderMatters(false)            // Allow out of order messages (use this option unless in order delivery is essential)
+	opts.ConnectTimeout = 30 * time.Second // Minimal delays on connect
+	opts.WriteTimeout = 30 * time.Second   // Minimal delays on writes
+	opts.KeepAlive = 60                    // Keepalive every 10 seconds so we quickly detect network outages
+	opts.PingTimeout = 30 * time.Second    // local broker so response should be quick
 
 	// Automate connection management (will keep trying to connect and will reconnect if network drops)
 	opts.ConnectRetry = true

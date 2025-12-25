@@ -40,12 +40,17 @@ func StoreEnergyV2(db *ebow.BowStorage, meteringPoint string, data *model.MqttEn
 	var resources *map[string]*model.RawSourceLine = &map[string]*model.RawSourceLine{}
 	begin := time.UnixMilli(data.Start)
 	end := time.UnixMilli(data.End)
+
+	monitorStart := time.Now()
 	fetchSourceRange(db, "CP", begin, end, resources)
+	glog.V(4).Infof("Fetching source takes %v", time.Since(monitorStart).Milliseconds())
 
 	var err error
 	metaMeter := organizeMetaCodeImport(data.Data)
 	if len(metaMeter) > 0 {
+		monitorStart = time.Now()
 		resources, err = importEnergyValuesV2(metaMeter, data, metaCP, consumerCount, producerCount, resources, false)
+		glog.V(4).Infof("Updateing source takes %v", time.Since(monitorStart).Milliseconds())
 	}
 	if err != nil {
 		return err
@@ -78,7 +83,9 @@ func StoreEnergyV2(db *ebow.BowStorage, meteringPoint string, data *model.MqttEn
 		return updated[i].Id < updated[j].Id
 	})
 
+	monitorStart = time.Now()
 	err = db.SetLines(updated)
+	glog.V(4).Infof("Writing source takes %v", time.Since(monitorStart).Milliseconds())
 
 	if err != nil {
 		glog.Error(err)
@@ -124,9 +131,11 @@ func importEnergyValuesV2(
 		})
 	}
 
+	//var _wg sync.WaitGroup
 	var tablePrefix = "CP/"
 	for _, mc := range meterCode {
 		if mc.SourceInData < len(data.Data) {
+			//_wg.Add(1)
 			rowIdVisited := map[string]bool{}
 			for i := 0; i < len(data.Data[mc.SourceInData].Value); i++ {
 				v := data.Data[mc.SourceInData].Value[i]
@@ -154,6 +163,41 @@ func importEnergyValuesV2(
 	}
 	return resources, nil
 }
+
+//func importDataType(srcIdx, consumerCount, producerCount int,
+//		target map[string]*model.RawSourceLine,
+//		data *model.MqttEnergyData,
+//		tablePrefix string,
+//		isExt bool, metaCP *model.CounterPointMeta, meterCode []*model.MeterCodeMeta) (map[string]*model.RawSourceLine, error) {
+//
+//	updateValues := []float64{}
+//	updateQoV := []int8{}
+//
+//	rowIdVisited := map[string]bool{}
+//	for _, mc := range meterCode {
+//		for i := 0; i < len(data.Value); i++ {
+//			v := data.Value[i]
+//
+//			id, err := utils.ConvertUnixTimeToRowId(tablePrefix, time.UnixMilli(v.From))
+//			if err != nil {
+//				return target, err
+//			}
+//			_, ok := (target)[id]
+//			if !ok {
+//				target[id] = model.MakeRawSourceLine(id, consumerCount, producerCount) //&model.RawSourceLine{Id: id, Consumers: make([]float64, consumerCount), Producers: make([]float64, producerCount)}
+//			}
+//			_, visited := rowIdVisited[id]
+//			if visited {
+//				// Just a specific function for winter-time-switch. If in an energy day file timestamps occur twice add those values.
+//				sumEnergyValueToResource(target[id], metaCP, mc, v, isExt)
+//			} else {
+//				addEnergyValueToResource(target[id], metaCP, mc, v, isExt)
+//			}
+//			rowIdVisited[id] = true
+//		}
+//	}
+//	return target, nil
+//}
 
 func sumEnergyValueToResource(resource *model.RawSourceLine, metaCP *model.CounterPointMeta, meterCode *model.MeterCodeMeta, v model.MqttEnergyValue, isExt bool) {
 	// Exit the function if the extended MeterCode is zero

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sync"
+	"time"
 
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
@@ -64,13 +65,95 @@ func (tmw *TenantEnergyImporter) Execute(msg mqtt.Message) {
 		return
 	}
 
+	monitor := time.Now()
 	glog.V(3).Infof("Execute Energy Data Message for Topic (%v)", tmw.Tenant)
 	err := tmw.Import(data)
 	if err != nil {
 		glog.Errorf("%v tenant=%s", err, tmw.Tenant)
 		return
 	}
-	glog.V(3).Infof("Execution finished (%v)", tmw.Tenant)
+	glog.V(3).Infof("Execution finished in %d ms (%v)", time.Since(monitor).Milliseconds(), tmw.Tenant)
+}
+
+//func createDayGroups(data *model.MqttEnergyMessage) []model.MqttEnergy {
+//	energyGroup := []model.MqttEnergy{}
+//	for i := range data.Energy {
+//		energy := data.Energy[i]
+//		energyEntry := model.MqttEnergy{Start: energy.Start, End: energy.End, Data: make([]model.MqttEnergyData, 0)}
+//		startDate := time.UnixMilli(energy.Start).AddDate(0, 0, 1).Truncate(24 * time.Hour).UnixMilli()
+//		nn := 0
+//		for n := range energy.Data {
+//			groupData := model.MqttEnergyData{MeterCode: energy.Data[n].MeterCode, Value: make([]model.MqttEnergyValue, 0)}
+//			for x := range energy.Data[n].Value {
+//				if energy.Data[n].Value[x].To > startDate {
+//					energyEntry.End = energy.Data[n].Value[x].To
+//					energyGroup = append(energyGroup, energyEntry)
+//					eData = model.MqttEnergyData{MeterCode: energy.Data[n].MeterCode, Value: make([]model.MqttEnergyValue, 0)}
+//					nn = 0
+//					startDate = time.UnixMilli(energy.Data[n].Value[x].To).AddDate(0, 0, 1).Truncate(24 * time.Hour).UnixMilli()
+//				}
+//				groupData.Value = append(groupData.Value, energy.Data[n].Value[x])
+//			}
+//			energyEntry.Data = append(energyEntry.Data, model.MqttEnergyData{MeterCode: energy.Data[n].MeterCode, Value: make([]model.MqttEnergyValue, 0)})
+//		}
+//	}
+//	return energyGroup
+//}
+
+const daySeconds = int64(24 * 60 * 60 * 1000)
+
+func dayStart(ts int64) int64 {
+	return ts - (ts % daySeconds)
+}
+
+func SplitEnergyByDay(src model.MqttEnergy) []model.MqttEnergy {
+	var result []model.MqttEnergy
+
+	startDay := dayStart(src.Start)
+	endDay := dayStart(src.End)
+
+	for day := startDay; day <= endDay; day += daySeconds {
+		dayStartTs := max(day, src.Start)
+		dayEndTs := min(day+daySeconds, src.End)
+
+		var dayData []model.MqttEnergyData
+
+		for _, meter := range src.Data {
+			var values []model.MqttEnergyValue
+
+			for _, v := range meter.Value {
+				// overlap check
+				from := max(v.From, dayStartTs)
+				to := min(v.To, dayEndTs)
+
+				if from < to {
+					values = append(values, model.MqttEnergyValue{
+						From:   from,
+						To:     to,
+						Method: v.Method,
+						Value:  v.Value, // see note below
+					})
+				}
+			}
+
+			if len(values) > 0 {
+				dayData = append(dayData, model.MqttEnergyData{
+					MeterCode: meter.MeterCode,
+					Value:     values,
+				})
+			}
+		}
+
+		if len(dayData) > 0 {
+			result = append(result, model.MqttEnergy{
+				Start: dayStartTs,
+				End:   dayEndTs,
+				Data:  dayData,
+			})
+		}
+	}
+
+	return result
 }
 
 func (tmw *TenantEnergyImporter) Import(data *model.MqttEnergyMessage) error {
@@ -81,9 +164,24 @@ func (tmw *TenantEnergyImporter) Import(data *model.MqttEnergyMessage) error {
 	}
 
 	for i := range data.Energy {
-		if err := store.StoreEnergyV2(tmw.db, data.Meter.MeteringPoint, &data.Energy[i]); err != nil {
-			return err
+
+		groupedEnergy := SplitEnergyByDay(data.Energy[i])
+		var _wg = sync.WaitGroup{}
+		for n := range groupedEnergy {
+			_wg.Add(1)
+			go func(e *model.MqttEnergy) {
+				defer _wg.Done()
+				if err := store.StoreEnergyV2(tmw.db, data.Meter.MeteringPoint, e); err != nil {
+					glog.Errorf("Error storing Energy: %v (Metering-Point: %s)", err, data.Meter.MeteringPoint)
+					return
+				}
+			}(&groupedEnergy[n])
 		}
+		_wg.Wait()
+
+		//if err := store.StoreEnergyV2(tmw.db, data.Meter.MeteringPoint, &data.Energy[i]); err != nil {
+		//	return err
+		//}
 	}
 	return nil
 }

@@ -1,11 +1,12 @@
 package calculation
 
 import (
+	"fmt"
+	"testing"
+
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/utils"
-	"fmt"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestAllocDynamic2(t *testing.T) {
