@@ -113,14 +113,14 @@ func (dpo *DbPoolObject) OpenStorage() (*DB, error) {
 		//WithCompression(options.None).
 		WithMemTableSize(32 << 20). // 32 MB write buffer (OK)
 		WithNumMemtables(1).
-		WithBlockCacheSize(128 << 20). // disable block cache
-		WithIndexCacheSize(32 << 20).  // disable index cache
-		WithNumLevelZeroTables(4).     // allow a few in-memory tables
+		//WithBlockCacheSize(64 << 20). // disable block cache
+		//WithIndexCacheSize(16 << 20). // disable index cache
+		WithNumLevelZeroTables(4). // allow a few in-memory tables
 		WithNumLevelZeroTablesStall(8).
 		////WithValueLogFileSize(128 << 20). // reasonable log file size
 		//WithValueThreshold(8 << 20). // store values >1MB in vlog
 		WithValueThreshold(128 << 10). // 64 KB
-		WithNumCompactors(2).          // fewer background threads = less RAM
+		WithNumCompactors(2). // fewer background threads = less RAM
 		////WithCompactL0OnClose(false).     // skip final compaction to save time
 		WithMetricsEnabled(false)
 
