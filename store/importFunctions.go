@@ -42,7 +42,7 @@ func StoreEnergyV2(db *ebow.BowStorage, meteringPoint string, data *model.MqttEn
 	end := time.UnixMilli(data.End)
 
 	monitorStart := time.Now()
-	fetchSourceRange(db, "CP", begin, end, resources)
+	fetchSourceRange(db, "CP", begin.Local(), end.Local(), resources)
 	glog.V(4).Infof("Fetching source takes %v", time.Since(monitorStart).Milliseconds())
 
 	var err error

@@ -103,7 +103,12 @@ func (tmw *TenantEnergyImporter) Execute(msg mqtt.Message) {
 const daySeconds = int64(24 * 60 * 60 * 1000)
 
 func dayStart(ts int64) int64 {
-	return ts - (ts % daySeconds)
+	t := time.UnixMilli(ts).In(time.Local)
+	return time.Date(
+		t.Year(), t.Month(), t.Day(),
+		0, 0, 0, 0,
+		t.Location(),
+	).UnixMilli()
 }
 
 func SplitEnergyByDay(src model.MqttEnergy) []model.MqttEnergy {
@@ -147,7 +152,7 @@ func SplitEnergyByDay(src model.MqttEnergy) []model.MqttEnergy {
 		if len(dayData) > 0 {
 			result = append(result, model.MqttEnergy{
 				Start: dayStartTs,
-				End:   dayEndTs,
+				End:   dayEndTs - int64(15*60*1000),
 				Data:  dayData,
 			})
 		}

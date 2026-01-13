@@ -9,7 +9,7 @@ DOCKER=docker
 GOPATH := ${PWD}/..:${GOPATH}
 export GOPATH
 
-DOCKER_TAG=v0.3.02
+DOCKER_TAG=v0.3.03
 BINARY_NAME=energy-store
 ORGANISATION=vfeeg-development
 GLOBAL_ORG=eegfaktura
