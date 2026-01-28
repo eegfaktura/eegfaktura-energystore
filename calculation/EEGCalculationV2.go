@@ -286,7 +286,7 @@ func calcParticipantReport(iter ebow.IRange,
 						//	participantReport.Report.Intermediate = EnsureIntermediateSlice(participantReport.Report.Intermediate, idx)
 						//}
 						//ir := &participantReport.Report.Intermediate[idx-1]
-						//ir.Consumption += values[0]
+						//ir.Consumed += values[0]
 						//ir.Allocation += values[1]
 						//ir.Utilization += values[2]
 						//ir.RoundToFixed(6)
@@ -303,7 +303,7 @@ func calcParticipantReport(iter ebow.IRange,
 						//	participantReport.Report.Intermediate = EnsureIntermediateSlice(participantReport.Report.Intermediate, idx)
 						//}
 						//ir := &participantReport.Report.Intermediate[idx-1]
-						//ir.Production += values[0]
+						//ir.Produced += values[0]
 						//ir.Allocation += values[1]
 					}
 				},

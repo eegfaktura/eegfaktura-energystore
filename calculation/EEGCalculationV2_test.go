@@ -90,8 +90,8 @@ func TestCalculateBiAnnualParticipantReport(t *testing.T) {
 		require.Equal(t, 328.907478, participant.Meters[0].Report.Summary.Utilization)
 
 		//require.Equal(t, len(participant[0].Report.Intermediate), 31)
-		//require.Equal(t, 19.429, participant[0].Report.Intermediate[0].Consumption)
-		//require.Equal(t, 18.316, participant[0].Report.Intermediate[30].Consumption)
+		//require.Equal(t, 19.429, participant[0].Report.Intermediate[0].Consumed)
+		//require.Equal(t, 18.316, participant[0].Report.Intermediate[30].Consumed)
 
 		for _, v := range report.ParticipantReports {
 			fmt.Printf("[%s]", v.ParticipantId)
@@ -126,9 +126,9 @@ func TestCalculateBiAnnualParticipantReport(t *testing.T) {
 		require.Equal(t, 6746.79875, utils.RoundToFixed(report.TotalConsumption, 6))
 
 		//require.Equal(t, 27, len(participant[0].Report.Intermediate))
-		//require.Equal(t, 56.1225, participant[0].Report.Intermediate[0].Consumption)
+		//require.Equal(t, 56.1225, participant[0].Report.Intermediate[0].Consumed)
 		//require.Equal(t, 5.652446, participant[0].Report.Intermediate[0].Utilization)
-		//require.Equal(t, 52.3905, participant[0].Report.Intermediate[26].Consumption)
+		//require.Equal(t, 52.3905, participant[0].Report.Intermediate[26].Consumed)
 		//require.Equal(t, 84.927998, participant[0].Report.Intermediate[26].Allocation)
 
 		for _, v := range report.ParticipantReports {
@@ -172,13 +172,13 @@ func TestCalculateBiAnnualParticipantReport(t *testing.T) {
 		require.Equal(t, 941.826526, participant.Meters[0].Report.Summary.Utilization)
 
 		//require.Equal(t, 27, len(participant[0].Report.Intermediate))
-		//require.Equal(t, float64(0), participant[0].Report.Intermediate[0].Consumption)
+		//require.Equal(t, float64(0), participant[0].Report.Intermediate[0].Consumed)
 		//require.Equal(t, float64(0), participant[0].Report.Intermediate[0].Utilization)
-		//require.Equal(t, float64(0), participant[0].Report.Intermediate[12].Consumption)
+		//require.Equal(t, float64(0), participant[0].Report.Intermediate[12].Consumed)
 		//require.Equal(t, float64(0), participant[0].Report.Intermediate[12].Utilization)
-		//require.Equal(t, 73.39975, participant[0].Report.Intermediate[13].Consumption)
+		//require.Equal(t, 73.39975, participant[0].Report.Intermediate[13].Consumed)
 		//require.Equal(t, 41.587988, participant[0].Report.Intermediate[13].Utilization)
-		//require.Equal(t, 52.3905, participant[0].Report.Intermediate[26].Consumption)
+		//require.Equal(t, 52.3905, participant[0].Report.Intermediate[26].Consumed)
 		//require.Equal(t, 84.927998, participant[0].Report.Intermediate[26].Allocation)
 
 		for _, v := range report.ParticipantReports {
@@ -190,7 +190,7 @@ func TestCalculateBiAnnualParticipantReport(t *testing.T) {
 
 	})
 
-	t.Run("BiAnnual Calculation - Production", func(t *testing.T) {
+	t.Run("BiAnnual Calculation - Produced", func(t *testing.T) {
 		clearParticipants()
 
 		report = model.ReportResponse{ParticipantReports: []model.ParticipantReport{model.ParticipantReport{

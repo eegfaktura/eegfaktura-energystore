@@ -13,10 +13,10 @@ import (
 Calculate allocation for.
 Return:
 
-	Allocation, Consumption, Produced, Distributed, Share
+	Allocation, Consumed, Produced, Distributed, Share
 
 	Allocation: Energy value allocated for consumer
-	Consumption: Energy value consumed by consumer
+	Consumed: Energy value consumed by consumer
 	Produced: Energy value Produced by generator
 	Share: produced value divided to consumers.
 */
