@@ -1,9 +1,10 @@
 package store
 
 import (
+	"time"
+
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/utils"
-	"time"
 )
 
 type IntraDay struct {
@@ -12,7 +13,7 @@ type IntraDay struct {
 }
 
 func NewIntraDayFunction() (EnergyConsumer, error) {
-	return &IntraDay{Cache: Cache{cacheTs: AddDuration(time.Hour)}, Result: make(map[int]*ReportData)}, nil
+	return &IntraDay{Cache: Cache{cacheTsFn: AddDuration(time.Hour)}, Result: make(map[int]*ReportData)}, nil
 }
 
 func (id *IntraDay) HandleStart(ctx *EngineContext) error {
@@ -45,7 +46,7 @@ func (id *IntraDay) GetResult() []interface{} {
 }
 
 func (id *IntraDay) addToResult(ctx *EngineContext, t time.Time, line *model.RawSourceLine) error {
-	hour := t.Add(-1 * CacheTime{time.Now()}.GetDuration(id.cacheTs)).Hour()
+	hour := t.Add(-1 * CacheTime{time.Now()}.GetDuration(id.cacheTsFn)).Hour()
 
 	if _, ok := id.Result[hour]; !ok {
 		id.Result[hour] = &ReportData{}
@@ -63,6 +64,7 @@ func (id *IntraDay) addToResult(ctx *EngineContext, t time.Time, line *model.Raw
 	pLen = pLen - (pLen % 2)
 	for i := 0; i < pLen; i += 2 {
 		id.Result[hour].Produced += line.Producers[i]
+		id.Result[hour].Unused += line.Producers[i+1]
 		id.Result[hour].QoVProducer = calcQoV(id.Result[hour].QoVProducer, line.QoVProducers[i])
 	}
 	return nil

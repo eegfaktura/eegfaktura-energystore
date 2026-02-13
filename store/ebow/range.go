@@ -2,8 +2,8 @@ package ebow
 
 import (
 	"bytes"
-	"github.com/dgraph-io/badger/v3"
-	"runtime"
+
+	"github.com/dgraph-io/badger/v4"
 )
 
 type IRange interface {
@@ -28,7 +28,8 @@ func newRange(bucket *Bucket, prefix, until []byte) *Range {
 	prefix = bucket.internalKey(prefix)
 	until = bucket.internalKey(until)
 	opts := badger.DefaultIteratorOptions
-	opts.PrefetchSize = runtime.GOMAXPROCS(-1)
+	//opts.PrefetchSize = runtime.GOMAXPROCS(-1)
+	opts.PrefetchSize = 200
 	txn := bucket.db.db.NewTransaction(false)
 	it := txn.NewIterator(opts)
 	it.Seek(prefix)

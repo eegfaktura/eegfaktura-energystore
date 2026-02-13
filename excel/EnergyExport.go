@@ -1,16 +1,17 @@
 package excel
 
 import (
+	"bytes"
+	"errors"
+	"fmt"
+	"time"
+
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
 	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
-	"bytes"
-	"errors"
-	"fmt"
 	"github.com/golang/glog"
 	"github.com/xuri/excelize/v2"
-	"time"
 )
 
 type ExportCPs struct {
@@ -386,13 +387,17 @@ func addHeaderV2(ctx *RunnerContext, cellCon, cellProd int,
 			baseIdx := cCnt * cellCon
 			cCnt += 1
 			for i := 0; i < cellCon; i++ {
-				lineData[baseIdx+i] = excelize.Cell{Value: value(m, cp, i), StyleID: style(m, cp, i)}
+				if len(lineData) > (baseIdx + i) {
+					lineData[baseIdx+i] = excelize.Cell{Value: value(m, cp, i), StyleID: style(m, cp, i)}
+				}
 			}
 		} else if m.Dir == model.PRODUCER_DIRECTION {
 			baseIdx := (ctx.countCons * cellCon) + (pCnt * cellProd)
 			pCnt += 1
 			for i := 0; i < cellProd; i++ {
-				lineData[baseIdx+i] = excelize.Cell{Value: value(m, cp, i), StyleID: style(m, cp, i)}
+				if len(lineData) > (baseIdx + i) {
+					lineData[baseIdx+i] = excelize.Cell{Value: value(m, cp, i), StyleID: style(m, cp, i)}
+				}
 			}
 		}
 	}

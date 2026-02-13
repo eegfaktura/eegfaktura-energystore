@@ -1,7 +1,7 @@
 package ebow
 
 import (
-	"github.com/dgraph-io/badger/v3"
+	"github.com/dgraph-io/badger/v4"
 )
 
 type bucketId [bucketIdSize]byte
@@ -23,6 +23,7 @@ func (b *Bucket) PutBatch(batch []interface{}) error {
 	wb := b.db.db.NewWriteBatch()
 	defer wb.Cancel()
 
+	_wrtCnt := 0
 	for _, v := range batch {
 		key, data, err := b.encodeV(v)
 		if err != nil {
@@ -32,12 +33,60 @@ func (b *Bucket) PutBatch(batch []interface{}) error {
 		if err := wb.Set(ik, data); err != nil {
 			return err
 		}
+		_wrtCnt++
+
+		if _wrtCnt%100 == 0 {
+			// flush every 100 entries
+			if err := wb.Flush(); err != nil {
+				return err
+			}
+			wb = b.db.db.NewWriteBatch()
+		}
 	}
 	if err := wb.Flush(); err != nil {
 		return err
 	}
 	return nil
 }
+
+//func (b *Bucket) PutBatch(batch []interface{}) error {
+//	if b.db.readOnly {
+//		return ErrReadOnly
+//	}
+//	if b.err != nil {
+//		return b.err
+//	}
+//	sw := b.db.db.NewStreamWriter()
+//	defer sw.Cancel()
+//
+//	if err := sw.Prepare(); err != nil {
+//		return fmt.Errorf("failed to prepare stream writer: %w", err)
+//	}
+//
+//	buf := z.NewBuffer(len(batch), "test")
+//	for _, v := range batch {
+//		key, data, err := b.encodeV(v)
+//		if err != nil {
+//			return err
+//		}
+//		ik, err := b.encodeK(key)
+//		badger.KVToBuffer(&pb.KV{
+//			Key:   ik,
+//			Value: data,
+//		}, buf)
+//	}
+//
+//	if err := sw.Write(buf); err != nil {
+//		return err
+//	}
+//
+//	// IMPORTANT: flush when done
+//	if err := sw.Flush(); err != nil {
+//		return err
+//	}
+//
+//	return nil
+//}
 
 func (b *Bucket) encodeV(v interface{}) ([]byte, []byte, error) {
 	typ, err := newStructType(v, false)

@@ -1,15 +1,16 @@
 package store
 
 import (
-	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/store/ebow"
-	"at.ourproject/energystore/utils"
 	"errors"
 	"fmt"
-	"github.com/golang/glog"
 	"regexp"
 	"strings"
 	"time"
+
+	"at.ourproject/energystore/model"
+	"at.ourproject/energystore/store/ebow"
+	"at.ourproject/energystore/utils"
+	"github.com/golang/glog"
 )
 
 var re = regexp.MustCompile(`^(\w*)[^(]*\(([^)]*)\)$`)
@@ -19,6 +20,7 @@ type ReportData struct {
 	Allocated   float64 `json:"allocated"`
 	Distributed float64 `json:"distributed"`
 	Produced    float64 `json:"produced"`
+	Unused      float64 `json:"unused"` // energy which fed back to the supplier
 	QoVConsumer int     `json:"qoVConsumer"`
 	QoVProducer int     `json:"qoVProducer"`
 	CntProducer int     `json:"cntProducer"`
@@ -96,8 +98,9 @@ func QueryIntraDayReport(tenant, ecid string, start, end time.Time) ([]interface
 	return (c.(EnergyReportConsumer)).GetResult(), nil
 }
 
-func QueryLoadCurveReport(tenant, ecid string, start, end time.Time) ([]interface{}, error) {
-	c, _ := NewLoadCurveFunction(determineTimeShiftFunction(start, end), determineSeriesNameFunction(start, end))
+func QueryLoadCurveReport(tenant, ecid string, start, end time.Time, nameFunc *string) ([]interface{}, error) {
+	tsFn, initFn, nameFn := determineTimeShiftFunction(start, end)
+	c, _ := NewLoadCurveFunction(tsFn, nameFn, initFn)
 	e := &Engine{c}
 
 	sm := time.Now()
@@ -158,14 +161,35 @@ func QueryMetaData(tenant, ecid string) (map[string]*MetaData, error) {
 	return result, err
 }
 
-func determineTimeShiftFunction(start, end time.Time) AddCacheTimeFunc {
-	if start.AddDate(0, 1, 0).Add(time.Minute).After(end) {
-		return AddDate(0, 0, 1)
-	} else if start.AddDate(0, 3, 0).Add(time.Minute).After(end) {
-		return AddDate(0, 0, 7)
-	} else { //start.AddDate(0, 6, 0).Add(time.Minute).After(end) {
-		return AddDate(0, 1, 0)
+func determineTimeShiftFunction(start, end time.Time) (AddCacheTimeFunc, InitCacheTimeFunc, SeriesNameFunc) {
+	if start.AddDate(0, 0, 1).Add(time.Minute).After(end) {
+		return nil, InitDefault(), dayRawNameFunc()
+	} else if start.AddDate(0, 1, 0).Add(time.Minute).After(end) {
+		return AddDate(0, 0, 1), InitDefault(), monthDayNameFunc()
+	} else if start.AddDate(0, 6, 0).Add(time.Minute).After(end) {
+		return AddDate(0, 0, 7), InitWeek(), weekYearNameFunc()
+	} else if start.AddDate(0, 12, 0).Add(time.Minute).After(end) {
+		return AddDate(0, 1, 0), InitMonth(), monthYearNameFunc()
+	} else {
+		return nil, InitDefault(), dayRawNameFunc()
 	}
+}
+
+func determineSeriesNameFunction(start, end time.Time, nameFunc *string) SeriesNameFunc {
+	//if nameFunc == nil {
+	if start.AddDate(0, 0, 1).Add(time.Minute).After(end) {
+		return dayRawNameFunc()
+	} else if start.AddDate(0, 1, 0).Add(time.Minute).After(end) {
+		return monthDayNameFunc()
+	} else if start.AddDate(0, 6, 0).Add(time.Minute).After(end) {
+		return weekYearNameFunc()
+	} else if start.AddDate(0, 12, 0).Add(time.Minute).After(end) {
+		return monthYearNameFunc()
+	} else {
+		return dayRawNameFunc()
+	}
+	//}
+	//return nameFunctionRepo[strings.ToUpper(*nameFunc)]
 }
 
 func parseFunction(f []string) (fn string, pa string, err error) {

@@ -4,10 +4,12 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
-	"github.com/golang/glog"
-	"github.com/spf13/viper"
 	"io/ioutil"
 	"log"
+	"strings"
+
+	"github.com/golang/glog"
+	"github.com/spf13/viper"
 )
 
 func ReadConfig(path string) {
@@ -15,32 +17,38 @@ func ReadConfig(path string) {
 	viper.AddConfigPath(path)
 	viper.AutomaticEnv()
 	viper.SetConfigType("yml")
+
+	viper.SetEnvPrefix("ENERGYSTORE")
+	replacer := strings.NewReplacer(".", "_")
+	viper.SetEnvKeyReplacer(replacer)
+	viper.AutomaticEnv()
+
 	if err := viper.ReadInConfig(); err != nil {
 		glog.Exitf("Error reading config file, %s", err)
 	}
 }
 
-func ReadCertificate(privteKeyFile, publicKeyFile string) (*rsa.PublicKey, *rsa.PrivateKey, error) {
-	prvData, err := RSAKeyFile(privteKeyFile)
-	if err != nil {
-		return nil, nil, err
-	}
-	prv, err := RSAPrivateKey(prvData)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	pubData, err := RSAKeyFile(publicKeyFile)
-	if err != nil {
-		return nil, nil, err
-	}
-	pub, err := RSAPublicKey(pubData)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return pub, prv, nil
-}
+//func ReadCertificate(privteKeyFile, publicKeyFile string) (*rsa.PublicKey, *rsa.PrivateKey, error) {
+//	prvData, err := RSAKeyFile(privteKeyFile)
+//	if err != nil {
+//		return nil, nil, err
+//	}
+//	prv, err := RSAPrivateKey(prvData)
+//	if err != nil {
+//		return nil, nil, err
+//	}
+//
+//	pubData, err := RSAKeyFile(publicKeyFile)
+//	if err != nil {
+//		return nil, nil, err
+//	}
+//	pub, err := RSAPublicKey(pubData)
+//	if err != nil {
+//		return nil, nil, err
+//	}
+//
+//	return pub, prv, nil
+//}
 
 func RSAKeyFile(file string) (data []byte, err error) {
 

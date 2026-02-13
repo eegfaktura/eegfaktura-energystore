@@ -1,11 +1,12 @@
 package excel
 
 import (
+	"fmt"
+	"time"
+
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/utils"
-	"fmt"
 	"github.com/xuri/excelize/v2"
-	"time"
 )
 
 type SummarySheet struct {
@@ -17,13 +18,6 @@ type SummarySheet struct {
 }
 
 func (ss *SummarySheet) initSheet(ctx *RunnerContext) error {
-	//ss.report = &model.EnergyReport{
-	//	Consumed:    make([]float64, ctx.info.ConsumerCount),
-	//	Allocated:   make([]float64, ctx.info.ConsumerCount),
-	//	Shared:      make([]float64, ctx.info.ConsumerCount),
-	//	Produced:    make([]float64, ctx.info.ProducerCount),
-	//	Distributed: make([]float64, ctx.info.ProducerCount),
-	//}
 
 	ss.qovConsumerSlice = model.CreateInitializedBoolSlice(ctx.info.ConsumerCount, true)
 	ss.qovProducerSlice = model.CreateInitializedBoolSlice(ctx.info.ProducerCount, true)

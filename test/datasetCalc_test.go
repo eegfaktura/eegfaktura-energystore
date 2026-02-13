@@ -178,7 +178,7 @@ package test
 //
 //	t.Run("calculate row only report", func(t *testing.T) {
 //		am, cm, pm, dm, sm, ps := calculation.CalculateEEG(db, fmt.Sprintf("%s/%.2d/18/05/30/00", "2021", 4))
-//		fmt.Printf("Production Sum: %+v\n", ps)
+//		fmt.Printf("Produced Sum: %+v\n", ps)
 //		require.NotNil(t, am)
 //		require.NotNil(t, cm)
 //		require.NotNil(t, pm)
@@ -187,7 +187,7 @@ package test
 //
 //		fmt.Printf("Allocation: %+v\n", am)
 //		fmt.Printf("Consumtion: %+v\n", cm)
-//		fmt.Printf("Production: %+v\n", pm)
+//		fmt.Printf("Produced: %+v\n", pm)
 //
 //		expectedConsumption := []float64{0.155750, 0.016250, 0.152750, 0.026500, 0.047500, 0.021750, 0.059000,
 //			0.019000, 0.048250, 0.099750, 0.016750, 0.029000, 0.003750, 0.008000, 0.012250, 0.022500, 0.023000,

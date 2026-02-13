@@ -3,7 +3,7 @@ package ebow
 import (
 	"runtime"
 
-	"github.com/dgraph-io/badger/v3"
+	"github.com/dgraph-io/badger/v4"
 )
 
 type Iter struct {

@@ -6,10 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/dgraph-io/badger/v3"
 	"math"
 	"math/rand"
 	"sync"
+
+	"github.com/dgraph-io/badger/v4"
 
 	"at.ourproject/energystore/store/ebow/codec"
 	jsoncodec "at.ourproject/energystore/store/ebow/codec/json"

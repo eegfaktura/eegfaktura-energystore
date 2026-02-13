@@ -2,10 +2,11 @@ package mqttclient
 
 import (
 	"context"
-	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/golang/glog"
 	"sync"
 	"time"
+
+	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/golang/glog"
 )
 
 type TagValue struct {
@@ -161,7 +162,7 @@ func (d *TopicDispatcher) getWorker(tenant string) chan mqtt.Message {
 	if !ok {
 		worker = &TenantWorker{
 			tenant:     tenant,
-			JobChannel: make(chan mqtt.Message),
+			JobChannel: make(chan mqtt.Message, 10),
 			executor:   NewTenantEnergyImporter(tenant),
 			ctx:        d.ctx,
 			wg:         &d.wg,

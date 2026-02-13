@@ -1,12 +1,13 @@
 package ebow
 
 import (
-	"github.com/dgraph-io/badger/v3"
-	"github.com/golang/glog"
-	"github.com/spf13/viper"
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/dgraph-io/badger/v4"
+	"github.com/golang/glog"
+	"github.com/spf13/viper"
 )
 
 type ebowLogger struct {
@@ -67,16 +68,13 @@ func (dpo *DbPoolObject) Get() *DbObject {
 				return nil
 			}
 		}
-		glog.V(4).Infof("E:dpo.Get(): Pool-Size %d of %d tenant=%s", len(dpo.pool), cap(dpo.pool), dpo.tenant)
+		glog.V(4).Infof("dpo.Get(): Pool-Size %d of %d tenant=%s", len(dpo.pool), cap(dpo.pool), dpo.tenant)
 		dbObject.Db = dpo.db
 		return dbObject
 	}
 }
 
 func (dpo *DbPoolObject) Put(obj *DbObject) {
-	dpo.mu.Lock()
-	defer dpo.mu.Unlock()
-
 	obj.Db = nil
 	if len(dpo.pool) == cap(dpo.pool) {
 		glog.Warningf("Needless object release! tenant=%s", dpo.tenant)
@@ -86,6 +84,9 @@ func (dpo *DbPoolObject) Put(obj *DbObject) {
 	select {
 	case dpo.pool <- obj:
 		if len(dpo.pool) == cap(dpo.pool) {
+			dpo.mu.Lock()
+			defer dpo.mu.Unlock()
+
 			dpo.close()
 			glog.V(4).Infof("DB connection %s closed ... Object Pool max (%d) tenant=%s", dpo.ecId, len(dpo.pool), dpo.tenant)
 		}
@@ -107,9 +108,25 @@ func (dpo *DbPoolObject) OpenStorage() (*DB, error) {
 	basePath := viper.GetString("persistence.path")
 	path := filepath.Join(basePath, dpo.tenant, dpo.ecId)
 
-	badgerOpts := badger.DefaultOptions(path)
-	badgerOpts.Logger = ebowLogger{4}
-	badgerOpts.BlockCacheSize = 512 << 20
+	badgerOpts := badger.DefaultOptions(path).
+		WithLogger(ebowLogger{4}).
+		//WithCompression(options.None).
+		WithMemTableSize(32 << 20). // 32 MB write buffer (OK)
+		WithNumMemtables(1).
+		//WithBlockCacheSize(64 << 20). // disable block cache
+		//WithIndexCacheSize(16 << 20). // disable index cache
+		WithNumLevelZeroTables(4). // allow a few in-memory tables
+		WithNumLevelZeroTablesStall(8).
+		////WithValueLogFileSize(128 << 20). // reasonable log file size
+		//WithValueThreshold(8 << 20). // store values >1MB in vlog
+		WithValueThreshold(128 << 10). // 64 KB
+		WithNumCompactors(2). // fewer background threads = less RAM
+		////WithCompactL0OnClose(false).     // skip final compaction to save time
+		WithMetricsEnabled(false)
+
+	// original Options: 01-11-2025
+	//badgerOpts.Logger = ebowLogger{4}
+	//badgerOpts.BlockCacheSize = 512 << 20
 
 	db, err := Open(path, SetBadgerOptions(badgerOpts))
 	if err != nil {
@@ -123,6 +140,7 @@ type Pool struct {
 	poolSize int
 	nextID   int
 	mutex    sync.Mutex
+	mutexPut sync.Mutex
 }
 
 func NewPool(size int) *Pool {
@@ -133,12 +151,14 @@ func (p *Pool) Put(ecId string, e *DbObject) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
-	p.pool[ecId].Put(e)
+	if poolObj, ok := p.pool[ecId]; ok {
+		poolObj.Put(e)
+	}
 }
 
 func (p *Pool) Get(tenant, ecId string) *DbObject {
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
+	p.mutexPut.Lock()
+	defer p.mutexPut.Unlock()
 
 	poolObj, ok := p.pool[ecId]
 	if !ok {

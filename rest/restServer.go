@@ -1,19 +1,21 @@
 package rest
 
 import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
 	"at.ourproject/energystore/calculation"
 	"at.ourproject/energystore/excel"
 	"at.ourproject/energystore/middleware"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/services"
 	"at.ourproject/energystore/store"
-	"encoding/json"
-	"fmt"
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
-	"net/http"
-	"strconv"
-	"time"
 )
 
 func NewRestServer() *mux.Router {
@@ -23,9 +25,13 @@ func NewRestServer() *mux.Router {
 	//r.HandleFunc("/eeg/{year}/{month}", jwtWrapper(fetchEnergy())).Methods("GET")
 	//r.HandleFunc("/eeg/report", middleware.ProtectApp(fetchEnergyReport())).Methods("POST")
 	r.HandleFunc("/eeg/v2/{ecid}/report", middleware.ProtectApp(fetchEnergyReportV2())).Methods("POST")
+	r.HandleFunc("/eeg/v2/{ecid}/meta", middleware.ProtectApp(queryMetaData())).Methods("GET")
+	r.HandleFunc("/eeg/v2/{ecid}/raw", middleware.ProtectApp(fetchRawEnergyV2())).Methods("POST")
 	r.HandleFunc("/eeg/v2/{ecid}/intra-day-report", middleware.ProtectApp(fetchIntraDayReportV2())).Methods("POST")
 	r.HandleFunc("/eeg/v2/{ecid}/load-curve-report", middleware.ProtectApp(fetchLoadCurveReportV2())).Methods("POST")
+	r.HandleFunc("/eeg/v2/{ecid}/load-curve-report", middleware.ProtectApp(getLoadCurveReportV2())).Methods("GET")
 	r.HandleFunc("/eeg/v2/{ecid}/combined-report", middleware.ProtectApp(fetchCombinedReportV2())).Methods("POST")
+	r.HandleFunc("/eeg/v2/{ecid}/combined-report", middleware.ProtectApp(getCombinedReportV2())).Methods("GET")
 	r.HandleFunc("/eeg/v2/{ecid}/summary", middleware.ProtectApp(fetchSummaryReportV2())).Methods("POST")
 	r.HandleFunc("/eeg/{ecid}/lastRecordDate", middleware.ProtectApp(lastRecordDate())).Methods("GET")
 	r.HandleFunc("/eeg/{ecid}/excel/export/{year}/{month}", middleware.ProtectApp(exportMeteringData())).Methods("POST")
@@ -82,6 +88,37 @@ func fetchEnergyReportV2() middleware.JWTHandlerFunc {
 		}
 		glog.V(4).Infof("Time Monitor fetchEnergyReport. %v\n", time.Now().Sub(startMonitor))
 		respondWithJSON(w, http.StatusOK, &energy)
+	}
+}
+
+// fetchRawEnergyV2 Rest endpoint retrieve energy values of requested participant and period pattern.
+func fetchRawEnergyV2() middleware.JWTHandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request, claims *middleware.PlatformClaims, tenant string) {
+		vars := mux.Vars(r)
+		ecId := vars["ecid"]
+		startMonitor := time.Now()
+		glog.V(4).Infof("Start Time Monitor fetchEnergyReport. %s\n", tenant)
+
+		var request model.RawDataRequest
+		err := json.NewDecoder(r.Body).Decode(&request)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		cps := make([]store.TargetMP, len(request.Meters))
+		for i, meter := range request.Meters {
+			cps[i] = store.TargetMP{MeteringPoint: meter}
+		}
+
+		resp, err := store.QueryRawData(tenant, ecId, time.UnixMilli(request.Start), time.UnixMilli(request.End), cps, r.URL.Query())
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		glog.V(4).Infof("Time Monitor fetchRawData. %v\n", time.Now().Sub(startMonitor))
+		respondWithJSON(w, http.StatusOK, &resp)
 	}
 }
 
@@ -202,8 +239,9 @@ func fetchLoadCurveReportV2() middleware.JWTHandlerFunc {
 		startMonitor := time.Now()
 		glog.V(4).Infof("Start Time Monitor fetchLoadCurveReport. %s\n", tenant)
 		var request struct {
-			Start int64 `json:"start"`
-			End   int64 `json:"end"`
+			Start int64   `json:"start"`
+			End   int64   `json:"end"`
+			Func  *string `json:"func"`
 		}
 
 		err := json.NewDecoder(r.Body).Decode(&request)
@@ -212,7 +250,51 @@ func fetchLoadCurveReportV2() middleware.JWTHandlerFunc {
 			return
 		}
 
-		resp, err := store.QueryLoadCurveReport(tenant, ecid, time.UnixMilli(request.Start), time.UnixMilli(request.End))
+		resp, err := store.QueryLoadCurveReport(tenant, ecid, time.UnixMilli(request.Start), time.UnixMilli(request.End), request.Func)
+		glog.V(4).Infof("Time Monitor fetchLoadCurveReport. %v\n", time.Now().Sub(startMonitor))
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		respondWithJSON(w, http.StatusOK, &resp)
+	}
+}
+
+func getLoadCurveReportV2() middleware.JWTHandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request, claims *middleware.PlatformClaims, tenant string) {
+		vars := mux.Vars(r)
+		ecid := vars["ecid"]
+
+		startMonitor := time.Now()
+		glog.V(4).Infof("Start Time Monitor fetchLoadCurveReport. %s\n", tenant)
+		var request struct {
+			Start int64   `json:"start"`
+			End   int64   `json:"end"`
+			Func  *string `json:"func"`
+		}
+
+		startQuery := r.URL.Query().Get("start")
+		endQuery := r.URL.Query().Get("end")
+		funcQuery := r.URL.Query().Get("func")
+
+		var err error
+		if len(startQuery) > 0 {
+			request.Start, err = strconv.ParseInt(startQuery, 10, 64)
+		}
+		if len(endQuery) > 0 {
+			request.End, err = strconv.ParseInt(endQuery, 10, 64)
+		}
+
+		if len(funcQuery) > 0 {
+			request.Func = &funcQuery
+		}
+
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		resp, err := store.QueryLoadCurveReport(tenant, ecid, time.UnixMilli(request.Start), time.UnixMilli(request.End), request.Func)
 		glog.V(4).Infof("Time Monitor fetchLoadCurveReport. %v\n", time.Now().Sub(startMonitor))
 		if err != nil {
 			respondWithError(w, http.StatusBadRequest, err.Error())
@@ -236,6 +318,50 @@ func fetchCombinedReportV2() middleware.JWTHandlerFunc {
 		}
 
 		err := json.NewDecoder(r.Body).Decode(&request)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		resp, err := store.QueryCombinedReports(tenant, ecid, request.Reports, time.UnixMilli(request.Start), time.UnixMilli(request.End))
+		glog.V(4).Infof("Time Monitor fetchCombinedReport. %v\n", time.Now().Sub(startMonitor))
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		respondWithJSON(w, http.StatusOK, &resp)
+	}
+}
+
+func getCombinedReportV2() middleware.JWTHandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request, claims *middleware.PlatformClaims, tenant string) {
+		vars := mux.Vars(r)
+		ecid := vars["ecid"]
+
+		startMonitor := time.Now()
+		glog.V(4).Infof("Start Time Monitor fetchCombinedReport. %s\n", tenant)
+		var request struct {
+			Reports []string `json:"reports"`
+			Start   int64    `json:"start"`
+			End     int64    `json:"end"`
+		}
+
+		startQuery := r.URL.Query().Get("start")
+		endQuery := r.URL.Query().Get("end")
+		reportsQuery := r.URL.Query().Get("reports")
+
+		var err error
+		if len(startQuery) > 0 {
+			request.Start, err = strconv.ParseInt(startQuery, 10, 64)
+		}
+		if len(endQuery) > 0 {
+			request.End, err = strconv.ParseInt(endQuery, 10, 64)
+		}
+
+		if len(reportsQuery) > 0 {
+			request.Reports = strings.Split(reportsQuery, ",")
+		}
+
 		if err != nil {
 			respondWithError(w, http.StatusBadRequest, err.Error())
 			return
