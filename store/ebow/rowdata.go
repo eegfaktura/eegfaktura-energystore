@@ -1,10 +1,12 @@
 package ebow
 
 import (
-	"at.ourproject/energystore/model"
 	"errors"
 	"fmt"
 	"sync"
+
+	"at.ourproject/energystore/model"
+	"github.com/golang/glog"
 )
 
 var (
@@ -101,6 +103,10 @@ var turns = newTurns()
 //}
 
 func OpenStorage(tenant, ecId string) (*BowStorage, error) {
+	if len(tenant) > 8 {
+		glog.Errorf("tenant %s is too long", tenant)
+		return nil, fmt.Errorf("tenant is too long (%s)", tenant)
+	}
 	db := connectionPool.Get(tenant, ecId)
 	if db == nil {
 		return nil, errors.New("failed to connect to database")

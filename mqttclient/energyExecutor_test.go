@@ -178,7 +178,7 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 		{
 			name: "Insert Generator - summarize energy values",
 			energy: &model.MqttEnergyMessage{
-				EcId: "ecIdTest1",
+				EcId: "ecIdTest2",
 				Meter: model.EnergyMeter{
 					MeteringPoint: "AT0030000000000000000000030000010",
 					Direction:     "",
@@ -226,11 +226,11 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 			},
 			expected: func(t *testing.T, l *model.RawSourceLine) {
 				fmt.Printf("Producer Line: %+v\n", l)
-				require.Equal(t, 4, len(l.Producers))
-				assert.Equal(t, 7.3, utils.RoundToFixed(l.Producers[2], 1))
-				assert.Equal(t, 1, l.QoVProducers[2])
-				assert.Equal(t, 30.2, utils.RoundToFixed(l.Producers[3], 1))
-				assert.Equal(t, 1, l.QoVProducers[3])
+				require.Equal(t, 2, len(l.Producers))
+				assert.Equal(t, 7.3, utils.RoundToFixed(l.Producers[0], 1))
+				assert.Equal(t, 1, l.QoVProducers[0])
+				assert.Equal(t, 30.2, utils.RoundToFixed(l.Producers[1], 1))
+				assert.Equal(t, 1, l.QoVProducers[1])
 			},
 		},
 	}
@@ -239,17 +239,16 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			importer := NewTenantEnergyImporter("te100190")
+			importer := NewTenantEnergyImporter("importer")
 			err = importer.Import(tt.energy)
 			require.NoError(t, err)
 
-			//db, err := ebow.OpenStorageTest("importer", "ecid", "../test/rawdata")
 			db, err := ebow.OpenStorage("importer", tt.energy.EcId)
 			require.NoError(t, err)
+			defer db.Close()
+
 			it := db.GetLinePrefix(fmt.Sprintf("CP/%s", "2022/10/24"))
 			defer it.Close()
-			//defer db.CloseTestDriver()
-			defer db.Close()
 
 			var _line model.RawSourceLine
 
@@ -260,7 +259,7 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 		})
 	}
 
-	os.RemoveAll("../test/rawdata/importer")
+	assert.NoError(t, os.RemoveAll("../test/rawdata/importer"))
 }
 
 func TestImportRawdataStore(t *testing.T) {

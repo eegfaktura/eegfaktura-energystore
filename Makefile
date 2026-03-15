@@ -9,7 +9,7 @@ DOCKER=docker
 GOPATH := ${PWD}/..:${GOPATH}
 export GOPATH
 
-DOCKER_TAG=v0.3.03
+DOCKER_TAG=v0.3.04
 BINARY_NAME=energy-store
 ORGANISATION=vfeeg-development
 GLOBAL_ORG=eegfaktura
@@ -33,9 +33,9 @@ docker-clean:
 
 docker:
 	$(DOCKER) build -t ghcr.io/$(ORGANISATION)/energy-store:$(DOCKER_TAG) .
+	$(DOCKER) image tag ghcr.io/$(ORGANISATION)/energy-store:$(DOCKER_TAG) ghcr.io/$(GLOBAL_ORG)/energy-store:latest
 
 push: docker
-	$(DOCKER) image tag ghcr.io/$(ORGANISATION)/energy-store:$(DOCKER_TAG) ghcr.io/$(GLOBAL_ORG)/energy-store:latest
 	$(DOCKER) push ghcr.io/$(ORGANISATION)/energy-store:$(DOCKER_TAG)
 	$(DOCKER) push ghcr.io/$(GLOBAL_ORG)/energy-store:latest
 
