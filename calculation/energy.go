@@ -1,13 +1,14 @@
 package calculation
 
 import (
+	"fmt"
+	"strings"
+
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
 	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
-	"fmt"
 	"github.com/golang/glog"
-	"strings"
 )
 
 //const StorageException = errors.New()
@@ -20,9 +21,9 @@ import (
 //   - YQ1-YQ4:  cumulate quarter years
 //   - YH1-YH2:  cumulate half years
 //   - YM1-YM12: cumulate months
-func EnergyReport(tenant string, year, segment int, periodCode string) (*model.EegEnergy, error) {
+func EnergyReport(tenant, ecId string, year, segment int, periodCode string) (*model.EegEnergy, error) {
 
-	db, err := ebow.OpenStorage(tenant, "")
+	db, err := ebow.OpenStorage(tenant, ecId)
 	if err != nil {
 		return nil, err
 	}

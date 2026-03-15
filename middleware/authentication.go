@@ -34,8 +34,8 @@ type keycloakConfig struct {
 	Secret    string `json:"secret,omitempty"`
 	Realm     string `json:"realm"`
 	Host      string `json:"auth-server-url"`
-	Internal  bool   `json:"auth-server-url-internal,omitempty"`
-	IssuerUrl string `json:"issuer_url,omitempty"`
+	Internal  bool   `json:"issuer-internal,omitempty"`
+	IssuerUrl string `json:"issuer-url,omitempty"`
 }
 
 func init() {
@@ -73,7 +73,8 @@ func init() {
 
 	ctx := context.Background()
 	if kcConfig["app"].Internal {
-		if issuerUrl == "" {
+		internalHost := kcConfig["app"].IssuerUrl
+		if internalHost == "" {
 			panic("issuerUrl is required")
 		}
 		// External issuer (MUST match the token's "iss")
@@ -81,7 +82,6 @@ func init() {
 		if err != nil {
 			panic(err)
 		}
-		internalHost := issuerUrl // Custom transport that rewrites DNS lookups
 		transport := &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -106,6 +106,7 @@ func init() {
 	provider, err := oidc.NewProvider(ctx, providerUriApp)
 	if err != nil {
 		logrus.Errorf("E: %v", err)
+		panic(err)
 	}
 	verifier = provider.Verifier(&oidc.Config{ClientID: clientIDApp, SkipClientIDCheck: true})
 }

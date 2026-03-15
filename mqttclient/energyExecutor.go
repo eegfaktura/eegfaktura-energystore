@@ -15,14 +15,14 @@ import (
 
 type TenantEnergyImporter struct {
 	Tenant string
-	db     *ebow.BowStorage
+	db     map[string]*ebow.BowStorage
 	dbMutx sync.Mutex
 }
 
 func NewTenantEnergyImporter(tenant string) *TenantEnergyImporter {
 	return &TenantEnergyImporter{
 		Tenant: tenant,
-		db:     nil,
+		db:     make(map[string]*ebow.BowStorage),
 	}
 }
 
@@ -37,10 +37,14 @@ func (tmw *TenantEnergyImporter) closeDB() {
 	defer tmw.dbMutx.Unlock()
 
 	glog.V(4).Infof("Close Importer DB %s", tmw.Tenant)
-	if tmw.db != nil {
-		tmw.db.Close()
-		tmw.db = nil
+	for _, b := range tmw.db {
+		b.Close()
 	}
+	tmw.db = make(map[string]*ebow.BowStorage)
+	//if tmw.db != nil {
+	//	tmw.db.Close()
+	//	tmw.db = nil
+	//}
 	glog.V(4).Infof("Closed Importer DB %s", tmw.Tenant)
 }
 
@@ -48,13 +52,17 @@ func (tmw *TenantEnergyImporter) ensureDb(ecId string) {
 	tmw.dbMutx.Lock()
 	defer tmw.dbMutx.Unlock()
 
-	if tmw.db == nil || !tmw.db.IsOpen() {
+	//if _, ok := tmw.db[ecId]; !ok {
+	if tmw.db[ecId] == nil || !tmw.db[ecId].IsOpen() {
 		var err error
-		tmw.db, err = ebow.OpenStorage(tmw.Tenant, ecId)
+		tmw.db[ecId], err = ebow.OpenStorage(tmw.Tenant, ecId)
 		if err != nil {
 			glog.Errorf("%v tenant=%s", err, tmw.Tenant)
 			tmw.db = nil
 		}
+		//} else {
+		//
+		//}
 	}
 }
 
@@ -176,7 +184,7 @@ func (tmw *TenantEnergyImporter) Import(data *model.MqttEnergyMessage) error {
 			_wg.Add(1)
 			go func(e *model.MqttEnergy) {
 				defer _wg.Done()
-				if err := store.StoreEnergyV2(tmw.db, data.Meter.MeteringPoint, e); err != nil {
+				if err := store.StoreEnergyV2(tmw.db[data.EcId], data.Meter.MeteringPoint, e); err != nil {
 					glog.Errorf("Error storing Energy: %v (Metering-Point: %s)", err, data.Meter.MeteringPoint)
 					return
 				}

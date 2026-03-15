@@ -85,7 +85,8 @@ func main() {
 			"Sec-Fetch-Mode",
 			"Sec-Fetch-Site",
 			"Cache-Control",
-			"tenant"})
+			"tenant",
+			"X-tenant"})
 	allowedMethods := handlers.AllowedMethods([]string{"GET", "HEAD", "POST", "PUT", "OPTIONS", "DELETE"})
 	allowedCredentials := handlers.AllowCredentials()
 
