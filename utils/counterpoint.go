@@ -13,8 +13,6 @@ func DetermineDirection(meteringPoint string) model.MeterDirection {
 
 	netoperator := meteringPoint[:8]
 
-	println(netoperator)
-
 	if netoperator == "AT003000" {
 		switch meteringPoint[25] {
 		case '1', '2', '3':

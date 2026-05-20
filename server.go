@@ -13,6 +13,7 @@ import (
 
 	"at.ourproject/energystore/graph"
 	"at.ourproject/energystore/graph/generated"
+	"at.ourproject/energystore/middleware"
 	"at.ourproject/energystore/mqttclient"
 	"at.ourproject/energystore/rest"
 	"at.ourproject/energystore/store/ebow"
@@ -64,7 +65,7 @@ func main() {
 	//r.Use(middleware.GQLMiddleware(viper.GetString("jwt.pubKeyFile")))
 	srv := handler.NewDefaultServer(generated.NewExecutableSchema(generated.Config{Resolvers: &graph.Resolver{}}))
 	//r.Handle("/", playground.Handler("GraphQL playground", "/query"))
-	r.Handle("/query", srv)
+	r.Handle("/query", middleware.GQLProtect(srv))
 
 	allowedOrigins := handlers.AllowedOrigins([]string{"*"})
 	allowedHeaders := handlers.AllowedHeaders(
