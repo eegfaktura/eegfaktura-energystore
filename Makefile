@@ -9,7 +9,7 @@ DOCKER=docker
 GOPATH := ${PWD}/..:${GOPATH}
 export GOPATH
 
-DOCKER_TAG=v0.3.04
+DOCKER_TAG=v0.3.05-2
 BINARY_NAME=energy-store
 ORGANISATION=vfeeg-development
 GLOBAL_ORG=eegfaktura
@@ -37,7 +37,7 @@ docker:
 
 push: docker
 	$(DOCKER) push ghcr.io/$(ORGANISATION)/energy-store:$(DOCKER_TAG)
-	$(DOCKER) push ghcr.io/$(GLOBAL_ORG)/energy-store:latest
+#	$(DOCKER) push ghcr.io/$(GLOBAL_ORG)/energy-store:latest
 
 protoc: protoc/masterdata.proto protoc/excel.proto
 	protoc --experimental_allow_proto3_optional=true --proto_path=. --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative ./protoc/*.proto

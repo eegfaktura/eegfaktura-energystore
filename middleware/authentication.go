@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/sirupsen/logrus"
+	"github.com/golang/glog"
 )
 
 const (
@@ -27,6 +27,15 @@ const (
 var (
 	kcConfig map[string]*keycloakConfig
 	verifier *oidc.IDTokenVerifier
+	// VerifyTokenClaims pluggable verification function used by middlewares and tests.
+	// InitKeycloak should set this to the real verifier at startup.
+	// Tests override it to avoid network calls.
+	VerifyTokenClaims func(ctx context.Context, token string) (*PlatformClaims, error)
+
+	ErrNoAuthorization      = errors.New("authorization header missing")
+	ErrInvalidAuthSchema    = errors.New("invalid authorization schema")
+	ErrInvalidBasicEncoding = errors.New("invalid basic auth encoding")
+	ErrInvalidBasicFormat   = errors.New("invalid basic auth format")
 )
 
 type keycloakConfig struct {
@@ -42,12 +51,12 @@ func init() {
 	var err error
 	kcConfig, err = readKeycloakConfig()
 	if err != nil {
-		logrus.WithField("error", "Init Keycloak").Errorf("E: %v", err)
+		glog.Errorf("Init Keycloak: %v", err)
 		panic(err)
 	}
 
 	if _, ok := kcConfig["api"]; !ok {
-		logrus.WithField("error", "Init Keycloak").Errorf("E: %v", errors.New("no client-id 'at.ourproject.vfeeg.api' available"))
+		glog.Errorf("Init Keycloak: %v", errors.New("no client-id 'at.ourproject.vfeeg.api' available"))
 		panic(err)
 	}
 
@@ -105,7 +114,7 @@ func init() {
 	providerUriApp := fmt.Sprintf("%s/realms/%s", hostApp, realmApp)
 	provider, err := oidc.NewProvider(ctx, providerUriApp)
 	if err != nil {
-		logrus.Errorf("E: %v", err)
+		glog.Errorf("%v", err)
 		panic(err)
 	}
 	verifier = provider.Verifier(&oidc.Config{ClientID: clientIDApp, SkipClientIDCheck: true})
@@ -132,50 +141,127 @@ func readKeycloakConfig() (map[string]*keycloakConfig, error) {
 	return kcConfig, err
 }
 
-func verifyRequest(handler JWTHandlerFunc) func(w http.ResponseWriter, r *http.Request) {
-	return func(w http.ResponseWriter, r *http.Request) {
-		jwtToken := r.Header.Get("Authorization")
-		if len(jwtToken) == 0 {
-			logrus.WithField("error", "JWT-Token").Printf("No Access_token in request!\n")
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
+// verifyAndExtractClaims tries the test-hook VerifyTokenClaims (if present) and
+// falls back to the actual OIDC verifier otherwise. It always returns a populated
+// PlatformClaims or an error.
+func verifyAndExtractClaims(ctx context.Context, token string) (*PlatformClaims, error) {
+	// If a test hook / custom verifier is provided, use it.
+	if VerifyTokenClaims != nil {
+		return VerifyTokenClaims(ctx, token)
+	}
 
-		if strings.HasPrefix(jwtToken, BEARER_SCHEMA) {
-			jwtToken = jwtToken[len(BEARER_SCHEMA):]
-		} else {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
+	// Fallback to OIDC verifier
+	if verifier == nil {
+		return nil, fmt.Errorf("oidc verifier not initialized")
+	}
+	idToken, err := verifier.Verify(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	claims := &PlatformClaims{}
+	if err := idToken.Claims(claims); err != nil {
+		return nil, err
+	}
+	return claims, nil
+}
 
-		idToken, err := verifier.Verify(context.Background(), jwtToken)
+// ParseBearerTokenFromHeader extracts the Bearer token from the Authorization header.
+// Returns a non-empty token or an error describing the problem.
+func parseBearerTokenFromHeader(r *http.Request) (string, error) {
+	auth := strings.TrimSpace(r.Header.Get("Authorization"))
+	if auth == "" {
+		return "", ErrNoAuthorization
+	}
+	if !strings.HasPrefix(auth, BEARER_SCHEMA) {
+		return "", ErrInvalidAuthSchema
+	}
+	token := strings.TrimSpace(auth[len(BEARER_SCHEMA):])
+	if token == "" {
+		return "", ErrInvalidAuthSchema
+	}
+	return token, nil
+}
+
+func GQLProtect(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		jwtToken, err := parseBearerTokenFromHeader(r)
 		if err != nil {
-			logrus.WithField("error", "JWT-Token").Errorf("%v", err)
+			glog.Errorf("No Access_token in request or invalid Authorization: %v\n", err)
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
 
-		claims := PlatformClaims{}
-		if err := idToken.Claims(&claims); err != nil {
-			logrus.WithField("error", "Claims").Errorf("%v", err)
-			w.WriteHeader(http.StatusForbidden)
+		claims, err := verifyAndExtractClaims(context.Background(), jwtToken)
+		if err != nil {
+			glog.Errorf("%v", err)
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(err.Error()))
 			return
 		}
 
-		tenant := r.Header.Get("X-Tenant")
+		tenant := getTenant(r)
+		if len(tenant) == 0 {
+			glog.Warning("Unauthorized access without tenant")
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
 		superuser := hasRole(claims.RealmAccess.Roles, "superuser")
 		if !superuser {
 			if contains(claims.Tenants, tenant) == false {
-				logrus.WithField("tenant", tenant).Warnf("Unauthorized access with tenant %s", tenant)
+				glog.Warningf("Unauthorized access with tenant %s", tenant)
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func verifyRequest(handler JWTHandlerFunc) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		jwtToken, err := parseBearerTokenFromHeader(r)
+		if err != nil {
+			glog.Errorf("No Access_token in request or invalid Authorization: %v\n", err)
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+
+		claims, err := verifyAndExtractClaims(context.Background(), jwtToken)
+		if err != nil {
+			glog.Errorf("%v", err)
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(err.Error()))
+			return
+		}
+
+		tenant := getTenant(r)
+		if len(tenant) == 0 {
+			glog.Warning("Unauthorized access without tenant")
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		superuser := hasRole(claims.RealmAccess.Roles, "superuser")
+		if !superuser {
+			if contains(claims.Tenants, tenant) == false {
+				glog.Warningf("Unauthorized access with tenant %s", tenant)
 				w.WriteHeader(http.StatusForbidden)
 				return
 			}
 		}
 
-		handler(w, r, &claims, strings.ToUpper(tenant))
+		handler(w, r, claims, strings.ToUpper(tenant))
 	}
 }
 
 func hasRole(roles []string, role string) bool {
 	return slices.Contains(roles, role)
+}
+
+func getTenant(r *http.Request) string {
+	tenant := r.Header.Get("tenant")
+	if len(tenant) == 0 {
+		tenant = r.Header.Get("X-Tenant")
+	}
+	return tenant
 }

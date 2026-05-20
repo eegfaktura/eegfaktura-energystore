@@ -1,6 +1,7 @@
 package calculation
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -105,25 +106,25 @@ func EnergyReportV2(tenant, ecid string, participants []model.ParticipantReport,
 	switch code[1] {
 	case 'M':
 		err = CalculateMonthlyPeriodV2(db, response, AllocDynamicV2, year, segment)
-		if err != nil {
+		if err != nil && !errors.Is(err, ebow.ErrNotFound) {
 			return nil, err
 		}
 		break
 	case 'H':
 		err = CalculateBiAnnualPeriodV2(db, response, AllocDynamicV2, year, segment)
-		if err != nil {
+		if err != nil && !errors.Is(err, ebow.ErrNotFound) {
 			return nil, err
 		}
 		break
 	case 'Q':
 		err = CalculateQuarterlyPeriodV2(db, response, AllocDynamicV2, year, segment)
-		if err != nil {
+		if err != nil && !errors.Is(err, ebow.ErrNotFound) {
 			return nil, err
 		}
 		break
 	default:
 		err = CalculateAnnualPeriodV2(db, response, AllocDynamicV2, year)
-		if err != nil {
+		if err != nil && !errors.Is(err, ebow.ErrNotFound) {
 			return nil, err
 		}
 	}
@@ -153,7 +154,7 @@ func EnergySummary(tenant, ecid string, year, segment int, periodCode string) (i
 		return nil, err
 	}
 
-	if err := e.Query(tenant, ecid, start, end); err != nil {
+	if err := e.Query(tenant, ecid, start, end); err != nil && !errors.Is(err, ebow.ErrNoRows) {
 		return nil, err
 	}
 	return (c.(*store.EnergySummary)).GetResult(), nil

@@ -5,8 +5,9 @@ import (
 	"crypto/rsa"
 	"errors"
 	"fmt"
-	"github.com/golang-jwt/jwt"
 	"net/http"
+
+	"github.com/golang-jwt/jwt/v4"
 )
 
 type PlatformClaims struct {
