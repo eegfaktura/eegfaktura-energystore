@@ -42,29 +42,29 @@ func NewRestServer() *mux.Router {
 }
 
 // fetchEnergyReport Rest endpoint retrieve energy values of requested participant and period pattern.
-func fetchEnergyReport() middleware.JWTHandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request, claims *middleware.PlatformClaims, tenant string) {
-		energy := &model.EegEnergy{}
-
-		var request model.EnergyReportRequest
-		err := json.NewDecoder(r.Body).Decode(&request)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		if energy, err = calculation.EnergyReport(tenant, request.Year, request.Segment, request.Period); err != nil {
-			respondWithError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-
-		resp := struct {
-			Eeg *model.EegEnergy `json:"eeg"`
-		}{Eeg: energy}
-
-		respondWithJSON(w, http.StatusOK, &resp)
-	}
-}
+//func fetchEnergyReport() middleware.JWTHandlerFunc {
+//	return func(w http.ResponseWriter, r *http.Request, claims *middleware.PlatformClaims, tenant string) {
+//		energy := &model.EegEnergy{}
+//
+//		var request model.EnergyReportRequest
+//		err := json.NewDecoder(r.Body).Decode(&request)
+//		if err != nil {
+//			http.Error(w, err.Error(), http.StatusBadRequest)
+//			return
+//		}
+//
+//		if energy, err = calculation.EnergyReport(tenant, request.Year, request.Segment, request.Period); err != nil {
+//			respondWithError(w, http.StatusInternalServerError, err.Error())
+//			return
+//		}
+//
+//		resp := struct {
+//			Eeg *model.EegEnergy `json:"eeg"`
+//		}{Eeg: energy}
+//
+//		respondWithJSON(w, http.StatusOK, &resp)
+//	}
+//}
 
 // fetchEnergyReportV2 Rest endpoint retrieve energy values of requested participant and period pattern.
 func fetchEnergyReportV2() middleware.JWTHandlerFunc {
