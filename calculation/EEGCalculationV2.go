@@ -1,15 +1,93 @@
 package calculation
 
 import (
+	"fmt"
+	"math"
+	"time"
+
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
 	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
-	"fmt"
 	"github.com/golang/glog"
-	"math"
-	"time"
 )
+
+type AllocationHandlerV2 func(*model.Matrix, *model.Matrix) (*model.Matrix, *model.Matrix, *model.Matrix)
+
+type ValueIterator interface {
+	Next(result interface{}) bool
+}
+
+type calcResults struct {
+	rAlloc *model.Matrix
+	rCons  *model.Matrix
+	rProd  *model.Matrix
+	rDist  *model.Matrix
+	rShar  *model.Matrix
+	pSum   float64
+}
+
+func newCalcResult(metaInfo *model.CounterPointMetaInfo) *calcResults {
+	return &calcResults{
+		rCons:  model.NewMatrix(metaInfo.ConsumerCount, 1),
+		rAlloc: model.NewMatrix(metaInfo.ConsumerCount, 1),
+		rProd:  model.NewMatrix(metaInfo.ProducerCount, 1),
+		rDist:  model.NewMatrix(metaInfo.ProducerCount, 1),
+		rShar:  model.NewMatrix(metaInfo.ConsumerCount, 1),
+		pSum:   0,
+	}
+}
+
+func appendResults(line *model.RawSourceLine, allocFunc AllocationHandlerV2, results *calcResults) error {
+
+	consumerMatrix, producerMatrix := utils.ConvertLineToMatrix(line)
+	m, s, p := allocFunc(consumerMatrix, producerMatrix)
+
+	consumerUnitMatix := model.MakeMatrix(make([]float64, 3), 3, 1)
+	consumerUnitMatix.SetElm(0, 0, 1)
+
+	producerUnitMatix := model.MakeMatrix(make([]float64, 2), 2, 1)
+	producerUnitMatix.SetElm(0, 0, 1)
+
+	consumed := model.Multiply(consumerMatrix, consumerUnitMatix)
+	produced := model.Multiply(producerMatrix, producerUnitMatix)
+
+	if results.rCons == nil {
+		results.rCons = model.NewCopiedMatrixFromElements(line.Consumers, len(line.Consumers), 1)
+	} else {
+		//results.rCons.Add(model.MakeMatrix(line.Consumers, len(line.Consumers), 1))
+		results.rCons.Add(consumed)
+	}
+
+	if results.rProd == nil {
+		results.rProd = model.NewCopiedMatrixFromElements(line.Producers, len(line.Producers), 1)
+	} else {
+		//results.rProd.Add(model.MakeMatrix(line.Producers, len(line.Producers), 1))
+		results.rProd.Add(produced)
+	}
+
+	if results.rAlloc == nil {
+		results.rAlloc = model.NewCopiedMatrixFromElements(m.Elements, m.CountRows(), m.CountCols())
+	} else {
+		results.rAlloc.Add(m)
+	}
+
+	if results.rDist == nil {
+		results.rDist = model.NewCopiedMatrixFromElements(p.Elements, p.CountRows(), p.CountCols())
+	} else {
+		results.rDist.Add(p)
+	}
+
+	if results.rShar == nil {
+		results.rShar = model.NewCopiedMatrixFromElements(s.Elements, s.CountRows(), s.CountCols())
+	} else {
+		results.rShar.Add(s)
+	}
+	results.pSum += utils.Sum(produced.Elements)
+
+	return nil
+
+}
 
 type reportValues struct {
 	meters           map[string][]*model.MeterReport

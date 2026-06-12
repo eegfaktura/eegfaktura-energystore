@@ -1,6 +1,9 @@
 package mqttclient
 
 import (
+	"bytes"
+	"compress/gzip"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -16,6 +19,28 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func encryptMessage(msg []byte) ([]byte, error) {
+	compressed, err := gzipData(msg)
+	if err != nil {
+		return nil, err
+	}
+	encoded := base64.StdEncoding.EncodeToString(compressed)
+	return []byte(encoded), nil
+}
+
+func gzipData(data []byte) ([]byte, error) {
+	var out bytes.Buffer
+	gz := gzip.NewWriter(&out)
+	defer gz.Close()
+	if _, err := gz.Write(data); err != nil {
+		return nil, err
+	}
+	if err := gz.Close(); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
+}
 
 func TestNewMqttEnergyImporter(t *testing.T) {
 	timeV1, err := utils.ParseTime("24.10.2022 00:00:00", time.Now().UnixMilli())
@@ -239,7 +264,7 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			importer := NewTenantEnergyImporter("importer")
+			importer := NewTenantEnergyImporter("importer", &MQTTStreamer{})
 			err = importer.Import(tt.energy)
 			require.NoError(t, err)
 
@@ -269,10 +294,13 @@ func TestImportRawdataStore(t *testing.T) {
 	jsonRaw, err := os.ReadFile("../test/energy-response-new-text.json")
 	require.NoError(t, err)
 
-	rawData := decodeMessage(jsonRaw)
+	compressed, err := encryptMessage(jsonRaw)
+	require.NoError(t, err)
+
+	rawData := decodeMessage(compressed)
 	require.NotNil(t, rawData)
 
-	importer := NewTenantEnergyImporter("te100190")
+	importer := NewTenantEnergyImporter("te100190", &MQTTStreamer{})
 
 	err = importer.Import(rawData)
 	require.NoError(t, err)
@@ -281,7 +309,9 @@ func TestImportRawdataStore(t *testing.T) {
 	err = importer.Import(rawData)
 	require.NoError(t, err)
 
-	db, err := ebow.OpenStorageTest("te100190", "ecid", "../test/rawdata")
+	importer.Close()
+
+	db, err := ebow.OpenStorageTest("te100190", "AT00400000000RC101590000000400111", "../test/rawdata")
 	require.NoError(t, err)
 
 	meta, err := db.GetMeta("cpmeta/0")
@@ -353,7 +383,7 @@ func TestMassImport(t *testing.T) {
 	startTime := int64(1759269600000)
 	endTime := int64(1761951600000)
 
-	importer := NewTenantEnergyImporter("TE100888")
+	importer := NewTenantEnergyImporter("TE100888", &MQTTStreamer{})
 	err = importer.Import(testData)
 	require.NoError(t, err)
 
