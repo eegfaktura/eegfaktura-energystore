@@ -1,10 +1,11 @@
 package main
 
 import (
+	"fmt"
+
 	"at.ourproject/energystore/config"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store/ebow"
-	"fmt"
 
 	"flag"
 	"os"

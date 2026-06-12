@@ -33,7 +33,7 @@ func (r *queryResolver) Report(ctx context.Context, tenant string, ecID string, 
 	var err error
 	energy := &model.EegEnergy{}
 
-	if energy, err = calculation.EnergyReport(tenant, year, segment, period); err != nil {
+	if energy, err = calculation.EnergyReport(tenant, ecID, year, segment, period); err != nil {
 		return energy, err
 	}
 

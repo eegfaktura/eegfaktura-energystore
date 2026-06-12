@@ -1,13 +1,15 @@
 package calculation
 
 import (
+	"errors"
+	"fmt"
+	"strings"
+
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
 	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
-	"fmt"
 	"github.com/golang/glog"
-	"strings"
 )
 
 //const StorageException = errors.New()
@@ -20,9 +22,9 @@ import (
 //   - YQ1-YQ4:  cumulate quarter years
 //   - YH1-YH2:  cumulate half years
 //   - YM1-YM12: cumulate months
-func EnergyReport(tenant string, year, segment int, periodCode string) (*model.EegEnergy, error) {
+func EnergyReport(tenant, ecId string, year, segment int, periodCode string) (*model.EegEnergy, error) {
 
-	db, err := ebow.OpenStorage(tenant, "")
+	db, err := ebow.OpenStorage(tenant, ecId)
 	if err != nil {
 		return nil, err
 	}
@@ -104,25 +106,25 @@ func EnergyReportV2(tenant, ecid string, participants []model.ParticipantReport,
 	switch code[1] {
 	case 'M':
 		err = CalculateMonthlyPeriodV2(db, response, AllocDynamicV2, year, segment)
-		if err != nil {
+		if err != nil && !errors.Is(err, ebow.ErrNotFound) {
 			return nil, err
 		}
 		break
 	case 'H':
 		err = CalculateBiAnnualPeriodV2(db, response, AllocDynamicV2, year, segment)
-		if err != nil {
+		if err != nil && !errors.Is(err, ebow.ErrNotFound) {
 			return nil, err
 		}
 		break
 	case 'Q':
 		err = CalculateQuarterlyPeriodV2(db, response, AllocDynamicV2, year, segment)
-		if err != nil {
+		if err != nil && !errors.Is(err, ebow.ErrNotFound) {
 			return nil, err
 		}
 		break
 	default:
 		err = CalculateAnnualPeriodV2(db, response, AllocDynamicV2, year)
-		if err != nil {
+		if err != nil && !errors.Is(err, ebow.ErrNotFound) {
 			return nil, err
 		}
 	}
@@ -152,7 +154,7 @@ func EnergySummary(tenant, ecid string, year, segment int, periodCode string) (i
 		return nil, err
 	}
 
-	if err := e.Query(tenant, ecid, start, end); err != nil {
+	if err := e.Query(tenant, ecid, start, end); err != nil && !errors.Is(err, ebow.ErrNoRows) {
 		return nil, err
 	}
 	return (c.(*store.EnergySummary)).GetResult(), nil

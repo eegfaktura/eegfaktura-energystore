@@ -7,14 +7,14 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"github.com/golang-jwt/jwt"
-	"github.com/golang/glog"
-	"github.com/gorilla/mux"
-	log "github.com/sirupsen/logrus"
 	"io/ioutil"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/golang-jwt/jwt/v4"
+	"github.com/golang/glog"
+	"github.com/gorilla/mux"
 )
 
 type JwtValidateMiddleware struct {
@@ -36,7 +36,7 @@ func NewJWTMiddleware(jwtUtil *AccessTokenGenJWT) *JwtValidateMiddleware {
 func JWTMiddleware(publicKeyPath string /*jwtUtil *AccessTokenGenJWT*/) func(JWTHandlerFunc) http.HandlerFunc {
 	pub, err := loadEncryptionKey(publicKeyPath)
 	if err != nil {
-		log.Fatal(err)
+		glog.Fatal(err)
 	}
 	jwtUtil := &AccessTokenGenJWT{PublicKey: pub.key}
 
@@ -44,7 +44,7 @@ func JWTMiddleware(publicKeyPath string /*jwtUtil *AccessTokenGenJWT*/) func(JWT
 		return func(w http.ResponseWriter, r *http.Request) {
 			jwtToken := r.Header.Get("Authorization")
 			if len(jwtToken) == 0 {
-				log.Printf("No Access_token in request!\n")
+				glog.Info("No Access_token in request!")
 				w.WriteHeader(http.StatusForbidden)
 				return
 			}
@@ -58,7 +58,7 @@ func JWTMiddleware(publicKeyPath string /*jwtUtil *AccessTokenGenJWT*/) func(JWT
 
 			claims, err := jwtUtil.ExtractClaims(jwtToken)
 			if err != nil {
-				log.Printf("Error while parsing token: %s\n", err)
+				glog.Infof("Error while parsing token: %s", err)
 				w.WriteHeader(http.StatusForbidden)
 				return
 			}

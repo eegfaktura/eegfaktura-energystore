@@ -89,6 +89,7 @@ type TopicDispatcher struct {
 	Inbound  chan mqtt.Message
 	Finished chan bool
 	//workers  map[string]*TenantWorker
+	streamer   *MQTTStreamer
 	workers    sync.Map
 	ctx        context.Context
 	quit       chan struct{}
@@ -110,8 +111,9 @@ func NewTopicDispatcher(ctx context.Context, topic string, streamer *MQTTStreame
 		quit:       make(chan struct{}),
 		stopWorker: make(chan string),
 		//wg:       sync.WaitGroup,
-		stop: cancel,
-		mu:   &sync.RWMutex{},
+		stop:     cancel,
+		mu:       &sync.RWMutex{},
+		streamer: streamer,
 	}
 
 	sub := &TenantSubscriber{}
@@ -163,7 +165,7 @@ func (d *TopicDispatcher) getWorker(tenant string) chan mqtt.Message {
 		worker = &TenantWorker{
 			tenant:     tenant,
 			JobChannel: make(chan mqtt.Message, 10),
-			executor:   NewTenantEnergyImporter(tenant),
+			executor:   NewTenantEnergyImporter(tenant, d.streamer),
 			ctx:        d.ctx,
 			wg:         &d.wg,
 		}
