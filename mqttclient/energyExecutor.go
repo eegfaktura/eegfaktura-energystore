@@ -170,7 +170,6 @@ func (tmw *TenantEnergyImporter) Import(data *model.MqttEnergyMessage) error {
 }
 
 func decodeMessage(msg []byte) *model.MqttEnergyMessage {
-
 	decompressed, err := decryptMessage(msg)
 	if err != nil {
 		return nil

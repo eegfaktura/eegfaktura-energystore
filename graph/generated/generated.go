@@ -11,8 +11,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	model1 "at.ourproject/energystore/graph/model"
-	"at.ourproject/energystore/model"
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/99designs/gqlgen/graphql/introspection"
 	gqlparser "github.com/vektah/gqlparser/v2"
@@ -53,7 +51,6 @@ type ComplexityRoot struct {
 
 	Query struct {
 		LastEnergyDate func(childComplexity int, tenant string, ecID string) int
-		Report         func(childComplexity int, tenant string, ecID string, year int, segment int, period string) int
 	}
 }
 
@@ -62,7 +59,6 @@ type MutationResolver interface {
 }
 type QueryResolver interface {
 	LastEnergyDate(ctx context.Context, tenant string, ecID string) (string, error)
-	Report(ctx context.Context, tenant string, ecID string, year int, segment int, period string) (*model.EegEnergy, error)
 }
 
 type executableSchema struct {
@@ -107,18 +103,6 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 		}
 
 		return e.complexity.Query.LastEnergyDate(childComplexity, args["tenant"].(string), args["ecId"].(string)), true
-
-	case "Query.report":
-		if e.complexity.Query.Report == nil {
-			break
-		}
-
-		args, err := ec.field_Query_report_args(context.TODO(), rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.complexity.Query.Report(childComplexity, args["tenant"].(string), args["ecId"].(string), args["year"].(int), args["segment"].(int), args["period"].(string)), true
 
 	}
 	return 0, false
@@ -233,7 +217,6 @@ scalar Upload
 
 type Query {
   lastEnergyDate(tenant: String!, ecId: String!): String!
-  report(tenant: String!, ecId: String!, year: Int!, segment: Int!, period: String!): EegEnergy!
 }
 
 "The ` + "`" + `Mutation` + "`" + ` type, represents all updates we can make to our data."
@@ -325,57 +308,6 @@ func (ec *executionContext) field_Query_lastEnergyDate_args(ctx context.Context,
 		}
 	}
 	args["ecId"] = arg1
-	return args, nil
-}
-
-func (ec *executionContext) field_Query_report_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
-	var err error
-	args := map[string]interface{}{}
-	var arg0 string
-	if tmp, ok := rawArgs["tenant"]; ok {
-		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("tenant"))
-		arg0, err = ec.unmarshalNString2string(ctx, tmp)
-		if err != nil {
-			return nil, err
-		}
-	}
-	args["tenant"] = arg0
-	var arg1 string
-	if tmp, ok := rawArgs["ecId"]; ok {
-		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ecId"))
-		arg1, err = ec.unmarshalNString2string(ctx, tmp)
-		if err != nil {
-			return nil, err
-		}
-	}
-	args["ecId"] = arg1
-	var arg2 int
-	if tmp, ok := rawArgs["year"]; ok {
-		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("year"))
-		arg2, err = ec.unmarshalNInt2int(ctx, tmp)
-		if err != nil {
-			return nil, err
-		}
-	}
-	args["year"] = arg2
-	var arg3 int
-	if tmp, ok := rawArgs["segment"]; ok {
-		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("segment"))
-		arg3, err = ec.unmarshalNInt2int(ctx, tmp)
-		if err != nil {
-			return nil, err
-		}
-	}
-	args["segment"] = arg3
-	var arg4 string
-	if tmp, ok := rawArgs["period"]; ok {
-		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("period"))
-		arg4, err = ec.unmarshalNString2string(ctx, tmp)
-		if err != nil {
-			return nil, err
-		}
-	}
-	args["period"] = arg4
 	return args, nil
 }
 
@@ -521,61 +453,6 @@ func (ec *executionContext) fieldContext_Query_lastEnergyDate(ctx context.Contex
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_lastEnergyDate_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Query_report(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	fc, err := ec.fieldContext_Query_report(ctx, field)
-	if err != nil {
-		return graphql.Null
-	}
-	ctx = graphql.WithFieldContext(ctx, fc)
-	defer func() {
-		if r := recover(); r != nil {
-			ec.Error(ctx, ec.Recover(ctx, r))
-			ret = graphql.Null
-		}
-	}()
-	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
-		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Query().Report(rctx, fc.Args["tenant"].(string), fc.Args["ecId"].(string), fc.Args["year"].(int), fc.Args["segment"].(int), fc.Args["period"].(string))
-	})
-	if err != nil {
-		ec.Error(ctx, err)
-		return graphql.Null
-	}
-	if resTmp == nil {
-		if !graphql.HasFieldError(ctx, fc) {
-			ec.Errorf(ctx, "must not be null")
-		}
-		return graphql.Null
-	}
-	res := resTmp.(*model.EegEnergy)
-	fc.Result = res
-	return ec.marshalNEegEnergy2ᚖatᚗourprojectᚋenergystoreᚋmodelᚐEegEnergy(ctx, field.Selections, res)
-}
-
-func (ec *executionContext) fieldContext_Query_report(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Query",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type EegEnergy does not have child fields")
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Query_report_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -2582,28 +2459,6 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
-		case "report":
-			field := field
-
-			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._Query_report(ctx, field)
-				if res == graphql.Null {
-					atomic.AddUint32(&fs.Invalids, 1)
-				}
-				return res
-			}
-
-			rrm := func(ctx context.Context) graphql.Marshaler {
-				return ec.OperationContext.RootResolverMiddleware(ctx,
-					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
-			}
-
-			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "__type":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Query___type(ctx, field)
@@ -2968,57 +2823,6 @@ func (ec *executionContext) unmarshalNBoolean2bool(ctx context.Context, v interf
 
 func (ec *executionContext) marshalNBoolean2bool(ctx context.Context, sel ast.SelectionSet, v bool) graphql.Marshaler {
 	res := graphql.MarshalBoolean(v)
-	if res == graphql.Null {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
-		}
-	}
-	return res
-}
-
-func (ec *executionContext) unmarshalNEegEnergy2atᚗourprojectᚋenergystoreᚋmodelᚐEegEnergy(ctx context.Context, v interface{}) (model.EegEnergy, error) {
-	res, err := model1.UnmarshalEegEnergy(v)
-	return res, graphql.ErrorOnPath(ctx, err)
-}
-
-func (ec *executionContext) marshalNEegEnergy2atᚗourprojectᚋenergystoreᚋmodelᚐEegEnergy(ctx context.Context, sel ast.SelectionSet, v model.EegEnergy) graphql.Marshaler {
-	res := model1.MarshalEegEnergy(v)
-	if res == graphql.Null {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
-		}
-	}
-	return res
-}
-
-func (ec *executionContext) unmarshalNEegEnergy2ᚖatᚗourprojectᚋenergystoreᚋmodelᚐEegEnergy(ctx context.Context, v interface{}) (*model.EegEnergy, error) {
-	res, err := model1.UnmarshalEegEnergy(v)
-	return &res, graphql.ErrorOnPath(ctx, err)
-}
-
-func (ec *executionContext) marshalNEegEnergy2ᚖatᚗourprojectᚋenergystoreᚋmodelᚐEegEnergy(ctx context.Context, sel ast.SelectionSet, v *model.EegEnergy) graphql.Marshaler {
-	if v == nil {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
-		}
-		return graphql.Null
-	}
-	res := model1.MarshalEegEnergy(*v)
-	if res == graphql.Null {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
-		}
-	}
-	return res
-}
-
-func (ec *executionContext) unmarshalNInt2int(ctx context.Context, v interface{}) (int, error) {
-	res, err := graphql.UnmarshalInt(v)
-	return res, graphql.ErrorOnPath(ctx, err)
-}
-
-func (ec *executionContext) marshalNInt2int(ctx context.Context, sel ast.SelectionSet, v int) graphql.Marshaler {
-	res := graphql.MarshalInt(v)
 	if res == graphql.Null {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			ec.Errorf(ctx, "the requested element is null which the schema does not allow")

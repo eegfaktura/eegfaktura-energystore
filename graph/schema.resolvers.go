@@ -7,10 +7,8 @@ package graph
 import (
 	"context"
 
-	"at.ourproject/energystore/calculation"
 	"at.ourproject/energystore/excel"
 	"at.ourproject/energystore/graph/generated"
-	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/services"
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/golang/glog"
@@ -26,18 +24,6 @@ func (r *mutationResolver) SingleUpload(ctx context.Context, tenant string, ecID
 // LastEnergyDate is the resolver for the lastEnergyDate field.
 func (r *queryResolver) LastEnergyDate(ctx context.Context, tenant string, ecID string) (string, error) {
 	return services.GetLastEnergyEntry(tenant, ecID)
-}
-
-// Report is the resolver for the report field.
-func (r *queryResolver) Report(ctx context.Context, tenant string, ecID string, year int, segment int, period string) (*model.EegEnergy, error) {
-	var err error
-	energy := &model.EegEnergy{}
-
-	if energy, err = calculation.EnergyReport(tenant, ecID, year, segment, period); err != nil {
-		return energy, err
-	}
-
-	return energy, nil
 }
 
 // Mutation returns generated.MutationResolver implementation.
