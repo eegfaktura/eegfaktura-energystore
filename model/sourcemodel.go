@@ -44,14 +44,6 @@ func MakeRawSourceLine(id string, consumerSize, producerSize int) *RawSourceLine
 	}
 }
 
-func CreateInitializedIntSlice(size int, initVal int) []int {
-	intSlice := make([]int, size)
-	for i, _ := range intSlice {
-		intSlice[i] = initVal
-	}
-	return intSlice
-}
-
 func CreateInitializedBoolSlice(size int, initVal bool) []bool {
 	boolSlice := make([]bool, size)
 	for i, _ := range boolSlice {

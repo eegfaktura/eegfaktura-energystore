@@ -24,17 +24,6 @@ func (cp CounterPointRole) String() string {
 	return "unknown"
 }
 
-type CounterPointStatus int
-
-const (
-	NEW CounterPointStatus = iota
-	REGISTERED
-	ACCEPTED
-	CONNECTING
-	CONNECTED
-	UNREGISTERED
-)
-
 type MeterCodeValue string
 
 // 1-1:1.9.0 G.01
