@@ -2,9 +2,13 @@ package mqttclient
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"strings"
+	"sync"
 	"time"
 
+	"at.ourproject/energystore/model"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/golang/glog"
 	"github.com/spf13/viper"
@@ -21,7 +25,9 @@ func (t TopicType) Tenant() string {
 }
 
 type MQTTStreamer struct {
-	client mqtt.Client
+	client   mqtt.Client
+	outbound chan energyHistory
+	mutex    sync.Mutex
 }
 
 func NewMqttStreamer() (*MQTTStreamer, error) {
@@ -92,4 +98,41 @@ func (m *MQTTStreamer) SubscribeTopic(ctx context.Context, topic string, callbac
 	if err := s.Error(); err != nil {
 		glog.Error(err)
 	}
+}
+
+func (m *MQTTStreamer) SendMessage(tenant string, msg *model.MqttEnergyMessage) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	historyData := energyHistory{Meter: msg.Meter, EcId: msg.EcId, ConversationId: msg.ConversationId, MessageCode: msg.MessageCode, Energy: make([]energyDate, 0)}
+	for _, e := range msg.Energy {
+		historyData.Energy = append(historyData.Energy, energyDate{Start: e.Start, End: e.End})
+	}
+
+	payload, err := json.Marshal(historyData)
+	if err != nil {
+		glog.Error("Marshaling Message")
+		return
+	}
+	token := m.client.Publish(fmt.Sprintf("eda/response/%s/protocol/cr_msg_history", tenant), 1, false, payload)
+	go func() {
+		<-token.Done()
+		if token.Error() != nil {
+			fmt.Printf("MQTT ERROR PUBLISHING: %s\n", token.Error())
+		}
+	}()
+	token.Wait()
+}
+
+type energyHistory struct {
+	Meter          model.EnergyMeter `json:"meter"`
+	Energy         []energyDate      `json:"energy"`
+	EcId           string            `json:"ecId"`
+	ConversationId string            `json:"conversationId"`
+	MessageCode    string            `json:"messageCode"`
+}
+
+type energyDate struct {
+	Start int64 `json:"start"`
+	End   int64 `json:"end"`
 }

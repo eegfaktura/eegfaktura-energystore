@@ -1,8 +1,12 @@
 package mqttclient
 
 import (
+	"bytes"
+	"compress/gzip"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
 	"sync"
 	"time"
 
@@ -14,15 +18,17 @@ import (
 )
 
 type TenantEnergyImporter struct {
-	Tenant string
-	db     map[string]*ebow.BowStorage
-	dbMutx sync.Mutex
+	Tenant   string
+	db       map[string]*ebow.BowStorage
+	dbMutx   sync.Mutex
+	streamer *MQTTStreamer
 }
 
-func NewTenantEnergyImporter(tenant string) *TenantEnergyImporter {
+func NewTenantEnergyImporter(tenant string, streamer *MQTTStreamer) *TenantEnergyImporter {
 	return &TenantEnergyImporter{
-		Tenant: tenant,
-		db:     make(map[string]*ebow.BowStorage),
+		Tenant:   tenant,
+		db:       make(map[string]*ebow.BowStorage),
+		streamer: streamer,
 	}
 }
 
@@ -41,10 +47,6 @@ func (tmw *TenantEnergyImporter) closeDB() {
 		b.Close()
 	}
 	tmw.db = make(map[string]*ebow.BowStorage)
-	//if tmw.db != nil {
-	//	tmw.db.Close()
-	//	tmw.db = nil
-	//}
 	glog.V(4).Infof("Closed Importer DB %s", tmw.Tenant)
 }
 
@@ -52,7 +54,6 @@ func (tmw *TenantEnergyImporter) ensureDb(ecId string) {
 	tmw.dbMutx.Lock()
 	defer tmw.dbMutx.Unlock()
 
-	//if _, ok := tmw.db[ecId]; !ok {
 	if tmw.db[ecId] == nil || !tmw.db[ecId].IsOpen() {
 		var err error
 		tmw.db[ecId], err = ebow.OpenStorage(tmw.Tenant, ecId)
@@ -60,9 +61,6 @@ func (tmw *TenantEnergyImporter) ensureDb(ecId string) {
 			glog.Errorf("%v tenant=%s", err, tmw.Tenant)
 			tmw.db = nil
 		}
-		//} else {
-		//
-		//}
 	}
 }
 
@@ -80,33 +78,9 @@ func (tmw *TenantEnergyImporter) Execute(msg mqtt.Message) {
 		glog.Errorf("%v tenant=%s", err, tmw.Tenant)
 		return
 	}
+	tmw.streamer.SendMessage(tmw.Tenant, data)
 	glog.V(3).Infof("Execution finished in %d ms (%v)", time.Since(monitor).Milliseconds(), tmw.Tenant)
 }
-
-//func createDayGroups(data *model.MqttEnergyMessage) []model.MqttEnergy {
-//	energyGroup := []model.MqttEnergy{}
-//	for i := range data.Energy {
-//		energy := data.Energy[i]
-//		energyEntry := model.MqttEnergy{Start: energy.Start, End: energy.End, Data: make([]model.MqttEnergyData, 0)}
-//		startDate := time.UnixMilli(energy.Start).AddDate(0, 0, 1).Truncate(24 * time.Hour).UnixMilli()
-//		nn := 0
-//		for n := range energy.Data {
-//			groupData := model.MqttEnergyData{MeterCode: energy.Data[n].MeterCode, Value: make([]model.MqttEnergyValue, 0)}
-//			for x := range energy.Data[n].Value {
-//				if energy.Data[n].Value[x].To > startDate {
-//					energyEntry.End = energy.Data[n].Value[x].To
-//					energyGroup = append(energyGroup, energyEntry)
-//					eData = model.MqttEnergyData{MeterCode: energy.Data[n].MeterCode, Value: make([]model.MqttEnergyValue, 0)}
-//					nn = 0
-//					startDate = time.UnixMilli(energy.Data[n].Value[x].To).AddDate(0, 0, 1).Truncate(24 * time.Hour).UnixMilli()
-//				}
-//				groupData.Value = append(groupData.Value, energy.Data[n].Value[x])
-//			}
-//			energyEntry.Data = append(energyEntry.Data, model.MqttEnergyData{MeterCode: energy.Data[n].MeterCode, Value: make([]model.MqttEnergyValue, 0)})
-//		}
-//	}
-//	return energyGroup
-//}
 
 const daySeconds = int64(24 * 60 * 60 * 1000)
 
@@ -191,20 +165,52 @@ func (tmw *TenantEnergyImporter) Import(data *model.MqttEnergyMessage) error {
 			}(&groupedEnergy[n])
 		}
 		_wg.Wait()
-
-		//if err := store.StoreEnergyV2(tmw.db, data.Meter.MeteringPoint, &data.Energy[i]); err != nil {
-		//	return err
-		//}
 	}
 	return nil
 }
 
 func decodeMessage(msg []byte) *model.MqttEnergyMessage {
+
+	decompressed, err := decryptMessage(msg)
+	if err != nil {
+		return nil
+	}
+
 	m := model.MqttEnergyMessage{}
-	err := json.Unmarshal(msg, &m)
+	err = json.Unmarshal(decompressed, &m)
 	if err != nil {
 		glog.Errorf("Error decoding MQTT message. %s", err.Error())
 		return nil
 	}
 	return &m
+}
+
+func decryptMessage(msg []byte) ([]byte, error) {
+	// --- Reverse ---
+	decoded, err := base64.StdEncoding.DecodeString(string(msg[:]))
+	if err != nil {
+		return nil, err
+	}
+
+	decompressed, err := gunzipData(decoded)
+	if err != nil {
+		return nil, err
+	}
+	return decompressed, nil
+}
+
+func gunzipData(data []byte) ([]byte, error) {
+	buf := bytes.NewBuffer(data)
+	gz, err := gzip.NewReader(buf)
+	if err != nil {
+		return nil, err
+	}
+	defer gz.Close()
+
+	var out bytes.Buffer
+	_, err = io.Copy(&out, gz)
+	if err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
 }
