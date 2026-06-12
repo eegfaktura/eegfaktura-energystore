@@ -1,21 +1,22 @@
 package rest
 
 import (
-	"at.ourproject/energystore/middleware"
-	"at.ourproject/energystore/model"
-	"at.ourproject/energystore/services"
-	"at.ourproject/energystore/store"
 	"bytes"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
-	"github.com/golang/glog"
-	"github.com/gorilla/mux"
 	"io"
 	"net/http"
 	"sort"
 	"strings"
 	"time"
+
+	"at.ourproject/energystore/middleware"
+	"at.ourproject/energystore/model"
+	"at.ourproject/energystore/services"
+	"at.ourproject/energystore/store"
+	"github.com/golang/glog"
+	"github.com/gorilla/mux"
 )
 
 func InitQueryApiRouter(r *mux.Router) *mux.Router {
@@ -46,6 +47,9 @@ func queryRawData() middleware.JWTHandlerFunc {
 			return
 		}
 
+		//_maxEnd := time.UnixMilli(request.Start).AddDate(0, 3, 0)
+		//_currentEnd := int64(math.Min(float64(request.End), float64(_maxEnd.UnixMilli())))
+
 		var cps []store.TargetMP
 		if len(request.Cps) == 0 {
 			start := uint64(request.Start)
@@ -54,6 +58,7 @@ func queryRawData() middleware.JWTHandlerFunc {
 			if err != nil {
 				glog.Error(err)
 				respondWithError(w, http.StatusBadRequest, err.Error())
+				return
 			}
 
 			cps = make([]store.TargetMP, len(meters))
@@ -72,7 +77,9 @@ func queryRawData() middleware.JWTHandlerFunc {
 
 		if request.Format != nil && strings.ToLower(*request.Format) == "csv" {
 			responseWithCsv(w, resp, csvConverter)
+			return
 		}
+
 		respondWithJSON(w, http.StatusOK, &resp)
 	}
 }
