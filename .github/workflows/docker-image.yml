@@ -55,6 +55,35 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup Go (for protoc plugins)
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Install protoc + Go gRPC plugins
+        run: |
+          set -eu
+          # Reproduziert den `make protoc`-Schritt aus dem Makefile.
+          # Generierte Files (z.B. protoc/masterdata.pb.go) sind im Repo
+          # nicht committet (nur protoc/excel.pb.go) — Devs lassen das
+          # lokal vor `make docker` laufen. CI muss das selbst tun.
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+
+      - name: Run protoc codegen
+        run: |
+          set -eu
+          export PATH="$HOME/go/bin:$PATH"
+          protoc --experimental_allow_proto3_optional=true \
+            --proto_path=. \
+            --go_out=. --go_opt=paths=source_relative \
+            --go-grpc_out=. --go-grpc_opt=paths=source_relative \
+            ./protoc/*.proto
+          ls -la protoc/
+
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v5
