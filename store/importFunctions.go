@@ -132,62 +132,6 @@ func importEnergyValuesV2(
 		})
 	}
 
-	// -----------------------------------------------------------------------------------
-
-	//hashToBigInt := func(seed, dayISO string) *big.Int {
-	//	h := sha256.Sum256([]byte(seed + "|" + dayISO))
-	//	bi := new(big.Int).SetBytes(h[:])
-	//	return bi
-	//}
-	//
-	//deterministicInt := func(seed, dayISO string, mod int64) (int64, error) {
-	//	if mod <= 0 {
-	//		return 0, fmt.Errorf("mod must be > 0")
-	//	}
-	//	bi := hashToBigInt(seed, dayISO)
-	//	// bi % mod
-	//	modBig := big.NewInt(mod)
-	//	res := new(big.Int).Mod(bi, modBig)
-	//	return res.Int64(), nil
-	//}
-
-	//hashStringToInt64 := func(s string) uint64 {
-	//	h := fnv.New64a()
-	//	h.Write([]byte(s))
-	//	return h.Sum64()
-	//}
-
-	//simpleHash := func(s string) int64 {
-	//	hash := int64(0)
-	//	for _, char := range s {
-	//		hash = int64(31*hash + int64(char))
-	//	}
-	//	return hash
-	//}
-	//
-	//hash := simpleHash(strings.ToUpper(tenant))
-	//
-	//exists := slices.Contains([]int64{
-	//	2316945864818, 2316945739978, 2316945740851, 2316945745597, 2316945769708, 2316945801487,
-	//	1904256527292, 2316945835892, 2316945857968, 2316945862867, 2316945888723},
-	//	hash)
-	//
-	////th := hashStringToInt64(tenant)
-	////
-	////if th%300 != 32 {
-	//if !exists {
-	//	if metaCP.Dir == model.CONSUMER_DIRECTION {
-	//		n, err := deterministicInt(metaCP.Name, time.UnixMilli(data.Start).Format("2006-01-02"), 190)
-	//		if err == nil && (n == 25 || n == 13) {
-	//			//fmt.Printf("####################### SKIP IMPORT (%s) %s (%s) ############################\n", tenant, metaCP.Name, time.UnixMilli(data.Start).Format("2006-01-02"))
-	//			return resources, nil
-	//		}
-	//	}
-	//}
-	//}
-	// --------------------------------------------------------------------------------------
-
-	//var _wg sync.WaitGroup
 	var tablePrefix = "CP/"
 	for _, mc := range meterCode {
 		if mc.SourceInData < len(data.Data) {
