@@ -1,20 +1,153 @@
+# Ziel: REPLACED `.github/workflows/docker-image.yml` in
+# eegfaktura/eegfaktura-energystore. Das existierende docker-image.yml
+# triggert nur auf branch `master` (Default-Branch ist aber `main`) und
+# pusht ohne docker-login-Step zu `ghcr.io/vfeeg-development/...`, fuer das
+# der repo-eigene GITHUB_TOKEN keine Berechtigung hat — die CI ist
+# effektiv tot (0 runs seit Erstellung).
+#
+# Build-Flow:
+#   1. Checkout
+#   2. Docker login zu GHCR (mit GITHUB_TOKEN dieses Repos)
+#   3. docker/build-push-action -> ghcr.io/eegfaktura/energy-store
+#      (Legacy-Image-Name aus Makefile beibehalten, kein Source-Eingriff)
+#   4. Build-Provenance-Attestation
+#
+# ⚠️ STUFE 1: KEIN repository_dispatch-Job. Erstmal nur sicherstellen, dass
+# der Source-Code auf einer CI-Maschine durchbaut. Wenn 1-2 push-builds gruen
+# sind und das Image im Cluster manuell getestet wurde, wird der
+# dispatch-deploy-Job in einer zweiten Iteration ergaenzt (Stufe 3).
+#
+# Vorbedingung Stufe 1: keine (GITHUB_TOKEN reicht aus, kein PLATFORM_DEPLOY_PAT).
+# Vorbedingung Stufe 3: `PLATFORM_DEPLOY_PAT`-Secret im Repo + dispatch-deploy
+# job in dieser Datei.
+
 name: Docker Image CI
 
 on:
   push:
-    branches: [ "master" ]
+    branches:
+      - master
+      - main
+    tags:
+      - v*
   pull_request:
-    branches: [ "master" ]
+    branches:
+      - master
+      - main
+
+env:
+  REGISTRY: "ghcr.io"
+  # Achtung: NICHT ${{ github.repository }} - das waere `eegfaktura/eegfaktura-energystore`.
+  # Wir behalten den Legacy-Image-Namen `energy-store` aus der Makefile.
+  IMAGE_NAME: "eegfaktura/energy-store"
 
 jobs:
-
-  build:
-
+  build-and-push-image:
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+
     steps:
-    - uses: actions/checkout@v3
-    - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag ghcr.io/vfeeg-development/energy-store:latest
-    - name: publish docker container
-      run: docker push ghcr.io/vfeeg-development/energy-store:latest
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go (for protoc plugins)
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Install protoc + Go gRPC plugins
+        run: |
+          set -eu
+          # Reproduziert den `make protoc`-Schritt aus dem Makefile.
+          # Generierte Files (z.B. protoc/masterdata.pb.go) sind im Repo
+          # nicht committet (nur protoc/excel.pb.go) — Devs lassen das
+          # lokal vor `make docker` laufen. CI muss das selbst tun.
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+
+      - name: Run protoc codegen
+        run: |
+          set -eu
+          export PATH="$HOME/go/bin:$PATH"
+          protoc --experimental_allow_proto3_optional=true \
+            --proto_path=. \
+            --go_out=. --go_opt=paths=source_relative \
+            --go-grpc_out=. --go-grpc_opt=paths=source_relative \
+            ./protoc/*.proto
+          ls -la protoc/
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,format=short,prefix=sha-
+          labels: |
+            org.opencontainers.image.title="eegfaktura-energystore"
+            org.opencontainers.image.description="EEG Faktura energy store - holds the energy data of renewable communities (Go)"
+            org.opencontainers.image.source=${{ github.event.repository.html_url || '' }}
+            org.opencontainers.image.url=${{ github.event.repository.html_url || '' }}
+            org.opencontainers.image.version=${{ github.sha || '' }}
+            org.opencontainers.image.revision=${{ github.sha || '' }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp || '' }}
+            org.opencontainers.image.authors="eegfaktura@vfeeg.org"
+            org.opencontainers.image.vendor="Verein zur Förderung von Erneuerbaren Energiegemeinschaften"
+            org.opencontainers.image.licenses=${{ github.event.repository.license.spdx_id || '' }}
+            org.opencontainers.image.ref.name=${{ github.ref || '' }}
+            org.opencontainers.image.ref.sha=${{ github.sha || '' }}
+            org.opencontainers.image.repository=${{ github.repository || '' }}
+
+      - name: Login to Container Registry
+        # Pull-Requests aus Forks haben keine packages:write-Permission — Login-Step
+        # wuerde sonst beim PR-Build mit "Resource not accessible by integration"
+        # failen. Nur bei push-Events anmelden + pushen.
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build (PR) / Build and push (push)
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ steps.meta.outputs.tags || 'latest' }}
+          labels: ${{ steps.meta.outputs.labels || '' }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+
+      - name: Generate artifact attestation
+        if: github.event_name == 'push'
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+  # NOTE — Stufe 3: hier kommt ein zweiter Job `dispatch-deploy` rein,
+  # analog zu eegfaktura-filestore-rolling-release.yml.
+  # Erst aktivieren, wenn:
+  #   - Build oben mindestens 1x erfolgreich
+  #   - K8s-Manifest k8s/50-energystore.yaml im Platform-Repo auf
+  #     ghcr.io/eegfaktura/energy-store:latest umgestellt + getestet
+  #   - Platform-Workflow deploy-on-dispatch.yml um `deploy-energystore`
+  #     erweitert
+  #   - `PLATFORM_DEPLOY_PAT`-Secret im Source-Repo gesetzt
