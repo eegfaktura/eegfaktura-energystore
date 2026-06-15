@@ -65,7 +65,9 @@ jobs:
           # Generierte Files (z.B. protoc/masterdata.pb.go) sind im Repo
           # nicht committet (nur protoc/excel.pb.go) — Devs lassen das
           # lokal vor `make docker` laufen. CI muss das selbst tun.
-          sudo apt-get update
+          # `apt-get update` schlaegt gelegentlich an azure-cli-Repo (403) fehl,
+          # das wir gar nicht brauchen. Andere Sources reichen fuer protobuf-compiler.
+          sudo apt-get update || true
           sudo apt-get install -y protobuf-compiler
           go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
           go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
