@@ -1,5 +1,8 @@
 FROM golang:1.24
 
+LABEL org.opencontainers.image.source="https://github.com/eegfaktura/eegfaktura-energystore"
+LABEL org.opencontainers.image.licenses="AGPL-3.0"
+
 ENV TZ="Europe/Berlin"
 
 WORKDIR /usr/src/app
