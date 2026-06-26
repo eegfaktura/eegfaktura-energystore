@@ -2,6 +2,15 @@
 
 Energy Store is a Go-based service designed to manage, process, and store energy data. It provides both GraphQL and REST APIs for data interaction and supports MQTT for real-time energy data ingestion.
 
+Part of the **eegfaktura** suite — an open-source billing and management platform
+for Austrian renewable energy communities (*Erneuerbare-Energiegemeinschaften*, EEG).
+It ingests interval consumption/production data arriving over the EDA pipeline via
+MQTT and serves the aggregations used for billing and visualisation.
+(Container image: `energy-store`.)
+
+**Tech stack:** Go · BadgerDB · Gorilla mux (REST) · gqlgen (GraphQL) ·
+Eclipse Paho (MQTT) · Viper · Cobra · Keycloak/OIDC (JWT).
+
 ## Features
 
 - **Data Management**: Store and retrieve energy readings and related metadata.
@@ -34,6 +43,14 @@ Energy Store is a Go-based service designed to manage, process, and store energy
 ### Configuration
 
 Configuration is handled via `config.yaml` or environment variables. You can specify the config file path using the `-configPath` flag.
+
+Key settings: `persistence.path` (BadgerDB directory), `mqtt.host` / `mqtt.id` /
+`mqtt.qos`, the subscription topics `mqtt.energySubscriptionTopic`
+(e.g. `eda/response/+/protocol/cr_msg`) and `mqtt.inverterSubscriptionTopic`,
+`jwt.pubKeyFile`, and `services.mail-server`. Exposed port: **8080** (HTTP).
+
+**Dependencies:** an MQTT broker (mosquitto) for data ingestion, Keycloak for JWT
+validation, and on-disk BadgerDB storage.
 
 ### Running the Service
 
@@ -85,3 +102,7 @@ make estore
 - `mqttclient/`: MQTT subscriber and dispatcher logic.
 - `rest/`: REST API implementation.
 - `store/`: Data persistence layer (BadgerDB/ebow).
+
+## License
+
+GNU Affero General Public License v3.0 (AGPL-3.0) — see [`LICENSE`](LICENSE).
