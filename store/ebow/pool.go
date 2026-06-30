@@ -113,8 +113,8 @@ func (dpo *DbPoolObject) OpenStorage() (*DB, error) {
 		//WithCompression(options.None).
 		WithMemTableSize(32 << 20). // 32 MB write buffer (OK)
 		WithNumMemtables(1).
-		//WithBlockCacheSize(64 << 20). // disable block cache
-		//WithIndexCacheSize(16 << 20). // disable index cache
+		WithBlockCacheSize(64 << 20). // cap block cache at 64 MB/DB (Badger default is 256 MB)
+		WithIndexCacheSize(16 << 20). // bound index/bloom cache at 16 MB/DB
 		WithNumLevelZeroTables(4). // allow a few in-memory tables
 		WithNumLevelZeroTablesStall(8).
 		////WithValueLogFileSize(128 << 20). // reasonable log file size
