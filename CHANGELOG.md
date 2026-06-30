@@ -8,6 +8,16 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+## [1.0.2] – 2026-06-30
+
+### Changed
+- Hardening: close idle per-tenant Badger DBs after 15s instead of 60s; raise the keycloak token HTTP client timeout from 1s to 10s. (#16)
+
+## [1.0.1] – 2026-06-30
+
+### Fixed
+- OOM / node-level SystemOOM under broad multi-tenant load: cap the per-tenant Badger block cache at 64 MB and the index cache at 16 MB (was the 256 MB default). (#15)
+
 ## [1.0.0] – 2026-06-28
 
 First production release built entirely from public source.
