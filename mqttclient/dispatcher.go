@@ -193,18 +193,19 @@ func (worker *TenantWorker) Run() {
 	worker.wg.Add(1)
 	defer worker.wg.Done()
 
-	timer := time.NewTimer(1 * time.Minute) // 15 seconds timeout
+	const idleDBCloseTimeout = 15 * time.Second
+	timer := time.NewTimer(idleDBCloseTimeout)
 	defer timer.Stop()
 
 	for {
 		select {
 		case job := <-worker.JobChannel:
 			worker.executor.Execute(job)
-			timer.Reset(1 * time.Minute)
+			timer.Reset(idleDBCloseTimeout)
 		case <-timer.C:
-			glog.Infof("No message received for 1 minute. Close DB tenant=%s.", worker.tenant)
+			glog.Infof("No message received for %s. Close DB tenant=%s.", idleDBCloseTimeout, worker.tenant)
 			worker.executor.Close()
-			glog.V(4).Infof("DB closed after 1 minute. tenant=%s.", worker.tenant)
+			glog.V(4).Infof("DB closed after %s. tenant=%s.", idleDBCloseTimeout, worker.tenant)
 		case <-worker.ctx.Done():
 			glog.Infof("Stop Worker tenant=%s", worker.tenant)
 			worker.executor.Close()
