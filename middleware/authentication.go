@@ -67,7 +67,7 @@ func init() {
 	realmApi := kcConfig["api"].Realm
 	host := strings.TrimRight(kcConfig["api"].Host, "/")
 
-	c := &http.Client{Timeout: time.Duration(1) * time.Second}
+	c := &http.Client{Timeout: 10 * time.Second}
 	kcClientAPI, err = NewKeycloakClient(fmt.Sprintf("%s/realms/%s", host, realmApi), clientIDApi, clientSecretApi, issuerUrl, c)
 	if err != nil {
 		panic(err)
