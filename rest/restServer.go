@@ -82,6 +82,11 @@ func fetchEnergyReportV2() middleware.JWTHandlerFunc {
 			return
 		}
 
+		if err := calculation.ValidateTimeWindows(request.Participants); err != nil {
+			respondWithError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
 		if energy, err = calculation.EnergyReportV2(tenant, ecid, request.Participants, request.ReportInterval.Year, request.ReportInterval.Segment, request.ReportInterval.Period); err != nil {
 			respondWithError(w, http.StatusInternalServerError, err.Error())
 			return
