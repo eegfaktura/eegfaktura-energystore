@@ -9,6 +9,20 @@ this changelog highlights the changes relevant for overview and operations.
 ## [Unreleased]
 
 ### Added
+- Time-of-use window folding (ZVT): the participant report request
+  (`POST /eeg/v2/{ecid}/report`) accepts up to two generic time windows per
+  metering point (`timeWindows: [{key: T1|T2, from: "HH:MM", to: "HH:MM"}]`,
+  15-min raster, `from > to` crosses midnight). The report response then
+  carries per-window sums of the billing quantity per metering point
+  (`report.buckets: [{key: BASE|T1|T2, kWh}]`, consumer = utilization,
+  producer = production − allocation). `BASE` is the residual against the
+  period total, so the kWh partition is exact by construction. Window
+  membership is evaluated against the local wall-clock time encoded in the
+  stored row ids (container TZ, Europe/Berlin = Vienna offset). energystore
+  has no tariff or price knowledge — the windows are plain daytime ranges.
+  Invalid windows (key, raster, `from == to`, >2 per meter) are rejected
+  with 400.
+
 - CI builds `env/**` branches and deploys the resulting image into the matching feature
   environment (ADR-0008): a push to `env/<name>` pins this service in namespace `env-<name>`
   to that branch's `sha-…` image. Previously only the default branch, tags and `preview/**`
