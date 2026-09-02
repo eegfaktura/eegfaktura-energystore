@@ -8,6 +8,17 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Security
+- `golang.org/x/crypto` 0.46.0 → 0.52.0, closing seven open advisories — CVE-2026-46595
+  (CVSS 10.0) plus six rated 9.1. All of them are in `x/crypto/ssh`, which this service does
+  not import (the module is an indirect dependency and there is no SSH server here), so the
+  vulnerable code was never reachable — but leaving a 10.0 open is not defensible either.
+  Requires Go 1.25: `x/crypto` 0.52.0 declares `go 1.25.0`, so the Dockerfile and the CI Go
+  version move from 1.24 to 1.25. That version floor is why Dependabot's own bump (#22) kept
+  failing at `go mod download && go mod verify` — it raised the dependency without raising
+  the toolchain. Pulled along by the resolution: `x/net` 0.48.0 → 0.54.0 (direct) and the
+  usual `x/sys`/`x/text`/`x/tools`/`x/mod`/`x/sync` indirects.
+
 ### Fixed
 - `DateToString` rendered the seconds with `%.4d` — the year's verb, applied one argument too
   far — so every period timestamp it wrote looked like `30.12.2023 15:00:0000`. The value was
