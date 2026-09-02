@@ -9,6 +9,13 @@ this changelog highlights the changes relevant for overview and operations.
 ## [Unreleased]
 
 ### Security
+- `github.com/xuri/excelize/v2` 2.8.1 → 2.11.0, closing CVE-2026-54063 (CVSS 7.5). Three
+  minor versions in one step, because this service had fallen further behind than the others
+  — and unlike the x/crypto advisories this one is on a reachable path: excelize parses the
+  offline EDA spreadsheets and writes the energy exports. The `excel` package tests cover
+  both directions and pass.
+- `google.golang.org/grpc` 1.79.3 → 1.82.1 (GHSA-hrxh-6v49-42gf), which also pulled
+  `protobuf` 1.36.10 → 1.36.11.
 - `golang.org/x/crypto` 0.46.0 → 0.52.0, closing seven open advisories — CVE-2026-46595
   (CVSS 10.0) plus six rated 9.1. All of them are in `x/crypto/ssh`, which this service does
   not import (the module is an indirect dependency and there is no SSH server here), so the
