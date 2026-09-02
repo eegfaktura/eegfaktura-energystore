@@ -57,7 +57,7 @@ jobs:
       - name: Setup Go (for protoc plugins)
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.25'
 
       - name: Install protoc + Go gRPC plugins
         run: |
