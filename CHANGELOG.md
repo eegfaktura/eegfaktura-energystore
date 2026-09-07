@@ -8,6 +8,8 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+## [1.2.0] – 2026-09-07
+
 ### Security
 - `github.com/xuri/excelize/v2` 2.8.1 → 2.11.0, closing CVE-2026-54063 (CVSS 7.5). Three
   minor versions in one step, because this service had fallen further behind than the others
