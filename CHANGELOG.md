@@ -8,6 +8,13 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Security
+- `google.golang.org/grpc` 1.82.1 -> 1.83.1, closing CVE-2026-84304 (HIGH): heap memory
+  exhaustion through HTTP/2 DATA frame fragmentation. This is the same advisory that
+  `eegfaktura-backend` closed a day earlier — energystore carried it too, since both speak
+  gRPC to each other. The server is cluster-internal rather than exposed at the ingress, which
+  limits who can reach it, but does not remove the exposure. (#32)
+
 ## [1.2.0] – 2026-09-07
 
 ### Security
