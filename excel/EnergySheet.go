@@ -15,6 +15,7 @@ type EnergySheet struct {
 	stylesQoV []int
 	writer    *excelize.StreamWriter
 	lineNum   int
+	rowStyle  int
 }
 
 func (es *EnergySheet) initSheet(ctx *RunnerContext) error {
@@ -53,6 +54,19 @@ func (es *EnergySheet) initSheet(ctx *RunnerContext) error {
 	es.stylesQoV = []int{styleIdNumFmt, styleIdL2, styleIdL3}
 
 	es.writer, err = f.NewStreamWriter(es.name)
+	if err != nil {
+		return err
+	}
+
+	// Neutraler Zeilenstil (Font 11 = Excel-Standard, optisch unveraendert).
+	// Hintergrund: excelize laeuft in prepareCellStyle fuer JEDE Zelle ohne
+	// eigenen Stil ueber saemtliche Spaltendefinitionen. Wir setzen dort nur
+	// Breiten (Style == 0), die Schleife liefert also immer 0 -- voller Preis,
+	// keine Wirkung. Ein von 0 verschiedener Zeilenstil laesst prepareCellStyle
+	// sofort zurueckkehren; Zellstile gewinnen danach ohnehin (stream.go:
+	// "if s > 0 { c.S = s }"). ACHTUNG: NewStyle(&Style{}) liefert 0 und waere
+	// wirkungslos -- es braucht eine tatsaechlich von 0 verschiedene ID.
+	es.rowStyle, err = f.NewStyle(&excelize.Style{Font: &excelize.Font{Size: 11}})
 	if err != nil {
 		return err
 	}
@@ -140,7 +154,8 @@ func (es *EnergySheet) handleLine(ctx *RunnerContext, line *model.RawSourceLine)
 		return err
 	}
 	_ = es.writer.SetRow(fmt.Sprintf("A%d", es.lineNum+10),
-		append([]interface{}{excelize.Cell{Value: lineDate}}, addLine(ctx, line, es.stylesQoV)...))
+		append([]interface{}{excelize.Cell{Value: lineDate}}, addLine(ctx, line, es.stylesQoV)...),
+		excelize.RowOpts{StyleID: es.rowStyle})
 
 	if !checkQoV(ctx, line) {
 		ctx.qovLogArray = append(ctx.qovLogArray, line.Copy(0))

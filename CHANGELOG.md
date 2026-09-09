@@ -8,6 +8,34 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Changed
+- The energy export writes its data rows with an explicit neutral row style, which cuts export
+  time by 22% on a large community and 29% on a medium one (measured; see the benchmark added
+  alongside). The output is unchanged.
+
+  Why this helps: excelize resolves a style for every cell that carries none, and that
+  resolution walks all column definitions of the sheet. This sheet declares widths for columns
+  2..1000, and `flatCols` expands such a range into one entry per column — so each of roughly
+  2.5 million cells scanned up to a thousand entries. None of those entries carries a style
+  (we only set widths), so the scan always returned zero: full cost, no effect. Passing a
+  non-zero `RowOpts.StyleID` makes `prepareCellStyle` return immediately, and per-cell styles
+  still win afterwards, so nothing about the rendered sheet changes.
+
+  A trap worth recording: `NewStyle(&excelize.Style{})` returns **0**, which is
+  indistinguishable from "no style" and leaves the fast path unused. The style has to be a real
+  one — font size 11, Excel's default, is visually neutral.
+
+  This is mitigation, not a cure. The export is still far slower than before the excelize
+  2.8.1 -> 2.11.0 upgrade in 1.2.0 (large community: 22.3s -> 17.5s, against 6.0s on 2.8.1).
+  The structural fix is to decouple the export from the HTTP request — see
+  `konzept-async-energy-export.md` in the eegfaktura repo.
+
+### Added
+- `excel/ExportBench_test.go` — a benchmark over the real export path (runner, summary and
+  energy sheets, mocked storage) at three community sizes. It is what established the excelize
+  regression and bisected it to 2.9.0/2.9.1, and it makes any future change to this path
+  measurable rather than arguable.
+
 ### Security
 - `google.golang.org/grpc` 1.82.1 -> 1.83.1, closing CVE-2026-84304 (HIGH): heap memory
   exhaustion through HTTP/2 DATA frame fragmentation. This is the same advisory that
