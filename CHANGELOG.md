@@ -8,6 +8,23 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Fixed
+- The energy export aborted with `write tcp …: i/o timeout` for larger communities, even though
+  the file had been generated correctly. The cause was this service's own HTTP server:
+  `WriteTimeout` was 180s, and in Go that covers the **entire handler plus writing the
+  response**. Since the export builds the complete XLSX before the first byte is sent, the whole
+  generation time counted against it. A community with 644 members needs about 218s, so it died
+  38s short of the finish line — the user saw an error for a file that existed.
+
+  Raised to 900s, deliberately **above** the ingress limit of 600s: that way the proxy is the
+  one that cuts a run short, cleanly, rather than the application running into its own deadline
+  mid-write. `ReadTimeout` stays at 180s — only the request is read there, which is fast even
+  for a thousand members.
+
+  This is headroom, not a fix. Roughly 1700 members' worth of monthly export at today's speed;
+  a yearly export or further growth exceeds it too. The structural answer is to decouple the
+  export from the request — see `konzept-async-energy-export.md`.
+
 ## [1.2.1] – 2026-09-09
 
 ### Changed
