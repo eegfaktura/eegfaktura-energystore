@@ -99,8 +99,25 @@ func main() {
 		Handler: handlers.CORS(allowedOrigins, allowedHeaders, allowedMethods, allowedCredentials)(r),
 		Addr:    fmt.Sprintf("0.0.0.0:%s", port),
 		// Good practice: enforce timeouts for servers you create!
-		WriteTimeout: 180 * time.Second,
-		ReadTimeout:  180 * time.Second,
+		//
+		// WriteTimeout deckt in Go den GESAMTEN Handler plus das Schreiben der
+		// Antwort ab. Der Energiedatenexport erzeugt die komplette XLSX, bevor
+		// das erste Byte fliesst -- die Erzeugungsdauer zaehlt also voll gegen
+		// diese Frist. Bei 180s brach der Export einer EEG mit 644 Mitgliedern
+		// nach ~218s mit "write tcp ...: i/o timeout" ab, obwohl die Datei
+		// fertig war. Es gibt EEGs mit ueber 1000 Mitgliedern.
+		//
+		// Bewusst HOEHER als das Ingress-Limit (600s): so schneidet im Ernstfall
+		// der Proxy sauber ab, statt dass die Anwendung mitten im Schreiben in
+		// ihre eigene Frist laeuft. Der Ingress bleibt die wirksame Grenze.
+		//
+		// Das ist eine Reserve, keine Loesung: ein Jahresexport oder weiteres
+		// Wachstum sprengt auch 900s. Die strukturelle Antwort ist die
+		// Entkopplung des Exports (konzept-async-energy-export.md).
+		WriteTimeout: 900 * time.Second,
+		// ReadTimeout bleibt bei 180s -- gelesen wird nur die Anforderung
+		// (Teilnehmerliste als JSON), das ist auch bei 1000+ Mitgliedern schnell.
+		ReadTimeout: 180 * time.Second,
 	}
 
 	go func() {
