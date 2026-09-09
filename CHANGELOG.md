@@ -8,6 +8,8 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+## [1.2.1] – 2026-09-09
+
 ### Changed
 - The energy export writes its data rows with an explicit neutral row style, which cuts export
   time by 22% on a large community and 29% on a medium one (measured; see the benchmark added
