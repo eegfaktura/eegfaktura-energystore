@@ -8,6 +8,8 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+## [1.2.2] – 2026-09-09
+
 ### Fixed
 - The energy export aborted with `write tcp …: i/o timeout` for larger communities, even though
   the file had been generated correctly. The cause was this service's own HTTP server:
