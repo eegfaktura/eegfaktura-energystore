@@ -8,6 +8,19 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Changed
+- The energy export no longer treats **L2 values as a quality issue**. L2 values are fine by
+  now. A time slot with only L1 and L2 values no longer lands in the "QoV Log" sheet, and a
+  metering point with only L1 and L2 values shows "data ok" in the Summary. L0 (no value) and
+  L3 still count as issues, exactly as before. L2 values stay marked — yellow in the value
+  sheets, the L2 column in the Summary — as information, not as a problem.
+
+  Side effect on file size and export time: in a real production export (512 metering points,
+  two months) 92 % of all rows were in the "QoV Log" sheet, most of them because of L2 values.
+  Without L2 the sheet shrinks by 28 % on that file (5 492 -> 3 936 rows). It does not shrink
+  further because one or two metering points without any readings (L0) put 3 360 rows in there,
+  each a full-width copy of all metering points.
+
 ## [1.2.2] – 2026-09-09
 
 ### Fixed

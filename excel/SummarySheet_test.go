@@ -3,6 +3,7 @@ package excel
 import (
 	"at.ourproject/energystore/mocks"
 	"at.ourproject/energystore/model"
+	"at.ourproject/energystore/utils"
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -78,6 +79,43 @@ func TestSummaryResult(t *testing.T) {
 			assert.NoError(t, err)
 
 			tt.check(t, summarySheet, result)
+		})
+	}
+}
+
+// "Daten ok" in der Uebersicht: L1 und L2 gelten als in Ordnung, L0 und L3 nicht.
+func TestSummaryDataOkQoV(t *testing.T) {
+	tests := []struct {
+		name string
+		qov  []int
+		want bool
+	}{
+		{name: "L1", qov: []int{1, 1, 1, 1, 1, 1}, want: true},
+		{name: "L2 is ok", qov: []int{1, 2, 2, 1, 1, 1}, want: true},
+		{name: "L3", qov: []int{1, 3, 1, 1, 1, 1}, want: false},
+		{name: "L0", qov: []int{0, 1, 1, 1, 1, 1}, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetTestData()
+			mockBow := &mocks.MockBowStorage{}
+			mockBow.On("GetMeta", "cpmeta/0").Return(exportTestMetaData)
+			start := time.Date(2023, time.Month(1), 1, 0, 0, 0, 0, time.Local)
+			ctx, err := createRunnerContext(mockBow, start, start.AddDate(0, 0, 1), exportCps)
+			assert.NoError(t, err)
+
+			line := &model.RawSourceLine{Id: "CP/2023/01/01/12/00/00/",
+				Consumers:    []float64{1, 1, 1, 1, 1, 1},
+				Producers:    []float64{1, 1, 1, 1},
+				QoVConsumers: tt.qov,
+				QoVProducers: []int{1, 1, 1, 1},
+			}
+			consumerMatrix, producerMatrix := utils.ConvertLineToMatrix(line)
+			p := ctx.cps[0] // erster Verbraucher, SourceIdx 0
+			ss := &SummarySheet{name: "Summary"}
+			assert.NoError(t, ss.handleParticipantReport(ctx, p, consumerMatrix, producerMatrix,
+				time.Date(2023, time.Month(1), 1, 12, 0, 0, 0, time.Local), line.QoVConsumers, line.QoVProducers))
+			assert.Equal(t, tt.want, p.QoV)
 		})
 	}
 }
