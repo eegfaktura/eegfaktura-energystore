@@ -59,13 +59,15 @@ func (es *EnergySheet) initSheet(ctx *RunnerContext) error {
 	}
 
 	// Neutraler Zeilenstil (Font 11 = Excel-Standard, optisch unveraendert).
-	// Hintergrund: excelize laeuft in prepareCellStyle fuer JEDE Zelle ohne
-	// eigenen Stil ueber saemtliche Spaltendefinitionen. Wir setzen dort nur
-	// Breiten (Style == 0), die Schleife liefert also immer 0 -- voller Preis,
-	// keine Wirkung. Ein von 0 verschiedener Zeilenstil laesst prepareCellStyle
-	// sofort zurueckkehren; Zellstile gewinnen danach ohnehin (stream.go:
-	// "if s > 0 { c.S = s }"). ACHTUNG: NewStyle(&Style{}) liefert 0 und waere
-	// wirkungslos -- es braucht eine tatsaechlich von 0 verschiedene ID.
+	// Hintergrund: excelize laeuft in prepareCellStyle fuer JEDE Zelle ueber
+	// saemtliche Spaltendefinitionen -- auch fuer Zellen mit eigenem Stil, denn
+	// prepareCellStyle sieht nur den Zeilenstil, der Zellstil kommt erst danach.
+	// Wir setzen dort nur Breiten (Style == 0), die Schleife liefert also immer
+	// 0 -- voller Preis, keine Wirkung. Ein von 0 verschiedener Zeilenstil laesst
+	// prepareCellStyle sofort zurueckkehren; Zellstile gewinnen danach ohnehin
+	// (stream.go: "if s > 0 { c.S = s }"). ACHTUNG: NewStyle(&Style{}) liefert 0
+	// und waere wirkungslos -- es braucht eine tatsaechlich von 0 verschiedene ID.
+	// Dasselbe gilt fuer das QoV-Blatt (QoVSheet.go).
 	es.rowStyle, err = f.NewStyle(&excelize.Style{Font: &excelize.Font{Size: 11}})
 	if err != nil {
 		return err

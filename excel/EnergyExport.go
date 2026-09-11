@@ -295,7 +295,6 @@ func (er *EnergyRunner) run(db ebow.IBowStorage, f *excelize.File, start, end ti
 
 	glog.V(5).Infof("Export Energy Data took %v (%s)", time.Since(sm).Seconds(), cps.CommunityId)
 
-	_ = f.DeleteSheet("Sheet1")
 	return f.WriteToBuffer()
 }
 
