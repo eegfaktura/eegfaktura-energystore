@@ -8,6 +8,35 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Added
+- **Value-log garbage collection** (#45), **off by default**. The production volume fills up by
+  about 5 GiB a day: 96.6 % of it is Badger's value log, which only `RunValueLogGC` frees — and
+  nothing called it. The cause is the community-wide metadata record `cpmeta/0`: above roughly
+  750 metering points it exceeds the 128 KB `ValueThreshold` and every period extension writes a
+  complete new copy into the value log (found by @artmanns).
+
+  A background run inside the service (not a CronJob: Badger locks each directory exclusively, an
+  external job could make imports fail) opens the largest databases one after another through the
+  pool, calls `RunValueLogGC` until nothing is left or the budget is used, and logs the value-log
+  size before and after for each database plus a summary line — all visible at `-v=3`.
+
+  Configuration under `persistence.vlogGC`, also settable as `ENERGYSTORE_PERSISTENCE_VLOGGC_*`:
+  `enabled` (false), `window` ("02:00-04:30", evaluated in Europe/Vienna whatever the container's
+  time zone), `checkEvery` (10m), `discardRatio` (0.5), `probeRatio` (0.1, one diagnostic call when
+  nothing qualifies), `minVlogMB` (100), `maxGBPerRun` (50, counted in bytes because Badger takes
+  the largest files first). On shutdown the run is awaited before the pool closes.
+
+  Safeguards: the directory of the database the pool actually returned is checked against the
+  enumerated one (the pool is keyed by ecId only), and for an ecId that exists under more than one
+  tenant the run never creates the pool entry itself — otherwise it could decide which copy the
+  community's imports go to after a restart. Value-log sizes exclude the current file, which Badger
+  pre-allocates at 2 GiB.
+
+  A read-only diagnosis of production on 2026-09-11 found the whole backlog (1 087 GiB) already
+  accounted as discardable, so the GC will reclaim it. Tests with a real Badger
+  (`go test -run TestVlogGC ./store/ebow/`, now a separate CI step): 93 MB value log reclaimed to
+  0 in 12 rewrites of ~6–10 ms each; one 976 MB file in 349 ms (local disk, warm cache).
+
 ## [1.2.2] – 2026-09-09
 
 ### Fixed

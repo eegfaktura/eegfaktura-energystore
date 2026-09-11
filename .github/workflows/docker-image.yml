@@ -101,6 +101,11 @@ jobs:
       - name: Run Go tests (gruene Pakete)
         run: go test -count=1 ./utils/ ./store/ ./store/function/ ./excel/
 
+      # store/ebow bleibt oben draussen (vorhandener Test "Test" rot), die Tests des
+      # Value-Log-Aufraeumens laufen hier gefiltert mit echtem Badger.
+      - name: Run Go tests (vlog GC, echter Badger)
+        run: go test -count=1 -run TestVlogGC ./store/ebow/
+
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v5
