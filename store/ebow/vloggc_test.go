@@ -246,6 +246,17 @@ func TestVlogGCRun(t *testing.T) {
 	assert.Less(t, after, before/4)
 }
 
+// Endet der Lauf in der letzten Datenbank am Budget, muss die Summenzeile das sagen (in Dev
+// meldete sie nach einem Neustart mitten im Lauf "alle Datenbanken bearbeitet").
+func TestVlogGCRunReportsStopInLastDatabase(t *testing.T) {
+	base := vlogGCTestBase(t)
+	fillVlog(t, "tegc0010", "ECIDVLOGGC0010", 6, 40)
+	flatten(t, "tegc0010", "ECIDVLOGGC0010")
+	cfg := vlogGCTestConfig(base)
+	cfg.MaxBytesPerRun = 1
+	assert.Equal(t, "Budget je Lauf erreicht", runVlogGC(context.Background(), cfg, time.Now().Add(time.Hour)))
+}
+
 func TestVlogGCDisabledStartsNothing(t *testing.T) {
 	wait := StartVlogGC(context.Background(), VlogGCConfig{Enabled: false})
 	done := make(chan struct{})
