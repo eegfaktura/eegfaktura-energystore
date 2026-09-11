@@ -61,6 +61,14 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	dispatcher := SetupMqttDispatcher(ctx)
 
+	// Aufraeumen des Badger-Value-Logs (konzept-energystore-vlog-gc.md); standardmaessig aus.
+	gcConfig, err := ebow.ReadVlogGCConfig()
+	if err != nil {
+		glog.Errorf("vlogGC: Konfiguration ungueltig, Lauf bleibt aus: %v", err)
+		gcConfig.Enabled = false
+	}
+	waitVlogGC := ebow.StartVlogGC(ctx, gcConfig)
+
 	r := rest.NewRestServer()
 	//r.Use(middleware.GQLMiddleware(viper.GetString("jwt.pubKeyFile")))
 	srv := handler.NewDefaultServer(generated.NewExecutableSchema(generated.Config{Resolvers: &graph.Resolver{}}))
@@ -133,6 +141,9 @@ func main() {
 	}
 
 	cancel()
+	// Den Aufraeumlauf abwarten, BEVOR der Pool schliesst: Pool.Close schliesst jede Datenbank,
+	// auch wenn der Lauf gerade einen Platz haelt.
+	waitVlogGC()
 	dispatcher.Close()
 	ebow.ClosePool()
 }
