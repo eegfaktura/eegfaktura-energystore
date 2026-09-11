@@ -191,37 +191,43 @@ type vlogGCStats struct {
 	freed, read                          int64
 }
 
-func runVlogGC(ctx context.Context, cfg VlogGCConfig, deadline time.Time) {
+// runVlogGC gibt den Grund zurueck, mit dem der Lauf endete (auch in der Summenzeile).
+func runVlogGC(ctx context.Context, cfg VlogGCConfig, deadline time.Time) (stop string) {
 	defer func() {
 		if r := recover(); r != nil {
 			glog.Errorf("vlogGC: Lauf abgebrochen nach panic: %v", r)
+			stop = "panic"
 		}
 	}()
 	started := time.Now()
 	refs, err := enumerateVlogDBs(cfg.BasePath)
 	if err != nil {
 		glog.Errorf("vlogGC: Aufzaehlung von %s fehlgeschlagen: %v", cfg.BasePath, err)
-		return
+		return "Aufzaehlung fehlgeschlagen"
 	}
 	glog.Infof("vlogGC: Lauf beginnt, %d Datenbanken, Frist %s", len(refs), deadline.In(vienna).Format("15:04"))
 
 	budget := cfg.MaxBytesPerRun
 	var st vlogGCStats
-	stop := "alle Datenbanken bearbeitet"
+	// Der Grund wird auch NACH der letzten Datenbank bestimmt: endet der Lauf mitten in ihr, weil
+	// der Dienst beendet wird, soll die Summenzeile das sagen und nicht "alle bearbeitet".
+	stopReason := func() string {
+		switch {
+		case ctx.Err() != nil:
+			return "Dienst wird beendet"
+		case !time.Now().Before(deadline):
+			return "Fensterende erreicht"
+		case budget <= 0:
+			return "Budget je Lauf erreicht"
+		}
+		return ""
+	}
+	stop = ""
 	for _, ref := range refs {
 		if ref.vlogBytes < cfg.MinVlogBytes {
 			break // absteigend sortiert: der Rest ist kleiner
 		}
-		if ctx.Err() != nil {
-			stop = "Dienst wird beendet"
-			break
-		}
-		if !time.Now().Before(deadline) {
-			stop = "Fensterende erreicht"
-			break
-		}
-		if budget <= 0 {
-			stop = "Budget je Lauf erreicht"
+		if stop = stopReason(); stop != "" {
 			break
 		}
 		res := collectDatabase(ctx, cfg, ref, deadline, &budget)
@@ -238,11 +244,17 @@ func runVlogGC(ctx context.Context, cfg VlogGCConfig, deadline time.Time) {
 		st.read += res.read
 	}
 
+	if stop == "" {
+		if stop = stopReason(); stop == "" {
+			stop = "alle Datenbanken bearbeitet"
+		}
+	}
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
 	glog.Infof("vlogGC: Lauf beendet (%s) in %v: %d bearbeitet, %d uebersprungen, %d fehlerhaft, %d Umschreibungen, %d MB gelesen, %d MB freigegeben, HeapInuse %d MB",
 		stop, time.Since(started).Round(time.Second), st.databases, st.skipped, st.failed, st.rewrites,
 		st.read>>20, st.freed>>20, ms.HeapInuse>>20)
+	return stop
 }
 
 // enumerateVlogDBs liefert alle Badger-Verzeichnisse in genau zwei Ebenen unter base, groesste zuerst.

@@ -37,6 +37,14 @@ this changelog highlights the changes relevant for overview and operations.
   (`go test -run TestVlogGC ./store/ebow/`, now a separate CI step): 93 MB value log reclaimed to
   0 in 12 rewrites of ~6–10 ms each; one 976 MB file in 349 ms (local disk, warm cache).
 
+  Verified on Dev with a synthetic community of 900 metering points fed through MQTT like
+  production (value log 981 MB → 134 MB, later 2.7 GB → 31 MB): the discard statistics build up
+  by themselves, imports run alongside, a restart mid-run stops cleanly before the pool closes,
+  the next pod finishes the job. Reading runs at **35–50 MB/s on network storage, and one call on
+  a 1 GB file took 28 s** — close to Kubernetes' default 30 s grace period. Raise
+  `terminationGracePeriodSeconds` (e.g. to 90) before enabling this where 1 GB value-log files
+  exist, as in production.
+
 ## [1.2.2] – 2026-09-09
 
 ### Fixed
