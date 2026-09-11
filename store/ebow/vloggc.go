@@ -286,9 +286,14 @@ func enumerateVlogDBs(base string) ([]vlogRef, error) {
 	return refs, nil
 }
 
-// vlogBytes summiert die Value-Log-Dateien eines Verzeichnisses OHNE die aktuelle (hoechste fid):
-// Badger legt sie beim Oeffnen mit 2*ValueLogFileSize an (value.go:508, auf Linux sparse) und
-// kuerzt sie erst beim Schliessen -- bei offener Datenbank waere ihre Groesse 2 GiB zu hoch.
+// vlogPreallocated trennt die vorbelegte aktuelle Datei von fertigen: Badger legt die aktuelle
+// beim Oeffnen mit 2*ValueLogFileSize = 2 GiB an (value.go:508, auf Linux sparse) und kuerzt sie
+// erst beim Schliessen; eine fertige Datei ist hoechstens ValueLogFileSize (1 GiB) plus ein Batch.
+const vlogPreallocated = 3 << 29 // 1,5 GiB
+
+// vlogBytes summiert die Value-Log-Dateien eines Verzeichnisses. Die hoechste Datei zaehlt nicht,
+// wenn sie vorbelegt ist (Datenbank offen) -- ihre Groesse waere 2 GiB zu hoch. Bei geschlossener
+// Datenbank ist sie eine gewoehnliche Datei mit Daten und zaehlt mit.
 // Bewusst nicht db.Size(): energystore schaltet Badgers Metriken ab, Size() liefert dann 0, 0.
 func vlogBytes(dir string) (total int64, sizes map[uint64]int64, curFid uint64) {
 	sizes = map[uint64]int64{}
@@ -308,7 +313,7 @@ func vlogBytes(dir string) (total int64, sizes map[uint64]int64, curFid uint64) 
 		}
 	}
 	for fid, sz := range sizes {
-		if fid != curFid {
+		if fid != curFid || sz < vlogPreallocated {
 			total += sz
 		}
 	}

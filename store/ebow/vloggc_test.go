@@ -257,6 +257,24 @@ func TestVlogGCRunReportsStopInLastDatabase(t *testing.T) {
 	assert.Equal(t, "Budget je Lauf erreicht", runVlogGC(context.Background(), cfg, time.Now().Add(time.Hour)))
 }
 
+// Die hoechste Datei zaehlt nur bei offener Datenbank nicht (vorbelegt auf 2 GiB); bei
+// geschlossener enthaelt sie Daten. In Dev blieb sonst eine Datenbank mit 280 MB in ihrer
+// letzten Datei unter minVlog.
+func TestVlogGCSizeCountsClosedNewestFile(t *testing.T) {
+	base := vlogGCTestBase(t)
+	tenant, ecId := "tegc0011", "ECIDVLOGGC0011"
+	fillVlog(t, tenant, ecId, 1, 40) // eine Sitzung: alle Daten in der hoechsten Datei
+	dir := filepath.Join(base, tenant, ecId)
+	closed, _, _ := vlogBytes(dir)
+	assert.Greater(t, closed, int64(5<<20), "geschlossen: die hoechste Datei zaehlt mit")
+
+	st, err := OpenStorage(tenant, ecId) // Oeffnen legt eine neue, vorbelegte Datei an
+	require.NoError(t, err)
+	open, _, _ := vlogBytes(dir)
+	st.Close()
+	assert.InDelta(t, closed, open, float64(1<<20), "offen: die vorbelegte Datei zaehlt nicht")
+}
+
 func TestVlogGCDisabledStartsNothing(t *testing.T) {
 	wait := StartVlogGC(context.Background(), VlogGCConfig{Enabled: false})
 	done := make(chan struct{})
