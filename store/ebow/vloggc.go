@@ -408,7 +408,11 @@ func collectDatabase(ctx context.Context, cfg VlogGCConfig, ref vlogRef, deadlin
 		}
 	}
 
+	// Das Oeffnen ist nicht unterbrechbar und liest die juengste Value-Log-Datei ganz (Badger prueft,
+	// ob sie gekuerzt werden muss, value.go:593) -- bei einer grossen Datei dauert es entsprechend.
+	openStarted := time.Now()
 	st, err := OpenStorage(ref.tenant, ref.ecId)
+	opened := time.Since(openStarted)
 	if err != nil {
 		glog.Errorf("vlogGC: %s nicht geoeffnet: %v", name, err)
 		res.err = err
@@ -420,8 +424,8 @@ func collectDatabase(ctx context.Context, cfg VlogGCConfig, ref vlogRef, deadlin
 	// Der Pool ist nur nach ecId geschluesselt; ohne diese Pruefung koennte der Lauf Verzeichnis A
 	// messen und Datenbank B aufraeumen. BowStorage.GetTenant() taugt dafuer nicht -- es gibt nur
 	// den uebergebenen Tenant zurueck.
-	if opened := filepath.Clean(bdb.Opts().Dir); opened != filepath.Clean(ref.dir) {
-		glog.Infof("vlogGC: %s uebersprungen: der Pool lieferte %s", name, opened)
+	if dir := filepath.Clean(bdb.Opts().Dir); dir != filepath.Clean(ref.dir) {
+		glog.Infof("vlogGC: %s uebersprungen: der Pool lieferte %s", name, dir)
 		res.skipped = true
 		return res
 	}
@@ -484,8 +488,9 @@ func collectDatabase(ctx context.Context, cfg VlogGCConfig, ref vlogRef, deadlin
 			l0 = l.NumTables
 		}
 	}
-	glog.Infof("vlogGC: %s: vorher %d MB, nachher %d MB, %d Umschreibungen (%d MB gelesen) in %v, L0-Tabellen %d, Ende: %s",
-		name, before>>20, after>>20, res.rewrites, res.read>>20, time.Since(started).Round(time.Millisecond), l0, end)
+	glog.Infof("vlogGC: %s: vorher %d MB, nachher %d MB, %d Umschreibungen (%d MB gelesen) in %v, Oeffnen %v, L0-Tabellen %d, Ende: %s",
+		name, before>>20, after>>20, res.rewrites, res.read>>20, time.Since(started).Round(time.Millisecond),
+		opened.Round(time.Millisecond), l0, end)
 	if res.rewrites > 0 && after >= before {
 		glog.Infof("vlogGC: %s: umgeschriebene Dateien noch nicht geloescht -- ein offener Iterator (z. B. Export) haelt sie bis zu seinem Ende", name)
 	}
