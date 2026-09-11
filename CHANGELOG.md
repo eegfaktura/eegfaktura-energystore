@@ -8,6 +8,39 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Changed
+- Two fixes to the energy export's Excel generation, found by @artmanns in #46. The file
+  content is unchanged: same sheets in the same order, Summary still the active sheet, every
+  cell value and column width identical (compared cell by cell). The only difference is that
+  cells in the "QoV Log" sheet which had no style now carry the same neutral row style the
+  "Energiedaten" sheet has carried since 1.2.1.
+
+  **"QoV Log" sheet: neutral row style.** The same fix as 1.2.1, applied to the sheet it missed.
+  excelize resolves a style for every cell by walking all column definitions of the sheet —
+  for cells with their own style too, because it only sees the row style at that point. This
+  sheet sets its widths one column at a time, so every cell walked one definition per column:
+  quadratic in the number of metering points. excelize 2.9.1 introduced this walk into the
+  streaming writer, which makes it the larger of the two steps of the 1.2.0 regression.
+  The sheet is written whenever any active metering point has a quality value other than 1 in
+  a row — including 0, a missing reading — so one metering point with gaps puts every row of
+  the export into it.
+
+  **Default sheet reused instead of deleted.** `DeleteSheet("Sheet1")` at the end made excelize
+  parse every already-streamed sheet below 16 MB back into memory and encode it again. The
+  Summary sheet now takes over the default sheet. This was already the case on excelize 2.8.1;
+  it helps small and mid-size communities and does nothing for sheets above 16 MB.
+
+  Measured with the benchmark (mocked storage, one month, every row in the QoV sheet):
+  small 1.83s -> 0.52s, medium 3.83s -> 2.17s, large 15.97s -> 6.05s — the large case is back
+  at its excelize 2.8.1 level (6.0s).
+
+  Checked against a real production export (512 metering points, two months, 100 MB, 130s in
+  production): the "QoV Log" sheet holds 92 % of all rows and 2 757 columns — 712 MB of the
+  file's ~1 GB of sheet XML. The rows land there because of substitute (L2) and estimated (L3)
+  values, not missing readings, so the sheet is written in normal operation. The benchmark in
+  exactly that shape: 82.1s -> 25.7s. Mocked storage, so the production figure is an estimate
+  — roughly 40s instead of 130s.
+
 ## [1.2.2] – 2026-09-09
 
 ### Fixed
