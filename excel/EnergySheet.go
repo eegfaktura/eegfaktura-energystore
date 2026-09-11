@@ -168,6 +168,14 @@ func (es *EnergySheet) closeSheet(ctx *RunnerContext) error {
 	return es.writer.Flush()
 }
 
+// qovOk sagt, ob ein Wert dieser Qualitaetsstufe als in Ordnung gilt.
+// L1 und L2 gelten als in Ordnung; L0 (kein Wert) und L3 sind Qualitaetsprobleme
+// und landen im QoV-Blatt. L2-Werte bleiben in den Blaettern weiterhin markiert --
+// als Information, nicht als Problem.
+func qovOk(qov int) bool {
+	return qov == 1 || qov == 2
+}
+
 func checkQoV(ctx *RunnerContext, line *model.RawSourceLine) bool {
 	_, lineDate, err := utils.ConvertRowIdToTimeString("CP", line.Id, time.Local)
 	if err != nil {
@@ -186,17 +194,17 @@ func checkQoV(ctx *RunnerContext, line *model.RawSourceLine) bool {
 				continue
 			}
 			nok =
-				utils.GetInt(line.QoVConsumers, baseIdx) != 1 ||
-					utils.GetInt(line.QoVConsumers, baseIdx+1) != 1 ||
-					utils.GetInt(line.QoVConsumers, baseIdx+2) != 1
+				!qovOk(utils.GetInt(line.QoVConsumers, baseIdx)) ||
+					!qovOk(utils.GetInt(line.QoVConsumers, baseIdx+1)) ||
+					!qovOk(utils.GetInt(line.QoVConsumers, baseIdx+2))
 		} else {
 			baseIdx := m.SourceIdx * 2
 			if utils.IsLineDateOutOfRange(*lineDate, [2]int64{cp.ActiveSince, cp.InactiveSince}) {
 				continue
 			}
 			nok =
-				utils.GetInt(line.QoVProducers, baseIdx) != 1 ||
-					utils.GetInt(line.QoVProducers, baseIdx+1) != 1
+				!qovOk(utils.GetInt(line.QoVProducers, baseIdx)) ||
+					!qovOk(utils.GetInt(line.QoVProducers, baseIdx+1))
 		}
 		if nok {
 			return false

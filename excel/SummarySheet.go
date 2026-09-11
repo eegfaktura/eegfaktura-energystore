@@ -77,7 +77,7 @@ func (ss *SummarySheet) handleParticipantReport(ctx *RunnerContext, participant 
 		if (meta.SourceIdx*3)+2 < len(QoVConsumers) {
 			participant.QoV = participant.QoV &&
 				(ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) ||
-					((QoVConsumers[(meta.SourceIdx*3)] == 1) && (QoVConsumers[(meta.SourceIdx*3)+1] == 1) && (QoVConsumers[(meta.SourceIdx*3)+2] == 1)))
+					(qovOk(QoVConsumers[(meta.SourceIdx*3)]) && qovOk(QoVConsumers[(meta.SourceIdx*3)+1]) && qovOk(QoVConsumers[(meta.SourceIdx*3)+2])))
 			participant.QoVSum[0] = participant.QoVSum[0] ||
 				(!ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) &&
 					((QoVConsumers[(meta.SourceIdx*3)] == 0) || (QoVConsumers[(meta.SourceIdx*3)+1] == 0) || (QoVConsumers[(meta.SourceIdx*3)+2] == 0)))
@@ -96,7 +96,7 @@ func (ss *SummarySheet) handleParticipantReport(ctx *RunnerContext, participant 
 			//ss.qovProducerSlice[i] = ss.qovProducerSlice[i] && (ctx.checkBegin(lineDate, ctx.periodsProducer[i].start) || ((line.QoVProducers[(i*2)] == 1) && (line.QoVProducers[(i*2)+1] == 1)))
 			participant.QoV = participant.QoV &&
 				(ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) ||
-					((QoVProducers[(meta.SourceIdx*2)] == 1) && (QoVProducers[(meta.SourceIdx*2)+1] == 1)))
+					(qovOk(QoVProducers[(meta.SourceIdx*2)]) && qovOk(QoVProducers[(meta.SourceIdx*2)+1])))
 
 			participant.QoVSum[0] = participant.QoVSum[0] ||
 				(!ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) &&

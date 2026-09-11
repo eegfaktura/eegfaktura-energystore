@@ -71,7 +71,7 @@ func TestEnergySheet(t *testing.T) {
 				&model.RawSourceLine{Id: "CP/2023/01/02/00/15/00/",
 					Consumers:    []float64{0, 0, 0, 0, 0, 0},
 					Producers:    []float64{0, 0, 0, 0},
-					QoVConsumers: []int{1, 2, 2, 1, 1, 1},
+					QoVConsumers: []int{1, 3, 3, 1, 1, 1},
 					QoVProducers: []int{1, 1, 1, 1},
 				}),
 			check: func(t *testing.T, f *excelize.File) {
@@ -90,6 +90,31 @@ func TestEnergySheet(t *testing.T) {
 				assert.Equal(t, "01.01.2023 02:45:00", rows[10][0])
 				assert.Equal(t, "01.01.2023 23:45:00", rows[94][0])
 				assert.Equal(t, "02.01.2023 00:15:00", rows[95][0])
+			},
+		},
+		{
+			name:     "L2 values are ok - not in QoV Log",
+			metaData: exportTestMetaData,
+			cps:      exportCps,
+			entries: append(exportEntries,
+				&model.RawSourceLine{Id: "CP/2023/01/02/00/00/00/",
+					Consumers:    []float64{0, 0, 0, 0, 0, 0},
+					Producers:    []float64{0, 0, 0, 0},
+					QoVConsumers: []int{1, 1, 1, 1, 1, 1},
+					QoVProducers: []int{1, 1, 1, 1},
+				},
+				&model.RawSourceLine{Id: "CP/2023/01/02/00/15/00/",
+					Consumers:    []float64{0, 0, 0, 0, 0, 0},
+					Producers:    []float64{0, 0, 0, 0},
+					QoVConsumers: []int{1, 2, 2, 1, 1, 1},
+					QoVProducers: []int{1, 2, 1, 1},
+				}),
+			check: func(t *testing.T, f *excelize.File) {
+				rows, err := f.GetRows("QoV Log")
+				assert.NoError(t, err)
+				// Die L2-Zeile um 00:15 fehlt, die letzte Log-Zeile bleibt 23:45.
+				assert.Equal(t, len(rows), 95)
+				assert.Equal(t, "01.01.2023 23:45:00", rows[94][0])
 			},
 		},
 	}
