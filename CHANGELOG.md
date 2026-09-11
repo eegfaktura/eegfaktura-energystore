@@ -50,8 +50,9 @@ this changelog highlights the changes relevant for overview and operations.
 
   Safeguards: the directory of the database the pool actually returned is checked against the
   enumerated one, and for an ecId that exists under more than one tenant the run only works on a
-  database the pool already holds under that tenant and never creates the pool entry itself. Value-log sizes exclude the current file, which Badger
-  pre-allocates at 2 GiB.
+  database the pool already holds under that tenant and never creates the pool entry itself.
+  Value-log sizes leave out the newest file while it is pre-allocated at 2 GiB (database open); in
+  a closed database it holds data and counts.
 
   A read-only diagnosis of production on 2026-09-11 found the whole backlog (1 087 GiB) already
   accounted as discardable, so the GC will reclaim it. Tests with a real Badger
