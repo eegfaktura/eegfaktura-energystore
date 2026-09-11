@@ -41,9 +41,11 @@ this changelog highlights the changes relevant for overview and operations.
   production (value log 981 MB → 134 MB, later 2.7 GB → 31 MB): the discard statistics build up
   by themselves, imports run alongside, a restart mid-run stops cleanly before the pool closes,
   the next pod finishes the job. Reading runs at **35–50 MB/s on network storage, and one call on
-  a 1 GB file took 28 s** — close to Kubernetes' default 30 s grace period. Raise
-  `terminationGracePeriodSeconds` (e.g. to 90) before enabling this where 1 GB value-log files
-  exist, as in production.
+  a 1 GB file took 28 s** — close to Kubernetes' default 30 s grace period. Opening a database is
+  not interruptible either: Badger reads the newest value-log file in full to check whether it
+  needs truncating (`value.go:593`), which took 22 s for a 900 MB file; the per-database log line
+  shows the open time. Raise `terminationGracePeriodSeconds` (e.g. to 90) before enabling this
+  where 1 GB value-log files exist, as in production.
 
 ## [1.2.2] – 2026-09-09
 
