@@ -312,6 +312,9 @@ func ExportEnergyToExcel(tenant, ecid string, start, end time.Time, cps *ExportP
 		}
 	}()
 
+	// Das Uebersichtsblatt muss das ERSTE sein: es uebernimmt das Standardblatt "Sheet1"
+	// (SummarySheet.initSheet). Steht es nicht vorn, legt es ein eigenes Blatt an und "Sheet1"
+	// bliebe in der Datei stehen.
 	runner := NewEnergyRunner([]Sheet{
 		&SummarySheet{name: "Summary", excel: f},
 		&EnergySheet{name: "Energiedaten", excel: f},
