@@ -44,6 +44,15 @@ func generateLogDataSheet(ctx *RunnerContext, f *excelize.File) error {
 
 	stylesQoV := []int{styleIdNumFmt, styleIdL2, styleIdL3}
 
+	// Neutraler Zeilenstil, Begruendung siehe EnergySheet.initSheet. Hier wiegt
+	// es schwerer: das Blatt ist doppelt so breit und setzt die Breiten je
+	// Spalte einzeln, jede Zelle lief also ueber eine Spaltendefinition je
+	// Spalte -- quadratisch in der Zahl der Zaehlpunkte.
+	rowStyle, err := f.NewStyle(&excelize.Style{Font: &excelize.Font{Size: 11}})
+	if err != nil {
+		return err
+	}
+
 	sw, err := f.NewStreamWriter(sheetName)
 	if err != nil {
 		return err
@@ -132,7 +141,8 @@ func generateLogDataSheet(ctx *RunnerContext, f *excelize.File) error {
 		}
 
 		_ = sw.SetRow(fmt.Sprintf("A%d", lineNum+8),
-			append([]interface{}{excelize.Cell{Value: lineDate}}, addLineQoV(ctx, &l, stylesQoV)...))
+			append([]interface{}{excelize.Cell{Value: lineDate}}, addLineQoV(ctx, &l, stylesQoV)...),
+			excelize.RowOpts{StyleID: rowStyle})
 	}
 
 	_ = sw.Flush()
