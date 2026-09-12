@@ -1,6 +1,8 @@
 package excel
 
 import (
+	"bytes"
+
 	"at.ourproject/energystore/mocks"
 	"at.ourproject/energystore/model"
 	"fmt"
@@ -130,4 +132,32 @@ func TestEnergySheet(t *testing.T) {
 			tt.check(t, f)
 		})
 	}
+}
+
+// Prueft die GESCHRIEBENE Datei, nicht nur die im Speicher: erst beim Schreiben entscheidet sich,
+// welche Blaetter drin sind und welches aktiv ist.
+func TestExportedWorkbookSheets(t *testing.T) {
+	mockRange := &mocks.MockBowRange{Entries: exportEntries}
+	mockRange.On("Next", mock.AnythingOfType("*model.RawSourceLine")).Return()
+	mockBow := &mocks.MockBowStorage{}
+	mockBow.On("GetMeta", "cpmeta/0").Return(exportTestMetaData)
+	mockBow.On("GetLineRange", "CP", "2023/01/01/", "2023/01/02/").Return(mockRange)
+
+	f := excelize.NewFile()
+	defer func() { _ = f.Close() }()
+	runner := NewEnergyRunner([]Sheet{
+		&SummarySheet{name: "Summary", excel: f},
+		&EnergySheet{name: "Energiedaten", excel: f},
+	})
+	buf, err := runner.run(mockBow, f,
+		time.Date(2023, time.Month(1), 1, 0, 0, 0, 0, time.Local),
+		time.Date(2023, time.Month(1), 2, 0, 0, 0, 0, time.Local),
+		exportCps)
+	assert.NoError(t, err)
+
+	out, err := excelize.OpenReader(bytes.NewReader(buf.Bytes()))
+	assert.NoError(t, err)
+	defer func() { _ = out.Close() }()
+	assert.Equal(t, []string{"Summary", "Energiedaten"}, out.GetSheetList(), "kein Sheet1 in der Datei")
+	assert.Equal(t, 0, out.GetActiveSheetIndex(), "Summary ist beim Oeffnen aktiv")
 }
