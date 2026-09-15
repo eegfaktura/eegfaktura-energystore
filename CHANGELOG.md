@@ -8,6 +8,8 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+## [1.3.0] – 2026-09-15
+
 ### Changed
 - Two fixes to the energy export's Excel generation, found by @artmanns in #46. The file
   content is unchanged: same sheets in the same order, Summary still the active sheet, every
