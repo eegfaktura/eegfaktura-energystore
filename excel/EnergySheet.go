@@ -73,8 +73,12 @@ func (es *EnergySheet) initSheet(ctx *RunnerContext) error {
 		return err
 	}
 
+	// Breiten in einem Aufruf ueber alle Datenspalten (s. QoVSheet); die feste
+	// Obergrenze 1000 liess bei mehr als 333 Verbrauchern Spalten ohne Breite.
 	_ = es.writer.SetColWidth(1, 1, 30)
-	_ = es.writer.SetColWidth(2, 1000, 25)
+	if cols := (ctx.countCons * 3) + (ctx.countProd * 2); cols > 0 {
+		_ = es.writer.SetColWidth(2, cols+1, 25)
+	}
 
 	_ = es.writer.SetRow("A2",
 		append([]interface{}{excelize.Cell{Value: "MeteringpointID"}},

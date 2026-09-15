@@ -186,3 +186,48 @@ func TestExportedWorkbookSheets(t *testing.T) {
 	assert.Equal(t, []string{"Summary", "Energiedaten"}, out.GetSheetList(), "kein Sheet1 in der Datei")
 	assert.Equal(t, 0, out.GetActiveSheetIndex(), "Summary ist beim Oeffnen aktiv")
 }
+
+// Grosse Gemeinschaft, ein Tag: die Breiten muessen bis zur letzten Datenspalte reichen, und
+// der Export darf nicht mit der Zaehlpunktzahl explodieren. Frueher setzte das QoV-Blatt jede
+// Breite einzeln -- bei 500 Zaehlpunkten 6 s, bei 2.000 333 s. Die Zeitgrenze ist grosszuegig
+// (lokal ~0,5 s), faengt aber einen Rueckfall in das kubische Verhalten sicher.
+func TestExportColumnWidthsLargeCommunity(t *testing.T) {
+	const nCons, nProd = 800, 200
+	start := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.Local)
+	meta, lines, cps := buildBenchData(nCons, nProd, 1, start)
+	mockRange := &mocks.MockBowRange{Entries: lines}
+	mockRange.On("Next", mock.AnythingOfType("*model.RawSourceLine")).Return()
+	mockBow := &mocks.MockBowStorage{}
+	mockBow.On("GetMeta", "cpmeta/0").Return(meta)
+	mockBow.On("GetLineRange", "CP", "2026/08/01/", "2026/08/02/").Return(mockRange)
+
+	f := excelize.NewFile()
+	defer func() { _ = f.Close() }()
+	runner := NewEnergyRunner([]Sheet{
+		&SummarySheet{name: "Summary", excel: f},
+		&EnergySheet{name: "Energiedaten", excel: f},
+	})
+	began := time.Now()
+	buf, err := runner.run(mockBow, f, start, start.AddDate(0, 0, 1), cps)
+	elapsed := time.Since(began)
+	assert.NoError(t, err)
+	assert.Less(t, elapsed, 20*time.Second, "Export einer grossen Gemeinschaft dauert zu lange")
+
+	out, err := excelize.OpenReader(bytes.NewReader(buf.Bytes()))
+	assert.NoError(t, err)
+	defer func() { _ = out.Close() }()
+	assert.Contains(t, out.GetSheetList(), "QoV Log", "Testdaten sollen das QoV-Blatt erzeugen")
+
+	colName := func(n int) string { c, _ := excelize.ColumnNumberToName(n); return c }
+	for sheet, cols := range map[string]int{
+		"Energiedaten": nCons*3 + nProd*2,
+		"QoV Log":      nCons*6 + nProd*4,
+	} {
+		w, err := out.GetColWidth(sheet, colName(cols+1))
+		assert.NoError(t, err)
+		assert.Equal(t, 25.0, w, "%s: letzte Datenspalte hat die Datenbreite", sheet)
+		w, err = out.GetColWidth(sheet, "A")
+		assert.NoError(t, err)
+		assert.Equal(t, 30.0, w, "%s: Spalte A", sheet)
+	}
+}
