@@ -45,9 +45,8 @@ func generateLogDataSheet(ctx *RunnerContext, f *excelize.File) error {
 	stylesQoV := []int{styleIdNumFmt, styleIdL2, styleIdL3}
 
 	// Neutraler Zeilenstil, Begruendung siehe EnergySheet.initSheet. Hier wiegt
-	// es schwerer: das Blatt ist doppelt so breit und setzt die Breiten je
-	// Spalte einzeln, jede Zelle lief also ueber eine Spaltendefinition je
-	// Spalte -- quadratisch in der Zahl der Zaehlpunkte.
+	// es schwerer: das Blatt ist doppelt so breit, jede Zelle liefe sonst ueber
+	// eine Spaltendefinition je Spalte -- quadratisch in der Zahl der Zaehlpunkte.
 	rowStyle, err := f.NewStyle(&excelize.Style{Font: &excelize.Font{Size: 11}})
 	if err != nil {
 		return err
@@ -58,14 +57,13 @@ func generateLogDataSheet(ctx *RunnerContext, f *excelize.File) error {
 		return err
 	}
 
+	// Breiten in EINEM Aufruf. excelize (flatCols) baut bei jedem SetColWidth die
+	// komplette Spaltenliste neu auf und durchsucht sie linear; je Spalte einzeln
+	// gesetzt (frueher abwechselnd 25/5) waechst das mit der dritten Potenz der
+	// Spaltenzahl: 2.000 Zaehlpunkte brauchten dafuer 333 s, auch fuer einen Tag.
 	_ = sw.SetColWidth(1, 1, 30)
-
-	for i := 0; i < (ctx.countCons*6)+(ctx.countProd*4); i++ {
-		if i%2 == 0 {
-			_ = sw.SetColWidth(i+2, i+2, 25)
-		} else {
-			_ = sw.SetColWidth(i+2, i+2, 5)
-		}
+	if cols := (ctx.countCons * 6) + (ctx.countProd * 4); cols > 0 {
+		_ = sw.SetColWidth(2, cols+1, 25)
 	}
 
 	_ = sw.SetRow("A2",

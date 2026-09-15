@@ -8,6 +8,24 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Fixed
+- The energy export of a **large community** took about 11 minutes **regardless of the period** —
+  even a single day — and ran into the ingress timeout of 600 s, so the file never arrived.
+  Measured in production on 15.09. for a community with roughly 2,400 metering points: one day
+  677 s, longer periods 688–694 s.
+
+  The cause was the "QoV Log" sheet setting its column widths **one column at a time** (six
+  columns per consumer, four per producer, alternating 25/5). excelize rebuilds and linearly
+  searches the complete column list on every `SetColWidth` call, so the cost grows with the
+  **cube** of the column count. Benchmark, one day: 500 metering points 6.2 s, 1,000 41.7 s,
+  2,000 333 s — 91 % of it in `SetColWidth`.
+
+  The data columns now get their width in a single call: 2,000 metering points 1.9 s. The file
+  content is unchanged; the QoV columns are now as wide as the value columns (25) instead of
+  alternating 25/5. The "Energiedaten" sheet also sets its width across all data columns
+  instead of a fixed 1,000 (larger communities had columns without width). Smaller communities
+  with a QoV sheet benefit as well.
+
 ## [1.3.0] – 2026-09-15
 
 ### Changed
