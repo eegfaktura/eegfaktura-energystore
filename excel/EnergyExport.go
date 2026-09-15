@@ -295,7 +295,6 @@ func (er *EnergyRunner) run(db ebow.IBowStorage, f *excelize.File, start, end ti
 
 	glog.V(5).Infof("Export Energy Data took %v (%s)", time.Since(sm).Seconds(), cps.CommunityId)
 
-	_ = f.DeleteSheet("Sheet1")
 	return f.WriteToBuffer()
 }
 
@@ -313,6 +312,9 @@ func ExportEnergyToExcel(tenant, ecid string, start, end time.Time, cps *ExportP
 		}
 	}()
 
+	// Das Uebersichtsblatt muss das ERSTE sein: es uebernimmt das Standardblatt "Sheet1"
+	// (SummarySheet.initSheet). Steht es nicht vorn, legt es ein eigenes Blatt an und "Sheet1"
+	// bliebe in der Datei stehen.
 	runner := NewEnergyRunner([]Sheet{
 		&SummarySheet{name: "Summary", excel: f},
 		&EnergySheet{name: "Energiedaten", excel: f},
