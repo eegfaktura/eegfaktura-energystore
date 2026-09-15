@@ -22,12 +22,18 @@ func (ss *SummarySheet) initSheet(ctx *RunnerContext) error {
 	ss.qovConsumerSlice = model.CreateInitializedBoolSlice(ctx.info.ConsumerCount, true)
 	ss.qovProducerSlice = model.CreateInitializedBoolSlice(ctx.info.ProducerCount, true)
 
-	_, err := ss.excel.NewSheet(ss.name)
-	if err != nil {
-		return err
+	// Das Standardblatt "Sheet1" uebernehmen statt es am Ende zu loeschen:
+	// DeleteSheet ruft SetActiveSheet, das jedes Blatt einliest -- auch die
+	// schon geschriebenen Stream-Blaetter unter 16 MB, die excelize dafuer
+	// komplett zurueck ins DOM parst und beim Speichern erneut kodiert. Bei
+	// kleinen und mittleren Gemeinschaften war das rund die Haelfte der Zeit.
+	var err error
+	if idx, _ := ss.excel.GetSheetIndex("Sheet1"); idx != -1 {
+		err = ss.excel.SetSheetName("Sheet1", ss.name)
+	} else {
+		_, err = ss.excel.NewSheet(ss.name)
 	}
-
-	return nil
+	return err
 }
 
 func (ss *SummarySheet) handleLine(ctx *RunnerContext, line *model.RawSourceLine) error {
