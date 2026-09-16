@@ -244,17 +244,17 @@ func (ss *SummarySheet) closeSheet(ctx *RunnerContext) error {
 	// Die Tage je Stufe haengen als Kommentar an der Zahl.
 	notes := []excelize.Comment{}
 	addNote := func(row, col int, level string, count int, days []string) {
-		text := qovDayComment(level, count, days)
-		if text == "" {
+		runs := qovDayNote(level, count, days)
+		if runs == nil {
 			return
 		}
 		axis, err := excelize.CoordinatesToCellName(col, row)
 		if err != nil {
 			return
 		}
+		w, h := noteBox(runs)
 		notes = append(notes, excelize.Comment{
-			Cell: axis, Author: "eegfaktura", Width: 260, Height: 28 + 14*uint((len(days)/6)+1),
-			Text: text,
+			Cell: axis, Author: "eegfaktura", Width: w, Height: h, Paragraph: runs,
 		})
 	}
 
@@ -327,11 +327,12 @@ func (ss *SummarySheet) closeSheet(ctx *RunnerContext) error {
 	return sw.Flush()
 }
 
-// qovDayComment beschreibt, an welchen Tagen eine Qualitaetsstufe aufgetreten ist.
+// qovDayNote beschreibt, an welchen Tagen eine Qualitaetsstufe aufgetreten ist.
 // Die Tage stehen als Kommentar an der Zahl, damit die Uebersicht schmal bleibt.
-func qovDayComment(level string, count int, days []string) string {
+// Erste Zeile fett wie bei einer von Hand angelegten Notiz, darunter die Tage.
+func qovDayNote(level string, count int, days []string) []excelize.RichTextRun {
 	if count == 0 || len(days) == 0 {
-		return ""
+		return nil
 	}
 	plural := func(n int, one, many string) string {
 		if n == 1 {
@@ -339,9 +340,38 @@ func qovDayComment(level string, count int, days []string) string {
 		}
 		return many
 	}
-	return fmt.Sprintf("%s: %d %s an %d %s\n%s",
+	head := fmt.Sprintf("%s: %d %s an %d %s\n",
 		level, count, plural(count, "Viertelstunde", "Viertelstunden"),
-		len(days), plural(len(days), "Tag", "Tagen"), strings.Join(days, ", "))
+		len(days), plural(len(days), "Tag", "Tagen"))
+	return []excelize.RichTextRun{
+		{Text: head, Font: &excelize.Font{Bold: true, Size: 9, Family: "Calibri"}},
+		{Text: strings.Join(days, ", "), Font: &excelize.Font{Size: 9, Family: "Calibri"}},
+	}
+}
+
+// noteBox schaetzt die Kastengroesse aus dem Text. Ohne eigene Angabe nimmt
+// excelize 140x60 Pixel -- zu klein, sobald mehrere Tage aufgelistet sind, und
+// Excel schneidet den Rest einfach ab, statt den Kasten wachsen zu lassen.
+func noteBox(runs []excelize.RichTextRun) (uint, uint) {
+	const (
+		width        = 340 // Pixel
+		charsPerLine = 48  // grob bei dieser Breite und der 9-pt-Schrift der Notizen
+		lineHeight   = 15
+	)
+	lines := 0
+	for _, run := range runs {
+		for _, l := range strings.Split(strings.TrimSuffix(run.Text, "\n"), "\n") {
+			lines += (len([]rune(l)) + charsPerLine - 1) / charsPerLine
+			if l == "" {
+				lines++
+			}
+		}
+	}
+	height := 24 + lines*lineHeight
+	if height < 68 {
+		height = 68
+	}
+	return width, uint(height)
 }
 
 // countCell zeigt die Anzahl betroffener Viertelstunden auf der Farbe der Stufe.
