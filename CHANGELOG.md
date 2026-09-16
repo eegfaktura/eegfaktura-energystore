@@ -8,6 +8,8 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+## [1.3.1] – 2026-09-16
+
 ### Fixed
 - The energy export of a **large community** took about 11 minutes **regardless of the period** —
   even a single day — and ran into the ingress timeout of 600 s, so the file never arrived.
