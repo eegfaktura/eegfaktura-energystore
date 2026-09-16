@@ -8,6 +8,8 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+## [1.4.0] – 2026-09-16
+
 ### Changed
 - The energy export no longer writes a separate **"QoV Log" sheet**. The quality of every value
   is already visible in the "Energiedaten" sheet, where each cell carries the colour of its
