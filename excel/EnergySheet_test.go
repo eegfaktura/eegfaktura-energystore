@@ -13,6 +13,19 @@ import (
 	"time"
 )
 
+// fillColor liefert die Hintergrundfarbe einer Zelle, "" wenn sie keine hat.
+func fillColor(t *testing.T, f *excelize.File, sheet, axis string) string {
+	t.Helper()
+	id, err := f.GetCellStyle(sheet, axis)
+	assert.NoError(t, err)
+	st, err := f.GetStyle(id)
+	assert.NoError(t, err)
+	if st == nil || len(st.Fill.Color) == 0 {
+		return ""
+	}
+	return st.Fill.Color[0]
+}
+
 func TestEnergySheet(t *testing.T) {
 	var tests = []struct {
 		name     string
@@ -64,7 +77,7 @@ func TestEnergySheet(t *testing.T) {
 			},
 		},
 		{
-			name:     "Bad Data - QoV differs to 1",
+			name:     "L3 markiert die Zelle, ohne eigenes Blatt",
 			metaData: exportTestMetaData,
 			cps:      exportCps,
 			entries: append(exportEntries,
@@ -81,49 +94,55 @@ func TestEnergySheet(t *testing.T) {
 					QoVProducers: []int{1, 1, 1, 1},
 				}),
 			check: func(t *testing.T, f *excelize.File) {
-				rows, err := f.GetRows("QoV Log")
+				assert.Equal(t, []string{"Summary", "Energiedaten"}, f.GetSheetList(),
+					"kein eigenes QoV-Blatt mehr")
+
+				// Die betroffenen Zellen tragen die L3-Farbe: Verbraucher 1 (Spalten B-D),
+				// zweiter und dritter Wert, in der Zeile zu 02.01.2023 00:15.
+				rows, err := f.GetRows("Energiedaten")
 				assert.NoError(t, err)
-				assert.Equal(t, len(rows[1]), 21)
-				assert.Equal(t, len(rows), 96)
-				//
-				//for i, r := range rows {
-				//	if len(r) > 0 {
-				//		fmt.Printf("L%.3d: %s\n", i, r[0])
-				//	}
-				//}
-
-				assert.Equal(t, "01.01.2023 02:15:00", rows[8][0])
-				assert.Equal(t, "01.01.2023 02:45:00", rows[10][0])
-				assert.Equal(t, "01.01.2023 23:45:00", rows[94][0])
-				assert.Equal(t, "02.01.2023 00:15:00", rows[95][0])
-
-				assert.Equal(t, []string{"Summary", "Energiedaten", "QoV Log"}, f.GetSheetList())
-				assert.Equal(t, 0, f.GetActiveSheetIndex())
+				row := len(rows)
+				assert.Equal(t, "02.01.2023 00:15:00", rows[row-1][0])
+				assert.Equal(t, qovColorL3, fillColor(t, f, "Energiedaten", fmt.Sprintf("C%d", row)))
+				assert.Equal(t, qovColorL3, fillColor(t, f, "Energiedaten", fmt.Sprintf("D%d", row)))
+				assert.Equal(t, "", fillColor(t, f, "Energiedaten", fmt.Sprintf("B%d", row)),
+					"L1 bleibt ungefaerbt")
 			},
 		},
 		{
-			name:     "L2 values are ok - not in QoV Log",
+			name:     "L0 wird grau markiert statt leer zu bleiben",
 			metaData: exportTestMetaData,
 			cps:      exportCps,
 			entries: append(exportEntries,
 				&model.RawSourceLine{Id: "CP/2023/01/02/00/00/00/",
 					Consumers:    []float64{0, 0, 0, 0, 0, 0},
 					Producers:    []float64{0, 0, 0, 0},
-					QoVConsumers: []int{1, 1, 1, 1, 1, 1},
+					QoVConsumers: []int{0, 0, 0, 1, 1, 1},
 					QoVProducers: []int{1, 1, 1, 1},
-				},
-				&model.RawSourceLine{Id: "CP/2023/01/02/00/15/00/",
+				}),
+			check: func(t *testing.T, f *excelize.File) {
+				rows, err := f.GetRows("Energiedaten")
+				assert.NoError(t, err)
+				row := len(rows)
+				assert.Equal(t, qovColorL0, fillColor(t, f, "Energiedaten", fmt.Sprintf("B%d", row)))
+			},
+		},
+		{
+			name:     "L2 gilt weiter als in Ordnung",
+			metaData: exportTestMetaData,
+			cps:      exportCps,
+			entries: append(exportEntries,
+				&model.RawSourceLine{Id: "CP/2023/01/02/00/00/00/",
 					Consumers:    []float64{0, 0, 0, 0, 0, 0},
 					Producers:    []float64{0, 0, 0, 0},
 					QoVConsumers: []int{1, 2, 2, 1, 1, 1},
 					QoVProducers: []int{1, 2, 1, 1},
 				}),
 			check: func(t *testing.T, f *excelize.File) {
-				rows, err := f.GetRows("QoV Log")
+				rows, err := f.GetRows("Energiedaten")
 				assert.NoError(t, err)
-				// Die L2-Zeile um 00:15 fehlt, die letzte Log-Zeile bleibt 23:45.
-				assert.Equal(t, len(rows), 95)
-				assert.Equal(t, "01.01.2023 23:45:00", rows[94][0])
+				row := len(rows)
+				assert.Equal(t, qovColorL2, fillColor(t, f, "Energiedaten", fmt.Sprintf("C%d", row)))
 			},
 		},
 	}
@@ -216,13 +235,10 @@ func TestExportColumnWidthsLargeCommunity(t *testing.T) {
 	out, err := excelize.OpenReader(bytes.NewReader(buf.Bytes()))
 	assert.NoError(t, err)
 	defer func() { _ = out.Close() }()
-	assert.Contains(t, out.GetSheetList(), "QoV Log", "Testdaten sollen das QoV-Blatt erzeugen")
+	assert.Equal(t, []string{"Summary", "Energiedaten"}, out.GetSheetList())
 
 	colName := func(n int) string { c, _ := excelize.ColumnNumberToName(n); return c }
-	for sheet, cols := range map[string]int{
-		"Energiedaten": nCons*3 + nProd*2,
-		"QoV Log":      nCons*6 + nProd*4,
-	} {
+	for sheet, cols := range map[string]int{"Energiedaten": nCons*3 + nProd*2} {
 		w, err := out.GetColWidth(sheet, colName(cols+1))
 		assert.NoError(t, err)
 		assert.Equal(t, 25.0, w, "%s: letzte Datenspalte hat die Datenbreite", sheet)

@@ -9,6 +9,13 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
+// Qualitaetsfarben, gemeinsam von "Energiedaten" und "Summary" benutzt.
+const (
+	qovColorL0 = "BFBFBF" // kein Messwert
+	qovColorL2 = "FFFF00" // Ersatzwert
+	qovColorL3 = "FF5429" // fehlerhaft
+)
+
 type EnergySheet struct {
 	name      string
 	excel     *excelize.File
@@ -31,13 +38,13 @@ func (es *EnergySheet) initSheet(ctx *RunnerContext) error {
 	}
 
 	styleIdL3, err := f.NewStyle(&excelize.Style{
-		Fill: excelize.Fill{Type: "pattern", Color: []string{"ff5429"}, Pattern: 1},
+		Fill: excelize.Fill{Type: "pattern", Color: []string{qovColorL3}, Pattern: 1},
 	})
 	if err != nil {
 		return err
 	}
 	styleIdL2, err := f.NewStyle(&excelize.Style{
-		Fill: excelize.Fill{Type: "pattern", Color: []string{"FFFF00"}, Pattern: 1},
+		Fill: excelize.Fill{Type: "pattern", Color: []string{qovColorL2}, Pattern: 1},
 	})
 	if err != nil {
 		return err
@@ -51,7 +58,14 @@ func (es *EnergySheet) initSheet(ctx *RunnerContext) error {
 		return err
 	}
 
-	es.stylesQoV = []int{styleIdNumFmt, styleIdL2, styleIdL3}
+	styleIdL0, err := f.NewStyle(&excelize.Style{
+		Fill: excelize.Fill{Type: "pattern", Color: []string{qovColorL0}, Pattern: 1},
+	})
+	if err != nil {
+		return err
+	}
+
+	es.stylesQoV = []int{styleIdNumFmt, styleIdL2, styleIdL3, styleIdL0}
 
 	es.writer, err = f.NewStreamWriter(es.name)
 	if err != nil {
@@ -163,10 +177,6 @@ func (es *EnergySheet) handleLine(ctx *RunnerContext, line *model.RawSourceLine)
 		append([]interface{}{excelize.Cell{Value: lineDate}}, addLine(ctx, line, es.stylesQoV)...),
 		excelize.RowOpts{StyleID: es.rowStyle})
 
-	if !checkQoV(ctx, line) {
-		ctx.qovLogArray = append(ctx.qovLogArray, line.Copy(0))
-	}
-
 	return nil
 }
 
@@ -176,45 +186,8 @@ func (es *EnergySheet) closeSheet(ctx *RunnerContext) error {
 
 // qovOk sagt, ob ein Wert dieser Qualitaetsstufe als in Ordnung gilt.
 // L1 und L2 gelten als in Ordnung; L0 (kein Wert) und L3 sind Qualitaetsprobleme
-// und landen im QoV-Blatt. L2-Werte bleiben in den Blaettern weiterhin markiert --
-// als Information, nicht als Problem.
+// und schlagen in der Uebersicht auf "Daten vollstaendig? Nein" durch. L2-Werte
+// bleiben markiert -- als Information, nicht als Problem.
 func qovOk(qov int) bool {
 	return qov == 1 || qov == 2
-}
-
-func checkQoV(ctx *RunnerContext, line *model.RawSourceLine) bool {
-	_, lineDate, err := utils.ConvertRowIdToTimeString("CP", line.Id, time.Local)
-	if err != nil {
-		return false
-	}
-
-	nok := false
-	for _, cp := range ctx.cps {
-		m, ok := ctx.metaMap[cp.MeteringPoint]
-		if !ok {
-			continue
-		}
-		if m.Dir == model.CONSUMER_DIRECTION {
-			baseIdx := m.SourceIdx * 3
-			if utils.IsLineDateOutOfRange(*lineDate, [2]int64{cp.ActiveSince, cp.InactiveSince}) {
-				continue
-			}
-			nok =
-				!qovOk(utils.GetInt(line.QoVConsumers, baseIdx)) ||
-					!qovOk(utils.GetInt(line.QoVConsumers, baseIdx+1)) ||
-					!qovOk(utils.GetInt(line.QoVConsumers, baseIdx+2))
-		} else {
-			baseIdx := m.SourceIdx * 2
-			if utils.IsLineDateOutOfRange(*lineDate, [2]int64{cp.ActiveSince, cp.InactiveSince}) {
-				continue
-			}
-			nok =
-				!qovOk(utils.GetInt(line.QoVProducers, baseIdx)) ||
-					!qovOk(utils.GetInt(line.QoVProducers, baseIdx+1))
-		}
-		if nok {
-			return false
-		}
-	}
-	return true
 }
