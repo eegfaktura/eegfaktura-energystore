@@ -169,14 +169,21 @@ func TestSummaryQoVDayComments(t *testing.T) {
 	comments, err := f.GetComments("Summary")
 	assert.NoError(t, err)
 	byCell := map[string]string{}
+	bold := map[string]bool{}
 	for _, c := range comments {
-		byCell[c.Cell] = c.Text
+		text := ""
+		for _, r := range c.Paragraph {
+			text += r.Text
+		}
+		byCell[c.Cell] = text
+		bold[c.Cell] = len(c.Paragraph) > 0 && c.Paragraph[0].Font != nil && c.Paragraph[0].Font.Bold
 	}
 
 	// Der erste Verbraucher steht in Zeile 13; L0 in Spalte G, L3 in Spalte I.
 	assert.Equal(t, "L0 (kein Messwert): 2 Viertelstunden an 1 Tag\n02.01.2023", byCell["G13"])
 	assert.Equal(t, "L3 (fehlerhaft): 1 Viertelstunde an 1 Tag\n01.01.2023", byCell["I13"])
 	assert.NotContains(t, byCell, "H13", "ohne L2 kein Kommentar")
+	assert.True(t, bold["G13"], "erste Zeile fett wie bei einer Notiz von Hand")
 
 	// Die Zahlen stehen sichtbar in der Zelle, auf der Farbe ihrer Stufe.
 	rows, err := f.GetRows("Summary")
