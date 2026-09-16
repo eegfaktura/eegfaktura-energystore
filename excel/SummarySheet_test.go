@@ -119,3 +119,68 @@ func TestSummaryDataOkQoV(t *testing.T) {
 		})
 	}
 }
+
+// Der gemischte Fall: ein Zaehlpunkt mit L0 UND L3 bekommt zwei getrennte
+// Kommentare -- je einer an der Zahl seiner Stufe, mit den Tagen dahinter.
+func TestSummaryQoVDayComments(t *testing.T) {
+	resetTestData()
+
+	// Zwei Tage lueckenlos, sonst fuellt der Runner die Luecken auf und die
+	// Fuellzeilen zaehlen zu Recht als L0.
+	start := time.Date(2023, time.Month(1), 1, 0, 0, 0, 0, time.Local)
+	entries := make([]*model.RawSourceLine, 0, 192)
+	for s := 0; s < 192; s++ {
+		ts := start.Add(time.Duration(s) * 15 * time.Minute)
+		l := &model.RawSourceLine{
+			Id: fmt.Sprintf("CP/%.4d/%.2d/%.2d/%.2d/%.2d/00/",
+				ts.Year(), int(ts.Month()), ts.Day(), ts.Hour(), ts.Minute()),
+			Consumers:    []float64{1, 1, 1, 1, 1, 1},
+			Producers:    []float64{1, 1, 1, 1},
+			QoVConsumers: []int{1, 1, 1, 1, 1, 1},
+			QoVProducers: []int{1, 1, 1, 1},
+		}
+		switch {
+		case s == 0: // 01.01. 00:00 -- ein einzelner fehlerhafter Wert
+			l.QoVConsumers[0] = 3
+		case s == 128 || s == 129: // 02.01. 08:00 und 08:15 -- keine Werte
+			l.QoVConsumers[0] = 0
+		}
+		entries = append(entries, l)
+	}
+
+	mockRange := &mocks.MockBowRange{Entries: entries}
+	mockRange.On("Next", mock.AnythingOfType("*model.RawSourceLine")).Return()
+	mockBow := &mocks.MockBowStorage{}
+	mockBow.On("GetMeta", "cpmeta/0").Return(exportTestMetaData)
+	mockBow.On("GetLineRange", "CP", "2023/01/01/", "2023/01/03/").Return(mockRange)
+
+	f := excelize.NewFile()
+	defer func() { _ = f.Close() }()
+	runner := NewEnergyRunner([]Sheet{
+		&SummarySheet{name: "Summary", excel: f},
+		&EnergySheet{name: "Energiedaten", excel: f},
+	})
+	_, err := runner.run(mockBow, f, start, start.AddDate(0, 0, 2), exportCps)
+	assert.NoError(t, err)
+
+	comments, err := f.GetComments("Summary")
+	assert.NoError(t, err)
+	byCell := map[string]string{}
+	for _, c := range comments {
+		byCell[c.Cell] = c.Text
+	}
+
+	// Der erste Verbraucher steht in Zeile 13; L0 in Spalte G, L3 in Spalte I.
+	assert.Equal(t, "L0 (kein Messwert): 2 Viertelstunden an 1 Tag\n02.01.2023", byCell["G13"])
+	assert.Equal(t, "L3 (fehlerhaft): 1 Viertelstunde an 1 Tag\n01.01.2023", byCell["I13"])
+	assert.NotContains(t, byCell, "H13", "ohne L2 kein Kommentar")
+
+	// Die Zahlen stehen sichtbar in der Zelle, auf der Farbe ihrer Stufe.
+	rows, err := f.GetRows("Summary")
+	assert.NoError(t, err)
+	assert.Equal(t, "2", rows[12][6])
+	assert.Equal(t, "", rows[12][7])
+	assert.Equal(t, "1", rows[12][8])
+	assert.Equal(t, qovColorL0, fillColor(t, f, "Summary", "G13"))
+	assert.Equal(t, qovColorL3, fillColor(t, f, "Summary", "I13"))
+}
