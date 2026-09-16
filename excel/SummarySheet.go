@@ -241,8 +241,7 @@ func (ss *SummarySheet) closeSheet(ctx *RunnerContext) error {
 			excelize.Cell{Value: "Eigendeckung gemeinschaftliche Erzeugung [KWH]"},
 		}, excelize.RowOpts{StyleID: styleIdHeader, Height: 1.15 * 72})
 
-	// Die Tage je Stufe haengen als Kommentar an der Zahl. Kommentare gehen erst
-	// nach dem Flush des StreamWriters, sonst sieht excelize das Blatt noch nicht.
+	// Die Tage je Stufe haengen als Kommentar an der Zahl.
 	notes := []excelize.Comment{}
 	addNote := func(row, col int, level string, count int, days []string) {
 		text := qovDayComment(level, count, days)
@@ -316,15 +315,16 @@ func (ss *SummarySheet) closeSheet(ctx *RunnerContext) error {
 		addNote(line, 8, "L2 (Ersatzwert)", c.CountL2, c.Days[1])
 		addNote(line, 9, "L3 (fehlerhaft)", c.CountL3, c.Days[2])
 	}
-	if err = sw.Flush(); err != nil {
-		return err
-	}
+	// Kommentare VOR dem Flush setzen: erst dabei schreibt der StreamWriter das
+	// Blatt endgueltig, samt der Verknuepfung <legacyDrawing> auf die Kommentare.
+	// Danach gesetzte Kommentare landen zwar in der Datei, aber ohne diese
+	// Verknuepfung -- Excel zeigt sie dann nicht an.
 	for _, n := range notes {
 		if err = f.AddComment(ss.name, n); err != nil {
 			return err
 		}
 	}
-	return nil
+	return sw.Flush()
 }
 
 // qovDayComment beschreibt, an welchen Tagen eine Qualitaetsstufe aufgetreten ist.
