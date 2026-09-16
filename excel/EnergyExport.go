@@ -43,6 +43,10 @@ type ParticipantCp struct {
 	Report        model.EnergyDescription `json:"report"`
 	QoV           bool                    `json:"qov"`
 	QoVSum        [3]bool                 `json:"qoVSum,omitempty"`
+	// Je Qualitaetsstufe (0=L0, 1=L2, 2=L3): Anzahl betroffener Viertelstunden
+	// und die Tage, an denen sie auftraten (chronologisch, ohne Dubletten).
+	QoVCount [3]int      `json:"qoVCount,omitempty"`
+	QoVDays  [3][]string `json:"qoVDays,omitempty"`
 }
 
 type SummaryMeterResult struct {
@@ -55,6 +59,10 @@ type SummaryMeterResult struct {
 	DataL0        bool
 	DataL2        bool
 	DataL3        bool
+	CountL0       int
+	CountL2       int
+	CountL3       int
+	Days          [3][]string
 	Total         float64
 	Coverage      float64
 	Share         float64
@@ -96,6 +104,9 @@ type periodRange struct {
 	end   time.Time
 }
 
+// MESSUNG ONLY - nicht mergen
+var skipQoVSheet = false
+
 type Sheet interface {
 	initSheet(ctx *RunnerContext) error
 	handleLine(ctx *RunnerContext, line *model.RawSourceLine) error
@@ -117,7 +128,6 @@ type RunnerContext struct {
 	countProd       int
 	periodsConsumer map[int]periodRange
 	periodsProducer map[int]periodRange
-	qovLogArray     []model.RawSourceLine
 	checkBegin      func(lineDate, mDate time.Time) bool
 }
 
@@ -287,12 +297,6 @@ func (er *EnergyRunner) run(db ebow.IBowStorage, f *excelize.File, start, end ti
 		return nil, err
 	}
 
-	if rCxt.qovLogArray != nil && len(rCxt.qovLogArray) > 0 {
-		if err = generateLogDataSheet(rCxt, f); err != nil {
-			glog.Infof("LOG: %+v\n", err)
-		}
-	}
-
 	glog.V(5).Infof("Export Energy Data took %v (%s)", time.Since(sm).Seconds(), cps.CommunityId)
 
 	return f.WriteToBuffer()
@@ -334,8 +338,9 @@ func addLine(ctx *RunnerContext, line *model.RawSourceLine, stylesQoV []int) []i
 		} else if _qov == 3 {
 			return excelize.Cell{Value: utils.RoundToFixed(matrix.GetElm(row, col), 6), StyleID: stylesQoV[2]}
 		} else {
-			//fmt.Printf("Quality of Value is %d Value: %f\n", _qov, utils.RoundToFixed(raw[sourceIdx], 6))
-			return excelize.Cell{Value: ""}
+			// L0: kein Messwert geliefert -- grau markiert, damit es sich von
+			// "Zaehlpunkt nicht aktiv" (echt leer) unterscheidet.
+			return excelize.Cell{Value: "", StyleID: stylesQoV[3]}
 		}
 	}
 

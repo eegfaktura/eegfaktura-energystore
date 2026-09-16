@@ -8,6 +8,23 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Changed
+- The energy export no longer writes a separate **"QoV Log" sheet**. The quality of every value
+  is already visible in the "Energiedaten" sheet, where each cell carries the colour of its
+  quality level; the extra sheet repeated the same values in twice the columns. Dropping it makes
+  the export roughly **60 % faster and the file two thirds smaller** (benchmark, 250 consumers +
+  40 producers over 31 days: 5.1 s / 18.3 MiB before, 2.1 s / 6.1 MiB after).
+
+  So that nothing is lost, three things changed together:
+  - **L0** (no measured value delivered) is now filled light grey instead of being written as a
+    blank cell. Before, it was indistinguishable from "metering point not active in this period",
+    which stays genuinely empty.
+  - The **"Summary" sheet** shows, per metering point and quality level, the **number of affected
+    quarter hours** instead of a plain marker, on the same colour the cell uses in the
+    "Energiedaten" sheet — the overview doubles as the legend.
+  - Each of those numbers carries a **cell comment listing the affected days**, so a metering
+    point with both L0 and L3 keeps them apart: one comment per level instead of one merged range.
+
 ## [1.3.1] – 2026-09-16
 
 ### Fixed
