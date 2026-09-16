@@ -2,6 +2,7 @@ package excel
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"at.ourproject/energystore/model"
@@ -66,7 +67,6 @@ func (ss *SummarySheet) handleParticipantReport(ctx *RunnerContext, participant 
 	consumerMatrix, producerMatrix *model.Matrix, lineDate time.Time, QoVConsumers, QoVProducers []int) error {
 
 	if utils.IsLineDateOutOfRange(lineDate, [2]int64{participant.ActiveSince, participant.InactiveSince}) {
-		//if lineDate.Before(time.UnixMilli(participant.ActiveSince)) || lineDate.After(time.UnixMilli(participant.InactiveSince)) {
 		return nil
 	}
 
@@ -76,43 +76,57 @@ func (ss *SummarySheet) handleParticipantReport(ctx *RunnerContext, participant 
 		return nil
 	}
 
+	var qovs []int
 	if participant.Direction == model.CONSUMER_DIRECTION {
 		participant.Report.Consumed += consumerMatrix.GetElm(meta.SourceIdx, 0)
 		participant.Report.Shared += consumerMatrix.GetElm(meta.SourceIdx, 1)
 		participant.Report.Allocated += consumerMatrix.GetElm(meta.SourceIdx, 2)
 		if (meta.SourceIdx*3)+2 < len(QoVConsumers) {
-			participant.QoV = participant.QoV &&
-				(ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) ||
-					(qovOk(QoVConsumers[(meta.SourceIdx*3)]) && qovOk(QoVConsumers[(meta.SourceIdx*3)+1]) && qovOk(QoVConsumers[(meta.SourceIdx*3)+2])))
-			participant.QoVSum[0] = participant.QoVSum[0] ||
-				(!ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) &&
-					((QoVConsumers[(meta.SourceIdx*3)] == 0) || (QoVConsumers[(meta.SourceIdx*3)+1] == 0) || (QoVConsumers[(meta.SourceIdx*3)+2] == 0)))
-			participant.QoVSum[1] = participant.QoVSum[1] ||
-				(!ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) &&
-					((QoVConsumers[(meta.SourceIdx*3)] == 2) || (QoVConsumers[(meta.SourceIdx*3)+1] == 2) || (QoVConsumers[(meta.SourceIdx*3)+2] == 2)))
-			participant.QoVSum[2] = participant.QoVSum[2] ||
-				(!ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) &&
-					((QoVConsumers[(meta.SourceIdx*3)] == 3) || (QoVConsumers[(meta.SourceIdx*3)+1] == 3) || (QoVConsumers[(meta.SourceIdx*3)+2] == 3)))
+			qovs = QoVConsumers[meta.SourceIdx*3 : (meta.SourceIdx*3)+3]
 		}
 	} else {
 		participant.Report.Produced += producerMatrix.GetElm(meta.SourceIdx, 0)
 		participant.Report.Distributed += producerMatrix.GetElm(meta.SourceIdx, 1)
 		if (meta.SourceIdx*2)+1 < len(QoVProducers) {
-			// TODO: check quality of Value calculation. Could be kind of weird!!!
-			//ss.qovProducerSlice[i] = ss.qovProducerSlice[i] && (ctx.checkBegin(lineDate, ctx.periodsProducer[i].start) || ((line.QoVProducers[(i*2)] == 1) && (line.QoVProducers[(i*2)+1] == 1)))
-			participant.QoV = participant.QoV &&
-				(ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) ||
-					(qovOk(QoVProducers[(meta.SourceIdx*2)]) && qovOk(QoVProducers[(meta.SourceIdx*2)+1])))
+			qovs = QoVProducers[meta.SourceIdx*2 : (meta.SourceIdx*2)+2]
+		}
+	}
+	if qovs == nil {
+		return nil
+	}
 
-			participant.QoVSum[0] = participant.QoVSum[0] ||
-				(!ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) &&
-					((QoVProducers[(meta.SourceIdx*2)] == 0) || (QoVProducers[(meta.SourceIdx*2)+1] == 0)))
-			participant.QoVSum[1] = participant.QoVSum[1] ||
-				(!ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) &&
-					((QoVProducers[(meta.SourceIdx*2)] == 2) || (QoVProducers[(meta.SourceIdx*2)+1] == 2)))
-			participant.QoVSum[2] = participant.QoVSum[2] ||
-				(!ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince)) &&
-					((QoVProducers[(meta.SourceIdx*2)] == 3) || (QoVProducers[(meta.SourceIdx*2)+1] == 3)))
+	allOk := true
+	for _, q := range qovs {
+		allOk = allOk && qovOk(q)
+	}
+	beforeBegin := ctx.checkBegin(lineDate, time.UnixMilli(participant.ActiveSince))
+	participant.QoV = participant.QoV && (beforeBegin || allOk)
+	if beforeBegin {
+		return nil
+	}
+
+	// Je Stufe zaehlen, wie viele Viertelstunden betroffen sind, und an welchen
+	// Tagen. Eine Viertelstunde zaehlt einmal, auch wenn mehrere Werte desselben
+	// Zaehlpunkts betroffen sind.
+	for slot, level := range [3]int{0, 2, 3} {
+		hit := false
+		for _, q := range qovs {
+			if q == level {
+				hit = true
+				break
+			}
+		}
+		if !hit {
+			continue
+		}
+		participant.QoVSum[slot] = true
+		participant.QoVCount[slot] += 1
+		// Die Zeilen kommen chronologisch: es genuegt, den zuletzt notierten Tag
+		// zu vergleichen, um eine sortierte Liste ohne Dubletten zu bekommen.
+		day := lineDate.Format("02.01.2006")
+		days := participant.QoVDays[slot]
+		if len(days) == 0 || days[len(days)-1] != day {
+			participant.QoVDays[slot] = append(days, day)
 		}
 	}
 	return nil
@@ -153,22 +167,19 @@ func (ss *SummarySheet) closeSheet(ctx *RunnerContext) error {
 		Fill: excelize.Fill{Type: "pattern", Color: []string{"ff4000"}, Pattern: 1},
 	})
 
-	styleIdQoVL0, err := f.NewStyle(&excelize.Style{
-		//Font:      &excelize.Font{Bold: true},
-		//Alignment: &excelize.Alignment{Vertical: "top", WrapText: true},
-		Font: &excelize.Font{Size: 5.0},
-		Fill: excelize.Fill{Type: "pattern", Color: []string{"777777"}, Pattern: 1},
-	})
-	styleIdQoVL2, err := f.NewStyle(&excelize.Style{
-		//Font:      &excelize.Font{Bold: true},
-		//Alignment: &excelize.Alignment{Vertical: "top", WrapText: true},
-		Font: &excelize.Font{Size: 5.0},
-		Fill: excelize.Fill{Pattern: 0},
-	})
-
 	styleIdQov := map[bool]int{true: styleIdQoVGood, false: styleIdQoVBad}
-	styleIdQovSum := map[bool]int{true: styleIdQoVL0, false: styleIdQoVL2}
-	//styleIdQovSum := map[int]int{0: styleIdQoVL0, 1: styleIdQoVL2, 2: styleIdQoVL2}
+
+	// Die Zaehler L0/L2/L3 tragen DIESELBEN Farben wie die Zellen im Blatt
+	// "Energiedaten". Damit ist die Uebersicht zugleich die Legende: grau = kein
+	// Messwert (L0), gelb = Ersatzwert (L2), rot = fehlerhaft (L3).
+	markStyle := func(color string) int {
+		id, _ := f.NewStyle(&excelize.Style{
+			Font: &excelize.Font{Size: 10.0},
+			Fill: excelize.Fill{Type: "pattern", Color: []string{color}, Pattern: 1},
+		})
+		return id
+	}
+	markL0, markL2, markL3 := markStyle(qovColorL0), markStyle(qovColorL2), markStyle(qovColorL3)
 
 	sw, err := f.NewStreamWriter(ss.name)
 	if err != nil {
@@ -183,7 +194,7 @@ func (ss *SummarySheet) closeSheet(ctx *RunnerContext) error {
 	_ = sw.SetColWidth(3, 4, float64(20))
 	_ = sw.SetColWidth(5, 5, 20.78)
 	_ = sw.SetColWidth(6, 6, float64(10))
-	_ = sw.SetColWidth(7, 9, 2.1)
+	_ = sw.SetColWidth(7, 9, 6)
 	_ = sw.SetColWidth(10, 14, float64(20))
 
 	rowOpts := excelize.RowOpts{StyleID: styleIdRowSummary}
@@ -230,6 +241,24 @@ func (ss *SummarySheet) closeSheet(ctx *RunnerContext) error {
 			excelize.Cell{Value: "Eigendeckung gemeinschaftliche Erzeugung [KWH]"},
 		}, excelize.RowOpts{StyleID: styleIdHeader, Height: 1.15 * 72})
 
+	// Die Tage je Stufe haengen als Kommentar an der Zahl. Kommentare gehen erst
+	// nach dem Flush des StreamWriters, sonst sieht excelize das Blatt noch nicht.
+	notes := []excelize.Comment{}
+	addNote := func(row, col int, level string, count int, days []string) {
+		text := qovDayComment(level, count, days)
+		if text == "" {
+			return
+		}
+		axis, err := excelize.CoordinatesToCellName(col, row)
+		if err != nil {
+			return
+		}
+		notes = append(notes, excelize.Comment{
+			Cell: axis, Author: "eegfaktura", Width: 260, Height: 28 + 14*uint((len(days)/6)+1),
+			Text: text,
+		})
+	}
+
 	for _, c := range counterpoints.Consumer {
 		line = line + 1
 		err = sw.SetRow(fmt.Sprintf("A%d", line),
@@ -239,14 +268,16 @@ func (ss *SummarySheet) closeSheet(ctx *RunnerContext) error {
 				excelize.Cell{Value: c.EndDate},
 				excelize.Cell{Value: c.ActivePeriod},
 				excelize.Cell{Value: c.DataOk, StyleID: styleIdQov[c.DataOk]},
-				excelize.Cell{Value: "", StyleID: styleIdQovSum[c.DataL0]},
-				excelize.Cell{Value: "", StyleID: styleIdQovSum[c.DataL2]},
-				excelize.Cell{Value: "", StyleID: styleIdQovSum[c.DataL3]},
+				countCell(c.CountL0, markL0),
+				countCell(c.CountL2, markL2),
+				countCell(c.CountL3, markL3),
 				excelize.Cell{Value: utils.RoundToFixed(c.Total, 6)},
 				excelize.Cell{Value: utils.RoundToFixed(c.Coverage, 6)},
 				excelize.Cell{Value: utils.RoundToFixed(c.Share, 6)},
 			}, excelize.RowOpts{StyleID: styleId})
-
+		addNote(line, 7, "L0 (kein Messwert)", c.CountL0, c.Days[0])
+		addNote(line, 8, "L2 (Ersatzwert)", c.CountL2, c.Days[1])
+		addNote(line, 9, "L3 (fehlerhaft)", c.CountL3, c.Days[2])
 	}
 
 	line = line + 3
@@ -274,16 +305,52 @@ func (ss *SummarySheet) closeSheet(ctx *RunnerContext) error {
 				excelize.Cell{Value: c.EndDate},
 				excelize.Cell{Value: c.ActivePeriod},
 				excelize.Cell{Value: c.DataOk, StyleID: styleIdQov[c.DataOk]},
-				excelize.Cell{Value: "", StyleID: styleIdQovSum[c.DataL0]},
-				excelize.Cell{Value: "", StyleID: styleIdQovSum[c.DataL2]},
-				excelize.Cell{Value: "", StyleID: styleIdQovSum[c.DataL3]},
+				countCell(c.CountL0, markL0),
+				countCell(c.CountL2, markL2),
+				countCell(c.CountL3, markL3),
 				excelize.Cell{Value: utils.RoundToFixed(c.Share, 6)},
 				excelize.Cell{Value: utils.RoundToFixed(c.Total, 6)},
 				excelize.Cell{Value: utils.RoundToFixed(c.Coverage, 6)},
 			}, excelize.RowOpts{StyleID: styleId})
-
+		addNote(line, 7, "L0 (kein Messwert)", c.CountL0, c.Days[0])
+		addNote(line, 8, "L2 (Ersatzwert)", c.CountL2, c.Days[1])
+		addNote(line, 9, "L3 (fehlerhaft)", c.CountL3, c.Days[2])
 	}
-	return sw.Flush()
+	if err = sw.Flush(); err != nil {
+		return err
+	}
+	for _, n := range notes {
+		if err = f.AddComment(ss.name, n); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// qovDayComment beschreibt, an welchen Tagen eine Qualitaetsstufe aufgetreten ist.
+// Die Tage stehen als Kommentar an der Zahl, damit die Uebersicht schmal bleibt.
+func qovDayComment(level string, count int, days []string) string {
+	if count == 0 || len(days) == 0 {
+		return ""
+	}
+	plural := func(n int, one, many string) string {
+		if n == 1 {
+			return one
+		}
+		return many
+	}
+	return fmt.Sprintf("%s: %d %s an %d %s\n%s",
+		level, count, plural(count, "Viertelstunde", "Viertelstunden"),
+		len(days), plural(len(days), "Tag", "Tagen"), strings.Join(days, ", "))
+}
+
+// countCell zeigt die Anzahl betroffener Viertelstunden auf der Farbe der Stufe.
+// Null bleibt leer und ungefaerbt, damit nur echte Treffer ins Auge fallen.
+func countCell(n, style int) excelize.Cell {
+	if n == 0 {
+		return excelize.Cell{Value: ""}
+	}
+	return excelize.Cell{Value: n, StyleID: style}
 }
 
 func (ss *SummarySheet) summaryMeteringPoints(ctx *RunnerContext) (*SummaryResult, error) {
@@ -306,6 +373,10 @@ func (ss *SummarySheet) summaryMeteringPoints(ctx *RunnerContext) (*SummaryResul
 				DataL0:   cp.QoVSum[0],
 				DataL2:   cp.QoVSum[1],
 				DataL3:   cp.QoVSum[2],
+				CountL0:  cp.QoVCount[0],
+				CountL2:  cp.QoVCount[1],
+				CountL3:  cp.QoVCount[2],
+				Days:     cp.QoVDays,
 				Total:    cp.Report.Consumed,  //returnFloatValue(ss.report.Consumed, m.SourceIdx),
 				Coverage: cp.Report.Shared,    //returnFloatValue(ss.report.Shared, m.SourceIdx),
 				Share:    cp.Report.Allocated, //returnFloatValue(ss.report.Allocated, m.SourceIdx),
@@ -323,6 +394,10 @@ func (ss *SummarySheet) summaryMeteringPoints(ctx *RunnerContext) (*SummaryResul
 				DataL0:   cp.QoVSum[0],
 				DataL2:   cp.QoVSum[1],
 				DataL3:   cp.QoVSum[2],
+				CountL0:  cp.QoVCount[0],
+				CountL2:  cp.QoVCount[1],
+				CountL3:  cp.QoVCount[2],
+				Days:     cp.QoVDays,
 				Total:    cp.Report.Produced,                         //returnFloatValue(ss.report.Produced, m.SourceIdx),
 				Coverage: cp.Report.Produced - cp.Report.Distributed, //returnFloatValue(ss.report.Produced, m.SourceIdx) - returnFloatValue(ss.report.Distributed, m.SourceIdx),
 				Share:    cp.Report.Distributed,                      //returnFloatValue(ss.report.Distributed, m.SourceIdx),
