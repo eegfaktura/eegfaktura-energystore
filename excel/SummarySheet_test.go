@@ -1,13 +1,16 @@
 package excel
 
 import (
+	"archive/zip"
 	"at.ourproject/energystore/mocks"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/utils"
+	"bytes"
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/xuri/excelize/v2"
+	"io"
 	"testing"
 	"time"
 )
@@ -183,4 +186,25 @@ func TestSummaryQoVDayComments(t *testing.T) {
 	assert.Equal(t, "1", rows[12][8])
 	assert.Equal(t, qovColorL0, fillColor(t, f, "Summary", "G13"))
 	assert.Equal(t, qovColorL3, fillColor(t, f, "Summary", "I13"))
+	// Die Kommentare muessen auch in der GESCHRIEBENEN Datei verknuepft sein:
+	// ohne <legacyDrawing> im Blatt liegen sie zwar in der Mappe, Excel zeigt
+	// sie aber nicht an. GetComments liest sie trotzdem -- deshalb hier die
+	// Pruefung am fertigen Paket.
+	buf, err := f.WriteToBuffer()
+	assert.NoError(t, err)
+	zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	assert.NoError(t, err)
+	var sheetXML string
+	for _, zf := range zr.File {
+		if zf.Name == "xl/worksheets/sheet1.xml" {
+			rc, err := zf.Open()
+			assert.NoError(t, err)
+			b, err := io.ReadAll(rc)
+			assert.NoError(t, err)
+			_ = rc.Close()
+			sheetXML = string(b)
+		}
+	}
+	assert.Contains(t, sheetXML, "<legacyDrawing",
+		"Blatt verweist auf die Kommentare")
 }
