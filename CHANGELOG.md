@@ -8,6 +8,18 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Security
+- The container no longer runs as root. The service listens on 8080, well above 1024, so the
+  privileges were never needed. A dedicated `app` user (UID/GID 1000) owns `/opt/rawdata` and
+  `/opt/energy`; the `chown` deliberately runs **before** the `VOLUME` instruction, because
+  later changes to a declared volume do not end up in the image.
+  The Badger data lives on a PVC, which is mounted `root:root` by default — the deployment
+  therefore needs `fsGroup: 1000` alongside this. Order matters: `fsGroup` first, then the
+  image, otherwise the service can no longer write to its data directory, and only at runtime.
+  Note for production: the PVC there holds about 1.2 TB, and the kubelet walks the whole
+  volume when applying `fsGroup`. `fsGroupChangePolicy: OnRootMismatch` keeps that from
+  delaying every pod start.
+
 ### Added
 - CI builds `env/**` branches and deploys the resulting image into the matching feature
   environment (ADR-0008): a push to `env/<name>` pins this service in namespace `env-<name>`

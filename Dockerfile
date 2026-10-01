@@ -18,7 +18,20 @@ COPY config.yaml /etc/energystore/
 
 RUN rm -r ./*
 
+# Nicht als root laufen (Befund A06 der Altsystem-Analyse).
+# Der Dienst lauscht auf 8080, also oberhalb von 1024, und braucht keine
+# Privilegien. Die Badger-Daten liegen auf einem PVC - dort regelt fsGroup im
+# Deployment die Gruppenzugehoerigkeit; /opt/rawdata ist ein anonymes Volume und
+# muss hier gehoeren, BEVOR die VOLUME-Anweisung kommt (spaetere Aenderungen
+# landen nicht mehr im Image).
+RUN groupadd -g 1000 app \
+ && useradd -u 1000 -g app -M -s /usr/sbin/nologin app \
+ && mkdir -p /opt/rawdata /opt/energy \
+ && chown -R app:app /opt/rawdata /opt/energy
+
 VOLUME /opt/rawdata
+
+USER app
 
 EXPOSE 8080
 
