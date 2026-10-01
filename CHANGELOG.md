@@ -9,6 +9,16 @@ this changelog highlights the changes relevant for overview and operations.
 ## [Unreleased]
 
 ### Security
+- **Tenant isolation: the connection pool was keyed by `ecId` alone.** A pool object opens its
+  Badger store under `basePath/<tenant>/<ecId>`, using the tenant of whoever created the entry
+  first. A later request for the same `ecId` under a *different* tenant received the first
+  tenant's store back — cross-tenant read/write of energy data. The pool is now keyed by
+  tenant **and** ecId (`poolKey`), so each tenant gets its own store.
+- **`ecid` from the URL path was unvalidated before reaching `filepath.Join`.** A value
+  containing `/` or `..` could escape the intended directory. `OpenStorage` now rejects any
+  tenant or ecId that is not strictly alphanumeric, before it touches the filesystem. All
+  real identifiers are alphanumeric and stay valid; every runtime caller goes through
+  `OpenStorage`.
 - The container no longer runs as root. The service listens on 8080, well above 1024, so the
   privileges were never needed. A dedicated `app` user (UID/GID 1000) owns `/opt/rawdata` and
   `/opt/energy`; the `chown` deliberately runs **before** the `VOLUME` instruction, because
