@@ -3,11 +3,18 @@ package ebow
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"sync"
 
 	"at.ourproject/energystore/model"
 	"github.com/golang/glog"
 )
+
+// idPattern begrenzt Mandant und ecId auf Buchstaben und Ziffern. Beide fliessen in den
+// Dateipfad basePath/<tenant>/<ecId> ein; ohne Pruefung koennte ein Wert mit "/" oder ".."
+// aus dem vorgesehenen Verzeichnis ausbrechen. Die echten Werte (z.B. "TE100200",
+// "AT00999900000TC100200000000000002") sind rein alphanumerisch und bleiben gueltig.
+var idPattern = regexp.MustCompile(`^[A-Za-z0-9]+$`)
 
 var (
 	connectionPool = NewPool(20)
@@ -107,6 +114,14 @@ func OpenStorage(tenant, ecId string) (*BowStorage, error) {
 		glog.Errorf("tenant %s is too long", tenant)
 		return nil, fmt.Errorf("tenant is too long (%s)", tenant)
 	}
+	if !idPattern.MatchString(tenant) {
+		glog.Errorf("invalid tenant %q", tenant)
+		return nil, fmt.Errorf("invalid tenant")
+	}
+	if !idPattern.MatchString(ecId) {
+		glog.Errorf("invalid ecId %q for tenant %s", ecId, tenant)
+		return nil, fmt.Errorf("invalid ecId")
+	}
 	db := connectionPool.Get(tenant, ecId)
 	if db == nil {
 		return nil, errors.New("failed to connect to database")
@@ -115,7 +130,7 @@ func OpenStorage(tenant, ecId string) (*BowStorage, error) {
 }
 
 func (b *BowStorage) Close() {
-	connectionPool.Put(b.ecId, b.dbObject)
+	connectionPool.Put(b.tenant, b.ecId, b.dbObject)
 }
 
 func (b *BowStorage) IsOpen() bool {

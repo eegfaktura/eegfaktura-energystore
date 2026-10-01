@@ -2,6 +2,7 @@ package ebow
 
 import (
 	"fmt"
+	"strings"
 	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"
@@ -36,20 +37,65 @@ func (cwg *CountedWait) Wait() {
 	}
 }
 
-func TestPutEmptyDbObj(t *testing.T) {
-	connectionPool.Put(testEcId, nil)
+// TestTenantIsolation sichert ab, dass zwei Mandanten mit DERSELBEN ecId getrennte
+// Pool-Objekte bekommen. Vorher war der Pool allein nach ecId geschluesselt, der zweite
+// Mandant bekam die DB des ersten (unter dessen Verzeichnis) zurueck.
+func TestTenantIsolation(t *testing.T) {
+	const ecId = "SHAREDECID01"
+	const tenantA = "TE000011"
+	const tenantB = "TE000022"
 
-	assert.Nil(t, connectionPool.pool[testEcId])
+	dbA := connectionPool.Get(tenantA, ecId)
+	assert.NotNil(t, dbA)
+	dbB := connectionPool.Get(tenantB, ecId)
+	assert.NotNil(t, dbB)
+
+	objA := connectionPool.pool[poolKey(tenantA, ecId)]
+	objB := connectionPool.pool[poolKey(tenantB, ecId)]
+	assert.NotNil(t, objA)
+	assert.NotNil(t, objB)
+	// Getrennte Pool-Objekte, jeweils unter dem eigenen Mandanten.
+	assert.NotSame(t, objA, objB)
+	// Pool-Objekt haelt den Mandanten klein, wie der Dateipfad basePath/<tenant>/<ecId>.
+	assert.Equal(t, strings.ToLower(tenantA), objA.tenant)
+	assert.Equal(t, strings.ToLower(tenantB), objB.tenant)
+	assert.NotEqual(t, poolKey(tenantA, ecId), poolKey(tenantB, ecId))
+
+	connectionPool.Put(tenantA, ecId, dbA)
+	connectionPool.Put(tenantB, ecId, dbB)
+}
+
+// TestOpenStorageRejectsInvalidIds sichert ab, dass Werte mit Pfad-Metazeichen abgelehnt
+// werden, bevor sie in filepath.Join geraten.
+func TestOpenStorageRejectsInvalidIds(t *testing.T) {
+	bad := []struct{ tenant, ecId string }{
+		{"TE100200", "../../etc"},
+		{"TE100200", "a/b"},
+		{"..", "AT00999900000TC100200000000000002"},
+		{"TE100200", ""},
+		{"", "AT00999900000TC100200000000000002"},
+	}
+	for _, c := range bad {
+		s, err := OpenStorage(c.tenant, c.ecId)
+		assert.Error(t, err, "tenant=%q ecId=%q sollte abgelehnt werden", c.tenant, c.ecId)
+		assert.Nil(t, s)
+	}
+}
+
+func TestPutEmptyDbObj(t *testing.T) {
+	connectionPool.Put(testRc, testEcId, nil)
+
+	assert.Nil(t, connectionPool.pool[poolKey(testRc, testEcId)])
 }
 
 func TestOpenObject(t *testing.T) {
 	db := connectionPool.Get(testRc, testEcId)
 	assert.NotNil(t, db)
 
-	dbObj := connectionPool.pool[testEcId]
+	dbObj := connectionPool.pool[poolKey(testRc, testEcId)]
 	assert.Equal(t, len(dbObj.pool), 19)
 
-	connectionPool.Put(testEcId, db)
+	connectionPool.Put(testRc, testEcId, db)
 	assert.Nil(t, dbObj.db)
 	assert.Equal(t, len(dbObj.pool), 20)
 
@@ -70,12 +116,12 @@ func TestOpenMaxObject(t *testing.T) {
 	}()
 
 	wg.Wait()
-	dbObj := connectionPool.pool[testEcId]
+	dbObj := connectionPool.pool[poolKey(testRc, testEcId)]
 	assert.Equal(t, len(dbObj.pool), 0)
 	assert.Nil(t, db[20])
 
 	for i := 0; i < 20; i++ {
-		connectionPool.Put(testEcId, db[i])
+		connectionPool.Put(testRc, testEcId, db[i])
 		assert.Nil(t, db[i].Db)
 	}
 	assert.Equal(t, len(dbObj.pool), 19)
@@ -83,7 +129,7 @@ func TestOpenMaxObject(t *testing.T) {
 	time.Sleep(500 * time.Microsecond)
 	assert.NotNil(t, db[20].Db)
 
-	connectionPool.Put(testEcId, db[20])
+	connectionPool.Put(testRc, testEcId, db[20])
 	assert.Nil(t, db[20].Db)
 	assert.Equal(t, len(dbObj.pool), 20)
 }

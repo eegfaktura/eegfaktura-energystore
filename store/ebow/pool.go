@@ -147,11 +147,22 @@ func NewPool(size int) *Pool {
 	return &Pool{poolSize: size, pool: make(map[string]*DbPoolObject)}
 }
 
-func (p *Pool) Put(ecId string, e *DbObject) {
+// poolKey schluesselt den Verbindungs-Pool nach Mandant UND ecId.
+//
+// Frueher war der Pool allein nach ecId geschluesselt, der Mandant ging nur beim ersten
+// Anlegen ein. Ein Pool-Objekt oeffnet seine DB aber unter basePath/<tenant>/<ecId> mit dem
+// Mandanten des ersten Aufrufers. Rief danach ein anderer Mandant mit derselben ecId auf,
+// bekam er die DB des ersten zurueck. Der Mandant gehoert deshalb in den Schluessel.
+// tenant wird klein geschrieben, wie beim Pfadaufbau in newDbPoolObject.
+func poolKey(tenant, ecId string) string {
+	return strings.ToLower(tenant) + "/" + ecId
+}
+
+func (p *Pool) Put(tenant, ecId string, e *DbObject) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
-	if poolObj, ok := p.pool[ecId]; ok {
+	if poolObj, ok := p.pool[poolKey(tenant, ecId)]; ok {
 		poolObj.Put(e)
 	}
 }
@@ -160,10 +171,11 @@ func (p *Pool) Get(tenant, ecId string) *DbObject {
 	p.mutexPut.Lock()
 	defer p.mutexPut.Unlock()
 
-	poolObj, ok := p.pool[ecId]
+	key := poolKey(tenant, ecId)
+	poolObj, ok := p.pool[key]
 	if !ok {
 		poolObj = newDbPoolObject(p.poolSize, ecId, tenant)
-		p.pool[ecId] = poolObj
+		p.pool[key] = poolObj
 	}
 
 	return poolObj.Get()
