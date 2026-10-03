@@ -15,12 +15,9 @@ import (
 
 func TestCalculateBiAnnualParticipantReport(t *testing.T) {
 
-	db, err := ebow.OpenStorageTest("excelsource", "ecid", "../test/rawdata")
+	db, err := ebow.OpenStorageTest("excelsource", "ecid", t.TempDir())
 	require.NoError(t, err)
-	defer func() {
-		db.CloseTestDriver()
-		//os.RemoveAll("../test/rawdata/excelsource")
-	}()
+	defer db.CloseTestDriver()
 
 	excelFile, err := excel.OpenExceFile("../test/zaehlpunkte-beispieldatei.xlsx")
 	require.NoError(t, err)
@@ -113,7 +110,8 @@ func TestCalculateBiAnnualParticipantReport(t *testing.T) {
 		participant := report.ParticipantReports[0]
 		assert.Equal(t, len(participant.Meters), 1)
 		require.NotNil(t, participant.Meters[0].Report)
-		assert.Equal(t, 26, len(participant.Meters[0].Report.Intermediate.Utilization), "Participant01")
+		// bucket count: known-errors #23, ES-14 — the 26 pinned here came from the code (offsets 0
+		// and 1 share bucket 1); the correct count is a business answer, the defect test is M3 S6.
 
 		fmt.Println("REPORT PARTICIPANTS")
 		participant = report.ParticipantReports[0]

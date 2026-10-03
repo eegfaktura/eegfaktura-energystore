@@ -4,7 +4,8 @@
 #
 # Build-Flow:
 #   1. Checkout
-#   2. Go-Setup + protoc-Codegen (siehe Makefile)
+#   2. Go-Setup + protoc-Codegen (scripts/dev/generate.sh), Tests mit -race,
+#      Coverage-Untergrenzen, gofmt/vet (M0 docs/improve-test-environment)
 #   3. docker/login-action mit VFEEG_DEV_PUSH_PAT (Cross-Org-Push)
 #   4. docker/build-push-action -> ghcr.io/vfeeg-development/eegfaktura-energystore
 #   5. Build-Provenance-Attestation
@@ -60,52 +61,54 @@ jobs:
         with:
           go-version: '1.25'
 
-      - name: Install protoc + Go gRPC plugins
+      - name: Install protoc + Go gRPC plugins (pinned, scripts/dev/generate.sh)
         run: |
           set -eu
-          # Reproduziert den `make protoc`-Schritt aus dem Makefile.
-          # Generierte Files (z.B. protoc/masterdata.pb.go) sind im Repo
-          # nicht committet (nur protoc/excel.pb.go) — Devs lassen das
-          # lokal vor `make docker` laufen. CI muss das selbst tun.
-          # GitHub-Runner haben das Microsoft-azure-cli-Repo vorinstalliert, das
-          # zeitweise 403 liefert. Wir brauchen es fuer protobuf-compiler nicht —
-          # vor `apt-get update` raus, damit echte Fehler nicht maskiert werden.
-          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list \
-                     /etc/apt/sources.list.d/azure-cli.list
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler
-          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+          # Versions as in scripts/dev/generate.sh (known-errors #1, #10; open-points ES-2, ES-3).
+          curl -sSfL -o /tmp/protoc.zip \
+            https://github.com/protocolbuffers/protobuf/releases/download/v29.3/protoc-29.3-linux-x86_64.zip
+          mkdir -p "$HOME/.local/opt/protoc" && unzip -q /tmp/protoc.zip -d "$HOME/.local/opt/protoc"
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.2
           echo "$HOME/go/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.local/opt/protoc/bin" >> "$GITHUB_PATH"
 
-      - name: Run protoc codegen
+      - name: Generated code is up to date
         run: |
-          set -eu
-          export PATH="$HOME/go/bin:$PATH"
-          protoc --experimental_allow_proto3_optional=true \
-            --proto_path=. \
-            --go_out=. --go_opt=paths=source_relative \
-            --go-grpc_out=. --go-grpc_opt=paths=source_relative \
-            ./protoc/*.proto
-          ls -la protoc/
+          bash scripts/dev/generate.sh
+          git diff --exit-code protoc/
 
-      # Bis hierher pruefte die Pipeline nur, ob das Image *baut* — ein gruener
-      # Check bedeutete "kompiliert", nicht "Tests bestehen". Eine Regression in
-      # der Perioden-Metadaten-Logik (PR #26) lief so an einem gruenen Check
-      # vorbei, obwohl ein vorhandener Test sie abgefangen haette.
-      #
-      # Bewusst KEIN `go test ./...`: auf main sind ./calculation (haengt,
-      # Timeout), ./model, ./mqttclient und ./store/ebow schon rot (Badger-Disk,
-      # Wire-Format-Fixtures). Die Liste deckt die Pakete ab, die auf main
-      # zuverlaessig gruen sind — sie ist als Untergrenze gedacht und gehoert
-      # erweitert, sobald die uebrigen Pakete repariert sind.
-      - name: Run Go tests (gruene Pakete)
-        run: go test -count=1 ./utils/ ./store/ ./store/function/ ./excel/ ./tenantctx/ ./graph/
+      # Tests gate the image (M0): a red test, a race, a format or vet finding outside the
+      # recorded ones (#11, #47) or a package below its coverage floor stops the job before
+      # anything is built or pushed. The root package (three func main) is left out, #1.
+      - name: Format and vet
+        run: bash scripts/dev/static-check.sh
 
-      # store/ebow bleibt oben draussen (vorhandener Test "Test" rot), die Tests des
-      # Value-Log-Aufraeumens laufen hier gefiltert mit echtem Badger.
-      - name: Run Go tests (vlog GC, echter Badger)
-        run: go test -count=1 -run TestVlogGC ./store/ebow/
+      - name: Go tests (race detector, coverage)
+        env:
+          TZ: UTC   # the tests fix Europe/Vienna themselves (TestMain); UTC proves it
+        run: bash scripts/dev/test.sh
+
+      - name: Coverage floors
+        run: |
+          bash scripts/dev/coverage-check.sh cover.out
+          go tool cover -html=cover.out -o coverage.html
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage
+          path: |
+            cover.out
+            coverage.html
+          if-no-files-found: ignore
+
+      - name: govulncheck (reporting only)
+        continue-on-error: true
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+          govulncheck $(bash scripts/dev/packages.sh)
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta

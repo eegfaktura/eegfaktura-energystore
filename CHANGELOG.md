@@ -38,6 +38,23 @@ this changelog highlights the changes relevant for overview and operations.
   line of defence the tenant worker recovers from a panic in a single message and logs it.
   Tests `TestEnsureDbInvalidThenValid`, `TestEnsureDbTenantTooLong`.
 
+### Build and CI
+- **A red test now blocks the image.** The CI job checks that the committed protobuf stubs match a
+  regeneration (`scripts/dev/generate.sh`, pinned protoc 29.3 and plugins), runs `gofmt`/`go vet`
+  (`scripts/dev/static-check.sh`), the whole test suite with the race detector (`scripts/dev/test.sh`,
+  every package except the root) and per-package coverage floors, uploads the coverage report and runs
+  `govulncheck` (reporting only) — all before the image is built.
+- `protoc/masterdata*.pb.go` are committed; `docker build` works from a fresh checkout. The build paths
+  of `energystore`/`estore` are unchanged (moving the entry points to `cmd/` was not done, `open-points.md` ES-24).
+- Tests write Badger data only into temporary directories and fix the time zone to `Europe/Vienna`;
+  the intermittent hang of the `calculation` tests is gone (`known-errors.md` #3).
+
+### Documentation
+- Working agreement (`AGENTS.md`, `CLAUDE.md`), tracking files (`known-errors.md`, `open-points.md`,
+  `EXTERNAL_SOURCES.md`, `AGENT_LOG.md`) and a concept for repairing the test environment and raising the
+  test coverage (`docs/improve-test-environment/`). No code change. It records a critical security defect found
+  during the review (`known-errors.md` #16, details not published).
+
 ## [1.5.0] – 2026-10-04
 
 ### Security
