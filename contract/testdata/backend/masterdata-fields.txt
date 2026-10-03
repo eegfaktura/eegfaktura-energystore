@@ -1,0 +1,26 @@
+# The messages and fields of eegfaktura-backend's proto/masterdata.proto at f4974b2 (2026-09-26),
+# written by hand: the backend repository has no LICENSE file, so the file itself is not copied
+# (as billing's B-16). Format: message field number type (optional/repeated as prefix of the type).
+# Accepted differences to protoc/masterdata.proto: option go_package and one comment.
+service ApiService MasterData_MeteringPoint MeteringRequest MeteringPointReply
+message MeteringRequest tenant 1 string
+message MeteringRequest status 2 uint32
+message MeteringRequest from 3 optional uint64
+message MeteringRequest to 4 optional uint64
+message MeteringPointReply status 1 string
+message MeteringPointReply meteringPoints 2 repeated MeteringPoint
+message MeteringPoint meteringPointId 1 string
+message MeteringPoint direction 2 string
+message MeteringPoint status 3 string
+message MeteringPoint partFact 4 uint32
+message MeteringPoint activeSince 5 optional uint64
+message MeteringPoint inactiveSince 6 optional uint64
+message MeteringPoint transformer 7 optional string
+message MeteringPoint equipmentNumber 8 optional string
+message MeteringPoint equipmentName 9 optional string
+message MeteringPoint inverterId 10 optional string
+message MeteringPoint street 11 optional string
+message MeteringPoint streetNumber 12 optional string
+message MeteringPoint city 13 optional string
+message MeteringPoint zip 14 optional string
+message MeteringPoint registeredSince 15 optional uint64

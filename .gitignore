@@ -3,8 +3,6 @@
 /energystore
 /estore
 
-# Generierte Badger-Testdaten (viper persistence.path in den Tests)
-/test/rawdata/
-/store/ebow/te999999/
-/store/ebow/te000011/
-/store/ebow/te000022/
+# Coverage of scripts/dev/test.sh
+/cover.out
+/coverage.html
