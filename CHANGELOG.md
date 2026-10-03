@@ -9,6 +9,11 @@ this changelog highlights the changes relevant for overview and operations.
 ## [Unreleased]
 
 ### Security
+- GraphQL (`singleUpload`, `lastEnergyDate`): the `tenant` argument is now checked against the
+  tenant that `GQLProtect` verified against the token (case-insensitive, `superuser` exempt); a
+  mismatch is refused before any store is opened. The middleware passes the verified tenant on in
+  the request context (new package `tenantctx`, no dependencies, so `graph` stays testable without
+  Keycloak). The web sends the same tenant in header and argument and is not affected.
 - **Tenant isolation: the connection pool was keyed by `ecId` alone.** A pool object opens its
   Badger store under `basePath/<tenant>/<ecId>`, using the tenant of whoever created the entry
   first. A later request for the same `ecId` under a *different* tenant received the first
