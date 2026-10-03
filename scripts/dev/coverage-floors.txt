@@ -1,0 +1,21 @@
+# Coverage floors per package (statements, %), read by scripts/dev/coverage-check.sh.
+# The clean baseline rounded DOWN to the full percent; raised at the end of every milestone, never lowered
+# without a recorded reason. Packages without a line are reported but not gated.
+# M0 baseline: 2026-10-03; raised after M1 (48.8 %) and M2 (65.2 %) and M3 (66.4 %) and M5 (68.0 %, 2026-10-03).
+# M0 baseline run:, bash scripts/dev/test.sh (go 1.26.0, -race, TZ=Europe/Vienna and TZ=UTC).
+calculation            72
+excel                  76
+mocks                  83
+model                  66
+mqttclient             66
+store                  77
+store/ebow             71
+store/ebow/codec/json  100
+store/ebow/codec/key   89
+store/function         78
+utils                  88
+graph                  100
+middleware             55
+middleware/httputil    70
+rest                   84
+services               81
