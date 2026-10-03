@@ -154,20 +154,39 @@ func TestVlogGCDeferredWithOpenIterator(t *testing.T) {
 	st.Close()
 }
 
-// Der Pool ist nur nach ecId geschluesselt: liefert er eine andere Datenbank, wird uebersprungen.
+// Gleiche ecId unter zwei Tenants: der Pool ist nach Tenant UND ecId geschluesselt und liefert die
+// Datenbank des angefragten Tenants -- der Lauf bearbeitet sie, die des anderen bleibt unberuehrt.
 func TestVlogGCDirectoryCheck(t *testing.T) {
 	base := vlogGCTestBase(t)
 	ecId := "ECIDVLOGGC0004"
-	fillVlog(t, "tegcaaaa", ecId, 3, 40) // Pool-Eintrag fuer ecId mit Tenant tegcaaaa
+	fillVlog(t, "tegcaaaa", ecId, 3, 40) // Pool-Eintrag fuer tegcaaaa/ecId
+	fillVlog(t, "tegcbbbb", ecId, 8, 40) // Pool-Eintrag fuer tegcbbbb/ecId, genug Altdaten zum Aufraeumen
+	flatten(t, "tegcbbbb", ecId)
 
-	other, err := OpenStorageTest("tegcbbbb", ecId, base) // gleiche ecId, anderes Verzeichnis, am Pool vorbei
+	otherBefore, _, _ := vlogBytes(filepath.Join(base, "tegcaaaa", ecId))
+	ref := refFor(base, "tegcbbbb", ecId)
+	budget := int64(100 << 30)
+	res := collectDatabase(context.Background(), vlogGCTestConfig(base), ref, time.Now().Add(time.Hour), &budget)
+	require.NoError(t, res.err)
+	assert.False(t, res.skipped)
+	assert.Greater(t, res.rewrites, 0)
+	otherAfter, _, _ := vlogBytes(filepath.Join(base, "tegcaaaa", ecId))
+	assert.Equal(t, otherBefore, otherAfter, "die Datenbank des anderen Tenants darf nicht angefasst werden")
+}
+
+// Liefert der Pool ein anderes Verzeichnis als das aufgezaehlte (hier: Tenant-Verzeichnis in
+// Grossbuchstaben, der Pool oeffnet klein geschrieben), wird uebersprungen statt fremd aufgeraeumt.
+func TestVlogGCSkipsWhenPoolOpensOtherDir(t *testing.T) {
+	base := vlogGCTestBase(t)
+	ecId := "ECIDVLOGGC0007"
+	st, err := OpenStorageTest("TEGCEEEE", ecId, base) // am Pool vorbei, Verzeichnis in Grossbuchstaben
 	require.NoError(t, err)
-	require.NoError(t, other.db.Badger().Update(func(txn *badger.Txn) error {
+	require.NoError(t, st.db.Badger().Update(func(txn *badger.Txn) error {
 		return txn.Set([]byte("cpmeta/0"), make([]byte, vlogGCTestValue))
 	}))
-	other.CloseTestDriver()
+	st.CloseTestDriver()
 
-	ref := refFor(base, "tegcbbbb", ecId) // bewusst ohne sharedEcId: hier greift die Verzeichnispruefung
+	ref := refFor(base, "TEGCEEEE", ecId)
 	budget := int64(100 << 30)
 	res := collectDatabase(context.Background(), vlogGCTestConfig(base), ref, time.Now().Add(time.Hour), &budget)
 	assert.True(t, res.skipped)
