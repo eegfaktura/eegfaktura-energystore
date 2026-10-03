@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"at.ourproject/energystore/tenantctx"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/golang/glog"
 )
@@ -214,7 +215,9 @@ func GQLProtect(next http.Handler) http.Handler {
 			}
 		}
 
-		next.ServeHTTP(w, r)
+		// Die Resolver bekommen tenant als Argument; geprueft ist nur der Header. Den geprueften
+		// Mandanten weiterreichen, damit die Resolver das Argument abgleichen (tenantctx.Check).
+		next.ServeHTTP(w, r.WithContext(tenantctx.WithCaller(r.Context(), tenant, superuser)))
 	})
 }
 
