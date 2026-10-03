@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"at.ourproject/energystore/calculation"
+	"at.ourproject/energystore/internal/testsupport"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
 	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -267,11 +267,12 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 		},
 	}
 
-	viper.Set("persistence.path", "../test/rawdata")
+	testsupport.UseTempPersistence(t)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			importer := NewTenantEnergyImporter("importer", &MQTTStreamer{})
+			defer importer.Close() // an unclosed importer keeps its pool objects (known-errors #54)
 			err = importer.Import(tt.energy)
 			require.NoError(t, err)
 
@@ -291,12 +292,11 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 		})
 	}
 
-	assert.NoError(t, os.RemoveAll("../test/rawdata/importer"))
 }
 
 func TestImportRawdataStore(t *testing.T) {
 
-	viper.Set("persistence.path", "../test/rawdata")
+	dir := testsupport.UseTempPersistence(t)
 
 	jsonRaw, err := os.ReadFile("../test/energy-response-new-text.json")
 	require.NoError(t, err)
@@ -318,7 +318,7 @@ func TestImportRawdataStore(t *testing.T) {
 
 	importer.Close()
 
-	db, err := ebow.OpenStorageTest("te100190", "AT00400000000RC101590000000400111", "../test/rawdata")
+	db, err := ebow.OpenStorageTest("te100190", "AT00400000000RC101590000000400111", dir)
 	require.NoError(t, err)
 
 	meta, err := db.GetMeta("cpmeta/0")
@@ -363,60 +363,46 @@ func TestImportRawdataStore(t *testing.T) {
 	//require.Equal(t, 5.388, energy.Report.Consumed[0])
 
 	fmt.Printf("META_DATA: %+v\n", string(response))
-
-	os.RemoveAll("../test/rawdata/rc100190")
 }
 
-func loadTestData() (*model.MqttEnergyMessage, error) {
-	content, err := os.ReadFile("../energy-mass-test-data.json")
-	if err != nil {
-		return nil, err
-	}
-	var obj model.MqttEnergyMessage
-	err = json.Unmarshal(content, &obj)
-	return &obj, err
-}
-
+// TestMassImport imports one CR_MSG with three days of quarter-hour values (generated here,
+// formerly a 2976-slot file that was in no repository, known-errors #5) and reads them back
+// through QueryRawData as /query/rawdata does.
 func TestMassImport(t *testing.T) {
-
-	viper.Set("persistence.path", "../test/rawdata")
-
-	testData, err := loadTestData()
-	require.NoError(t, err)
+	testsupport.UseTempPersistence(t)
 
 	tenant := "TE100888"
 	ecId := "AT00300000000RC100181000000956509"
+	meter := "AT0030000000000000000000000383545"
+	start := time.Date(2025, time.October, 1, 0, 0, 0, 0, testsupport.Vienna)
+	const slots = 3 * 96
 
-	startTime := int64(1759269600000)
-	endTime := int64(1761951600000)
+	con, share, cover := make([]float64, slots), make([]float64, slots), make([]float64, slots)
+	for i := range con {
+		con[i] = float64(i%96+1) / 1000
+		share[i] = float64(i%7) / 10000
+		cover[i] = share[i] / 2
+	}
+	msg := testsupport.CrMsg(ecId, meter).Direction(model.CONSUMER_DIRECTION).
+		Energy(start, "L1", map[model.MeterCodeValue][]float64{
+			model.CODE_CON: con, model.CODE_SHARE: share, model.CODE_COVER: cover}).Message()
 
-	importer := NewTenantEnergyImporter("TE100888", &MQTTStreamer{})
-	err = importer.Import(testData)
+	importer := NewTenantEnergyImporter(tenant, &MQTTStreamer{})
+	require.NoError(t, importer.Import(msg))
+	importer.Close()
+
+	last := start.Add((slots - 1) * 15 * time.Minute)
+	resp, err := store.QueryRawData(tenant, ecId, start, last, []store.TargetMP{{MeteringPoint: meter}}, map[string][]string{})
 	require.NoError(t, err)
 
-	resp, err := store.QueryRawData(tenant, ecId, time.UnixMilli(startTime), time.UnixMilli(endTime), []store.TargetMP{{MeteringPoint: "AT0030000000000000000000000383545"}}, map[string][]string{})
-	require.NoError(t, err)
-
-	resultEntry := resp["AT0030000000000000000000000383545"]
-	//fmt.Printf("Length: %d\n", len(resultEntry.Data))
-	//fmt.Printf("Data on postition[0000]: %f\n", resultEntry.Data[0].Value)
-	//fmt.Printf("Data on postition[1000]: %d\n", resultEntry.Data[1000].Ts)
-	//fmt.Printf("Data on postition[2975]: %d\n", resultEntry.Data[2975].Ts)
-
-	assert.Equal(t, 2976, len(resultEntry.Data))
-
-	assert.Equal(t, 0.0, resultEntry.Data[0].Value[0])
-
-	assert.Equal(t, int64(1760169600000), resultEntry.Data[1000].Ts)
-	assert.Equal(t, 0.001, resultEntry.Data[1000].Value[0])
-	assert.Equal(t, 0.000077, resultEntry.Data[1000].Value[1])
-	assert.Equal(t, 0.000077, resultEntry.Data[1000].Value[2])
-
-	assert.Equal(t, int64(1761950700000), resultEntry.Data[2975].Ts)
-	assert.Equal(t, 0.001, resultEntry.Data[2975].Value[0])
-	assert.Equal(t, 0.000028, resultEntry.Data[2975].Value[1])
-	assert.Equal(t, 0.000028, resultEntry.Data[2975].Value[2])
-
-	//fmt.Printf("Response: %+v\n", resp["AT0030000000000000000000000383545"])
-
+	result := resp[meter]
+	require.NotNil(t, result)
+	require.Equal(t, slots, len(result.Data))
+	for _, i := range []int{0, 95, 96, 150, slots - 1} {
+		ts := start.Add(time.Duration(i) * 15 * time.Minute)
+		assert.Equal(t, ts.UnixMilli(), result.Data[i].Ts, "slot %d", i)
+		testsupport.InDelta(t, con[i], result.Data[i].Value[0], "G.01 slot %d", i)
+		testsupport.InDelta(t, share[i], result.Data[i].Value[1], "G.02 slot %d", i)
+		testsupport.InDelta(t, cover[i], result.Data[i].Value[2], "G.03 slot %d", i)
+	}
 }

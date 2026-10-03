@@ -202,126 +202,70 @@ func printResult(r map[string]*RawDataResult) {
 	}
 }
 
-func TestAggregate_HandleFinish(t *testing.T) {
-	ctx, err := createTestEngineContext(time.Date(2022, time.Month(1), 1, 0, 0, 0, 0, time.Local),
-		time.Date(2022, 1, 2, 0, 0, 0, 0, time.Local))
-	require.NoError(t, err)
+// The three Handle* tests (GoLand skeletons with one NoError case before M1, known-errors #8) follow
+// one hourly aggregation for the test consumer (SourceIdx 0) through init, lines and finish.
+const testMeter = "AT002000000000000000000011111"
 
-	type fields struct {
-		ParentFunction ParentFunction
-		Cache          Cache
-	}
-	type args struct {
-		ctx *EngineContext
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr assert.ErrorAssertionFunc
-	}{
-		{
-			name: "Handle Finish",
-			fields: fields{
-				ParentFunction: ParentFunction{cps: []TargetMP{{MeteringPoint: "AT002000000000000000000011111"}}, Result: make(map[string]*RawDataResult)},
-				Cache:          Cache{cacheTsFn: AddDuration(1)},
-			},
-			args:    args{ctx: ctx},
-			wantErr: assert.NoError,
-		},
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			agg := &Aggregate{
-				ParentFunction: tt.fields.ParentFunction,
-				Cache:          tt.fields.Cache,
-			}
-			tt.wantErr(t, agg.HandleFinish(tt.args.ctx), fmt.Sprintf("HandleFinish(%v)", tt.args.ctx))
-		})
-	}
+func newHourlyAggregate(t *testing.T) (*Aggregate, *EngineContext) {
+	ctx, err := createTestEngineContext(time.Date(2022, time.January, 1, 0, 0, 0, 0, time.Local),
+		time.Date(2022, time.January, 2, 0, 0, 0, 0, time.Local))
+	require.NoError(t, err)
+	f, err := NewAggregateFunction([]string{"1h"}, []TargetMP{{MeteringPoint: testMeter}})
+	require.NoError(t, err)
+	return f.(*Aggregate), ctx
+}
+
+func consumerLine(id string, g1 float64, qov int) *model.RawSourceLine {
+	return &model.RawSourceLine{Id: id, Consumers: []float64{g1, g1 / 2, g1 / 4}, QoVConsumers: []int{qov, 1, 1}}
 }
 
 func TestAggregate_HandleInit(t *testing.T) {
-	ctx, err := createTestEngineContext(time.Date(2022, time.Month(1), 1, 0, 0, 0, 0, time.Local),
-		time.Date(2022, 1, 2, 0, 0, 0, 0, time.Local))
-	require.NoError(t, err)
+	agg, ctx := newHourlyAggregate(t)
+	require.NoError(t, agg.HandleInit(ctx))
 
-	type fields struct {
-		ParentFunction ParentFunction
-		Cache          Cache
-	}
-	type args struct {
-		ctx *EngineContext
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr assert.ErrorAssertionFunc
-	}{{
-		name: "Handle Init",
-		fields: fields{
-			ParentFunction: ParentFunction{cps: []TargetMP{{MeteringPoint: "AT002000000000000000000011111"}}, Result: make(map[string]*RawDataResult)},
-			Cache:          Cache{cacheTsFn: AddDuration(1)},
-		},
-		args:    args{ctx: ctx},
-		wantErr: assert.NoError,
-	},
-	// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			agg := &Aggregate{
-				ParentFunction: tt.fields.ParentFunction,
-				Cache:          tt.fields.Cache,
-			}
-			tt.wantErr(t, agg.HandleInit(tt.args.ctx), fmt.Sprintf("HandleInit(%v)", tt.args.ctx))
-		})
-	}
+	assert.NotNil(t, agg.Result)
+	assert.Empty(t, agg.Result)
+	assert.Equal(t, ctx.start, agg.cacheTime.Time)
+	assert.Equal(t, []float64{0, 0, 0}, agg.cache.Consumers, "one consumer: a G.01/G.02/G.03 triple")
+	assert.Equal(t, []int{1, 1, 1}, agg.cache.QoVConsumers, "quality starts at L1")
+	assert.Empty(t, agg.cache.Producers)
 }
 
 func TestAggregate_HandleLine(t *testing.T) {
-	ctx, err := createTestEngineContext(time.Date(2022, time.Month(1), 1, 0, 0, 0, 0, time.Local),
-		time.Date(2022, 1, 2, 0, 0, 0, 0, time.Local))
-	require.NoError(t, err)
+	agg, ctx := newHourlyAggregate(t)
+	require.NoError(t, agg.HandleInit(ctx))
 
-	type fields struct {
-		ParentFunction ParentFunction
-		Cache          Cache
-	}
-	type args struct {
-		ctx  *EngineContext
-		line *model.RawSourceLine
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr assert.ErrorAssertionFunc
-	}{
-		{
-			name: "Aggregate Hour",
-			fields: fields{
-				ParentFunction: ParentFunction{cps: []TargetMP{{MeteringPoint: "AT002000000000000000000011111"}}, Result: make(map[string]*RawDataResult)},
-				Cache:          Cache{cacheTsFn: AddDuration(1)},
-			},
-			args: args{
-				ctx:  ctx,
-				line: &model.RawSourceLine{Id: "CP/2022/11/09/00/00/00", Consumers: []float64{0.118}, Producers: []float64{}},
-			},
-			wantErr: assert.NoError,
-		}, // TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			agg := &Aggregate{
-				ParentFunction: tt.fields.ParentFunction,
-				Cache:          tt.fields.Cache,
-			}
-			tt.wantErr(t, agg.HandleLine(tt.args.ctx, tt.args.line), fmt.Sprintf("HandleLine(%v, %v)", tt.args.ctx, tt.args.line))
-		})
-	}
+	require.NoError(t, agg.HandleLine(ctx, consumerLine("CP/2022/01/01/00/00/00", 1.0, 1)))
+	require.NoError(t, agg.HandleLine(ctx, consumerLine("CP/2022/01/01/00/45/00", 0.5, 2)))
+	assert.Empty(t, agg.Result, "the first hour is still in the cache")
+
+	require.NoError(t, agg.HandleLine(ctx, consumerLine("CP/2022/01/01/01/00/00", 2.0, 1)))
+	require.Contains(t, agg.Result, testMeter)
+	data := agg.Result[testMeter].Data
+	require.Len(t, data, 1)
+	assert.Equal(t, time.Date(2022, 1, 1, 0, 0, 0, 0, time.Local).UnixMilli(), data[0].Ts)
+	assert.InDelta(t, 1.5, data[0].Value[0], 1e-9)
+	assert.InDelta(t, 0.75, data[0].Value[1], 1e-9)
+	assert.InDelta(t, 0.375, data[0].Value[2], 1e-9)
+	assert.Equal(t, 2, data[0].Qov[0], "an L2 slot makes the hour L2")
+	assert.Equal(t, model.CONSUMER_DIRECTION, agg.Result[testMeter].Direction)
+
+	assert.Error(t, agg.HandleLine(ctx, consumerLine("XX/garbage", 1, 1)), "a row id that is no time")
+}
+
+func TestAggregate_HandleFinish(t *testing.T) {
+	agg, ctx := newHourlyAggregate(t)
+	require.NoError(t, agg.HandleInit(ctx))
+	require.NoError(t, agg.HandleLine(ctx, consumerLine("CP/2022/01/01/00/00/00", 1.0, 1)))
+	require.NoError(t, agg.HandleLine(ctx, consumerLine("CP/2022/01/01/01/00/00", 2.0, 1)))
+	require.NoError(t, agg.HandleLine(ctx, consumerLine("CP/2022/01/01/01/15/00", 2.0, 1)))
+
+	require.NoError(t, agg.HandleFinish(ctx))
+	data := agg.Result[testMeter].Data
+	require.Len(t, data, 2, "finish flushes the last hour")
+	assert.Equal(t, time.Date(2022, 1, 1, 1, 0, 0, 0, time.Local).UnixMilli(), data[1].Ts)
+	assert.InDelta(t, 4.0, data[1].Value[0], 1e-9)
+	assert.Equal(t, []int{1, 1, 1}, data[1].Qov)
 }
 
 func TestAggregateFunction(t *testing.T) {
@@ -420,21 +364,38 @@ func TestAggregateFunction(t *testing.T) {
 	}
 }
 
+// calcQoV combines the quality of a cached slot (current) with a new one (target). The table records
+// today's rule; what QoV 0 means and how an aggregate's quality is formed is open-points ES-15, so this
+// is not a statement that the rule is right (known-errors #30).
 func Test_calcQoV(t *testing.T) {
-	type args struct {
-		current int
-		target  int
-	}
-	tests := []struct {
-		name string
-		args args
-		want int
-	}{
-		// TODO: Add test cases.
+	tests := []struct{ current, target, want int }{
+		{1, 1, 1}, {1, 2, 2}, {1, 3, 3}, {1, 0, 0}, // from L1 every other value wins
+		{2, 1, 2}, {2, 3, 3}, {3, 2, 3}, {2, 2, 2}, // the worse of L2/L3 stays
+		{0, 1, 0}, {0, 2, 2}, {0, 3, 3}, {0, 0, 0}, // 0 is replaced by L2/L3, never by L1 (#30)
+		{3, 0, 3},
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equalf(t, tt.want, calcQoV(tt.args.current, tt.args.target), "calcQoV(%v, %v)", tt.args.current, tt.args.target)
+		assert.Equalf(t, tt.want, calcQoV(tt.current, tt.target), "calcQoV(%d, %d)", tt.current, tt.target)
+	}
+}
+
+func Test_parseArgumentRejectsWrongUnits(t *testing.T) {
+	for _, arg := range []string{"1x", "xh", "1.5d", "w", "99999d"} {
+		_, err := parseArgument(arg)
+		assert.Error(t, err, "argument %q", arg)
+	}
+	_, err := NewAggregateFunction([]string{"1d", "1h"}, nil)
+	assert.Error(t, err, "exactly one argument")
+}
+
+// An empty argument (a request parameter "aggregate=") panics with index out of range
+// (known-errors #46, F31); it must be an error.
+func Test_parseArgumentEmpty(t *testing.T) {
+	t.Skip("known-errors #46")
+	for _, arg := range []string{"", "   "} {
+		assert.NotPanics(t, func() {
+			_, err := parseArgument(arg)
+			assert.Error(t, err, "argument %q", arg)
 		})
 	}
 }
