@@ -100,7 +100,7 @@ jobs:
       # zuverlaessig gruen sind — sie ist als Untergrenze gedacht und gehoert
       # erweitert, sobald die uebrigen Pakete repariert sind.
       - name: Run Go tests (gruene Pakete)
-        run: go test -count=1 ./utils/ ./store/ ./store/function/ ./excel/
+        run: go test -count=1 ./utils/ ./store/ ./store/function/ ./excel/ ./tenantctx/ ./graph/
 
       # store/ebow bleibt oben draussen (vorhandener Test "Test" rot), die Tests des
       # Value-Log-Aufraeumens laufen hier gefiltert mit echtem Badger.
