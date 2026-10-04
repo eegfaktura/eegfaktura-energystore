@@ -294,6 +294,60 @@ func TestVlogGCSizeCountsClosedNewestFile(t *testing.T) {
 	assert.InDelta(t, closed, open, float64(1<<20), "offen: die vorbelegte Datei zaehlt nicht")
 }
 
+// Der Probelauf oeffnet keine Datenbank und aendert keine Datei, sagt aber dieselbe Arbeit voraus,
+// die der echte Lauf danach tut.
+func TestVlogGCDryRunChangesNothing(t *testing.T) {
+	base := vlogGCTestBase(t)
+	tenant, ecId := "tegc0012", "ECIDVLOGGC0012"
+	fillVlog(t, tenant, ecId, 12, 40)
+	flatten(t, tenant, ecId)
+	ref := refFor(base, tenant, ecId)
+
+	snapshot := func() map[string]int64 {
+		files := map[string]int64{}
+		require.NoError(t, filepath.Walk(ref.dir, func(p string, fi os.FileInfo, err error) error {
+			if err == nil && !fi.IsDir() {
+				files[filepath.Base(p)] = fi.Size()
+			}
+			return err
+		}))
+		return files
+	}
+	before := snapshot()
+
+	cfg := vlogGCTestConfig(base)
+	cfg.DryRun = true
+	budget := int64(100 << 30)
+	dry := collectDatabase(context.Background(), cfg, ref, time.Now().Add(time.Hour), &budget)
+	require.NoError(t, dry.err)
+	assert.Equal(t, before, snapshot(), "der Probelauf darf nichts aendern")
+	assert.Greater(t, dry.rewrites, 5)
+	assert.Greater(t, dry.freed, ref.vlogBytes/2)
+
+	cfg.DryRun = false
+	budget = int64(100 << 30)
+	real := collectDatabase(context.Background(), cfg, ref, time.Now().Add(time.Hour), &budget)
+	require.NoError(t, real.err)
+	t.Logf("Probelauf: %d Umschreibungen, %d MB frei; echt: %d Umschreibungen, %d MB frei",
+		dry.rewrites, dry.freed>>20, real.rewrites, real.freed>>20)
+	assert.InDelta(t, real.rewrites, dry.rewrites, 1)
+	assert.InDelta(t, real.freed, dry.freed, float64(real.freed)/5)
+}
+
+// Probelauf mit Budget: er zaehlt es herunter wie der echte Lauf und haelt an derselben Stelle.
+func TestVlogGCDryRunBudget(t *testing.T) {
+	base := vlogGCTestBase(t)
+	tenant, ecId := "tegc0013", "ECIDVLOGGC0013"
+	fillVlog(t, tenant, ecId, 10, 40)
+	flatten(t, tenant, ecId)
+	cfg := vlogGCTestConfig(base)
+	cfg.DryRun = true
+	budget := int64(1)
+	res := collectDatabase(context.Background(), cfg, refFor(base, tenant, ecId), time.Now().Add(time.Hour), &budget)
+	assert.Equal(t, 1, res.rewrites)
+	assert.LessOrEqual(t, budget, int64(0))
+}
+
 func TestVlogGCDisabledStartsNothing(t *testing.T) {
 	wait := StartVlogGC(context.Background(), VlogGCConfig{Enabled: false})
 	done := make(chan struct{})
@@ -329,6 +383,7 @@ func TestVlogGCConfigDefaultsOff(t *testing.T) {
 	assert.Equal(t, 0.5, cfg.DiscardRatio)
 	assert.Equal(t, int64(100<<20), cfg.MinVlogBytes)
 	assert.Equal(t, int64(50<<30), cfg.MaxBytesPerRun)
+	assert.False(t, cfg.DryRun)
 
 	for _, w := range []string{"02:00", "25:00-03:00", "02:00-02:00", "a-b"} {
 		c := VlogGCConfig{Window: w, CheckEvery: time.Minute, DiscardRatio: 0.5, ProbeRatio: 0.1}
