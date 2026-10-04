@@ -63,6 +63,15 @@ this changelog highlights the changes relevant for overview and operations.
   accounted as discardable, so the GC will reclaim it. Tests with a real Badger
   (`go test -run TestVlogGC ./store/ebow/`, now a separate CI step): 93 MB value log reclaimed to
   0 in 12 rewrites of ~6–10 ms each; one 976 MB file in 349 ms (local disk, warm cache).
+
+  **Dry run** (`dryRun`, default false, env `ENERGYSTORE_PERSISTENCE_VLOGGC_DRYRUN`): with
+  `enabled=true` and `dryRun=true` the run keeps its schedule, window and budget but opens no
+  database. Per database it only reads `DISCARD` and the value-log file sizes and logs which files
+  `RunValueLogGC` would rewrite (largest discard first, stopping at the first file under
+  `discardRatio`, as Badger's `pickLog` does), how much it would read and the estimated space freed.
+  All lines are tagged `vlogGC [DRY-RUN]`. Meant for checking production before switching the run
+  on; run time, memory and the effect of open iterators only show in a real run. In the test the
+  prediction matched the real run exactly (12 rewrites, 93 MB).
 - CI builds `env/**` branches and deploys the resulting image into the matching feature
   environment (ADR-0008): a push to `env/<name>` pins this service in namespace `env-<name>`
   to that branch's `sha-…` image. Previously only the default branch, tags and `preview/**`

@@ -43,6 +43,7 @@ type VlogGCConfig struct {
 	ProbeRatio     float64
 	MinVlogBytes   int64
 	MaxBytesPerRun int64
+	DryRun         bool // nur lesen und protokollieren, was ein Lauf taete; keine Datenbank wird geoeffnet
 	BasePath       string
 
 	startMin, endMin int // Fenstergrenzen in Minuten nach Mitternacht
@@ -67,6 +68,7 @@ func ReadVlogGCConfig() (VlogGCConfig, error) {
 	viper.SetDefault(vlogGCKey+"probeRatio", 0.1)
 	viper.SetDefault(vlogGCKey+"minVlogMB", 100)
 	viper.SetDefault(vlogGCKey+"maxGBPerRun", 50)
+	viper.SetDefault(vlogGCKey+"dryRun", false)
 
 	cfg := VlogGCConfig{
 		Enabled:        viper.GetBool(vlogGCKey + "enabled"),
@@ -76,6 +78,7 @@ func ReadVlogGCConfig() (VlogGCConfig, error) {
 		ProbeRatio:     viper.GetFloat64(vlogGCKey + "probeRatio"),
 		MinVlogBytes:   viper.GetInt64(vlogGCKey+"minVlogMB") << 20,
 		MaxBytesPerRun: viper.GetInt64(vlogGCKey+"maxGBPerRun") << 30,
+		DryRun:         viper.GetBool(vlogGCKey + "dryRun"),
 		BasePath:       viper.GetString("persistence.path"),
 	}
 	return cfg, cfg.parse()
@@ -140,6 +143,14 @@ func (c VlogGCConfig) window(now time.Time) (in bool, end time.Time, day string)
 	return false, time.Time{}, ""
 }
 
+// logTag kennzeichnet die Zeilen eines Probelaufs, damit sie niemand fuer einen echten Lauf haelt.
+func (c VlogGCConfig) logTag() string {
+	if c.DryRun {
+		return "vlogGC [DRY-RUN]"
+	}
+	return "vlogGC"
+}
+
 // StartVlogGC startet den Zeitplan und gibt eine Funktion zurueck, die auf das Ende des
 // Hintergrundlaufs wartet. Sie muss VOR ClosePool aufgerufen werden: Pool.Close schliesst jede
 // Datenbank, auch wenn der Lauf gerade einen Platz haelt.
@@ -148,8 +159,8 @@ func StartVlogGC(ctx context.Context, cfg VlogGCConfig) (wait func()) {
 		glog.Info("vlogGC: ausgeschaltet (persistence.vlogGC.enabled=false)")
 		return func() {}
 	}
-	glog.Infof("vlogGC: eingeschaltet, Fenster %s Europe/Vienna, Pruefung alle %v, discardRatio %.2f, minVlog %d MB, max %d GB je Lauf",
-		cfg.Window, cfg.CheckEvery, cfg.DiscardRatio, cfg.MinVlogBytes>>20, cfg.MaxBytesPerRun>>30)
+	glog.Infof("%s: eingeschaltet, Fenster %s Europe/Vienna, Pruefung alle %v, discardRatio %.2f, minVlog %d MB, max %d GB je Lauf",
+		cfg.logTag(), cfg.Window, cfg.CheckEvery, cfg.DiscardRatio, cfg.MinVlogBytes>>20, cfg.MaxBytesPerRun>>30)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -205,7 +216,7 @@ func runVlogGC(ctx context.Context, cfg VlogGCConfig, deadline time.Time) (stop 
 		glog.Errorf("vlogGC: Aufzaehlung von %s fehlgeschlagen: %v", cfg.BasePath, err)
 		return "Aufzaehlung fehlgeschlagen"
 	}
-	glog.Infof("vlogGC: Lauf beginnt, %d Datenbanken, Frist %s", len(refs), deadline.In(vienna).Format("15:04"))
+	glog.Infof("%s: Lauf beginnt, %d Datenbanken, Frist %s", cfg.logTag(), len(refs), deadline.In(vienna).Format("15:04"))
 
 	budget := cfg.MaxBytesPerRun
 	var st vlogGCStats
@@ -251,9 +262,12 @@ func runVlogGC(ctx context.Context, cfg VlogGCConfig, deadline time.Time) (stop 
 	}
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
-	glog.Infof("vlogGC: Lauf beendet (%s) in %v: %d bearbeitet, %d uebersprungen, %d fehlerhaft, %d Umschreibungen, %d MB gelesen, %d MB freigegeben, HeapInuse %d MB",
-		stop, time.Since(started).Round(time.Second), st.databases, st.skipped, st.failed, st.rewrites,
+	glog.Infof("%s: Lauf beendet (%s) in %v: %d bearbeitet, %d uebersprungen, %d fehlerhaft, %d Umschreibungen, %d MB gelesen, %d MB freigegeben, HeapInuse %d MB",
+		cfg.logTag(), stop, time.Since(started).Round(time.Second), st.databases, st.skipped, st.failed, st.rewrites,
 		st.read>>20, st.freed>>20, ms.HeapInuse>>20)
+	if cfg.DryRun {
+		glog.Infof("%s: Probelauf, nichts geaendert; Umschreibungen und Freigabe sind aus DISCARD geschaetzt", cfg.logTag())
+	}
 	return stop
 }
 
@@ -407,10 +421,14 @@ func collectDatabase(ctx context.Context, cfg VlogGCConfig, ref vlogRef, deadlin
 	// echten Gemeinschaft in der falschen Kopie. Also nur mit vorhandenem, passendem Pool-Eintrag.
 	if ref.sharedEcId {
 		if exists, same := connectionPool.holdsEntry(ref.ecId, ref.tenant); !exists || !same {
-			glog.Infof("vlogGC: %s uebersprungen: ecId liegt unter mehreren Tenants und der Pool haelt sie nicht unter diesem Tenant (Eintrag vorhanden: %v)", name, exists)
+			glog.Infof("%s: %s uebersprungen: ecId liegt unter mehreren Tenants und der Pool haelt sie nicht unter diesem Tenant (Eintrag vorhanden: %v)", cfg.logTag(), name, exists)
 			res.skipped = true
 			return res
 		}
+	}
+
+	if cfg.DryRun {
+		return dryRunDatabase(cfg, ref, budget)
 	}
 
 	// Das Oeffnen ist nicht unterbrechbar und liest die juengste Value-Log-Datei ganz (Badger prueft,
@@ -511,4 +529,62 @@ func probeResult(err error) string {
 	default:
 		return err.Error()
 	}
+}
+
+// dryRunDatabase sagt voraus, was collectDatabase umschreiben wuerde, ohne die Datenbank zu oeffnen:
+// es liest nur DISCARD und die Groessen der Value-Log-Dateien. Nachgebildet ist pickLog (badger
+// value.go): immer die Datei mit dem groessten Verwurf, solange deren Verhaeltnis die Schwelle
+// erreicht; die erste darunter beendet die Datenbank, auch wenn kleinere Dateien sie noch erreichten.
+// Die Freigabe ist geschaetzt (verworfene Bytes); Laufzeit, Speicher und offene Iteratoren zeigt
+// erst ein echter Lauf.
+func dryRunDatabase(cfg VlogGCConfig, ref vlogRef, budget *int64) (res collectResult) {
+	name := ref.tenant + "/" + ref.ecId
+	before, sizes, curFid := vlogBytes(ref.dir)
+	// Die hoechste Datei ist nur dann die aktuelle, wenn die Datenbank offen ist (vorbelegt). Eine
+	// geschlossene Datenbank beginnt beim Oeffnen fuer den Lauf eine neue Datei.
+	if sizes[curFid] < vlogPreallocated {
+		curFid++
+	}
+
+	type slot struct {
+		fid           uint64
+		discard, size int64
+	}
+	var slots []slot
+	if buf, err := os.ReadFile(filepath.Join(ref.dir, "DISCARD")); err == nil {
+		for i := 0; i+16 <= len(buf); i += 16 {
+			fid := binary.BigEndian.Uint64(buf[i:])
+			dis := binary.BigEndian.Uint64(buf[i+8:])
+			if fid == 0 {
+				break
+			}
+			if sz, ok := sizes[fid]; ok && dis > 0 && fid < curFid {
+				slots = append(slots, slot{fid, int64(dis), sz})
+			}
+		}
+	}
+	sort.Slice(slots, func(i, j int) bool { return slots[i].discard > slots[j].discard })
+
+	end := "nichts mehr umzuschreiben"
+	for _, s := range slots {
+		if *budget <= 0 {
+			end = "Budget je Lauf erreicht"
+			break
+		}
+		if s.size == 0 || float64(s.discard) < cfg.DiscardRatio*float64(s.size) {
+			end = fmt.Sprintf("naechster Kandidat fid %d unter der Schwelle (Verhaeltnis %.2f < %.2f)",
+				s.fid, float64(s.discard)/float64(max(s.size, 1)), cfg.DiscardRatio)
+			break
+		}
+		res.rewrites++
+		res.read += s.size
+		res.freed += s.discard
+		*budget -= s.size
+	}
+	if len(slots) == 0 {
+		end = "keine Verwurfsstatistik"
+	}
+	glog.Infof("%s: %s: Value Log %d MB, wuerde %d Dateien umschreiben (%d MB lesen), geschaetzt frei %d MB, danach ~%d MB, Ende: %s",
+		cfg.logTag(), name, before>>20, res.rewrites, res.read>>20, res.freed>>20, (before-res.freed)>>20, end)
+	return res
 }
