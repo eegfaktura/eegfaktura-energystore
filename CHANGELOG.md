@@ -8,6 +8,8 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+## [1.5.0] – 2026-10-04
+
 ### Security
 - GraphQL (`singleUpload`, `lastEnergyDate`): the `tenant` argument is now checked against the
   tenant that `GQLProtect` verified against the token (case-insensitive, `superuser` exempt); a
@@ -34,6 +36,8 @@ this changelog highlights the changes relevant for overview and operations.
   Note for production: the PVC there holds about 1.2 TB, and the kubelet walks the whole
   volume when applying `fsGroup`. `fsGroupChangePolicy: OnRootMismatch` keeps that from
   delaying every pod start.
+- `google.golang.org/grpc` 1.83.1 -> 1.83.2 (Dependabot #40), patch release on top of the
+  CVE-2026-84304 fix.
 
 ### Added
 - **Value-log garbage collection** (#45), **off by default**. The production volume fills up by
