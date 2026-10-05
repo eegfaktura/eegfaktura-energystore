@@ -50,10 +50,9 @@ this changelog highlights the changes relevant for overview and operations.
   the intermittent hang of the `calculation` tests is gone (`known-errors.md` #3).
 
 ### Documentation
-- Working agreement (`AGENTS.md`, `CLAUDE.md`), tracking files (`known-errors.md`, `open-points.md`,
-  `EXTERNAL_SOURCES.md`, `AGENT_LOG.md`) and a concept for repairing the test environment and raising the
-  test coverage (`docs/improve-test-environment/`). No code change. It records a critical security defect found
-  during the review (`known-errors.md` #16, details not published).
+- `EXTERNAL_SOURCES.md` lists every source of the build, the tests and the service. The concept for
+  repairing the test environment and raising the test coverage, the storage-format concepts and the
+  working files of that work are kept outside the repository. No code change.
 
 ## [1.5.0] – 2026-10-04
 
