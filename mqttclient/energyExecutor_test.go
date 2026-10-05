@@ -16,6 +16,7 @@ import (
 	"at.ourproject/energystore/store"
 	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
