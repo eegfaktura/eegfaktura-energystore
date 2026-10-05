@@ -5,7 +5,6 @@ import (
 	"compress/gzip"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -51,18 +50,24 @@ func (tmw *TenantEnergyImporter) closeDB() {
 	glog.V(4).Infof("Closed Importer DB %s", tmw.Tenant)
 }
 
-func (tmw *TenantEnergyImporter) ensureDb(ecId string) {
+// ensureDb liefert den geoeffneten Store der ecId und oeffnet ihn bei Bedarf. Schlaegt das
+// Oeffnen fehl, wird nur der Eintrag dieser ecId entfernt: frueher wurde die ganze Map auf nil
+// gesetzt, die naechste Nachricht des Mandanten schrieb in die nil-Map und brachte den Dienst
+// zum Absturz, und die offenen Stores der anderen ecIds blieben haengen.
+func (tmw *TenantEnergyImporter) ensureDb(ecId string) (*ebow.BowStorage, error) {
 	tmw.dbMutx.Lock()
 	defer tmw.dbMutx.Unlock()
 
-	if tmw.db[ecId] == nil || !tmw.db[ecId].IsOpen() {
-		var err error
-		tmw.db[ecId], err = ebow.OpenStorage(tmw.Tenant, ecId)
-		if err != nil {
-			glog.Errorf("%v tenant=%s", err, tmw.Tenant)
-			tmw.db = nil
-		}
+	if st := tmw.db[ecId]; st != nil && st.IsOpen() {
+		return st, nil
 	}
+	st, err := ebow.OpenStorage(tmw.Tenant, ecId)
+	if err != nil {
+		delete(tmw.db, ecId)
+		return nil, err
+	}
+	tmw.db[ecId] = st
+	return st, nil
 }
 
 func (tmw *TenantEnergyImporter) Execute(msg mqtt.Message) {
@@ -145,10 +150,9 @@ func SplitEnergyByDay(src model.MqttEnergy) []model.MqttEnergy {
 }
 
 func (tmw *TenantEnergyImporter) Import(data *model.MqttEnergyMessage) error {
-	tmw.ensureDb(data.EcId)
-
-	if tmw.db == nil {
-		return errors.New("db not initialized")
+	st, err := tmw.ensureDb(data.EcId)
+	if err != nil {
+		return fmt.Errorf("open store ecId=%s: %w", data.EcId, err)
 	}
 
 	for i := range data.Energy {
@@ -157,7 +161,7 @@ func (tmw *TenantEnergyImporter) Import(data *model.MqttEnergyMessage) error {
 		// Store day blocks sequentially: StoreEnergyV2 updates the shared cpmeta/0
 		// record and may assign SourceIdx values for previously unknown metering points.
 		for n := range groupedEnergy {
-			if err := store.StoreEnergyV2(tmw.db[data.EcId], data.Meter.MeteringPoint, &groupedEnergy[n]); err != nil {
+			if err := store.StoreEnergyV2(st, data.Meter.MeteringPoint, &groupedEnergy[n]); err != nil {
 				glog.Errorf("Error storing Energy: %v (Metering-Point: %s)", err, data.Meter.MeteringPoint)
 				continue
 			}
