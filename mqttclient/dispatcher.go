@@ -200,7 +200,7 @@ func (worker *TenantWorker) Run() {
 	for {
 		select {
 		case job := <-worker.JobChannel:
-			worker.executor.Execute(job)
+			worker.execute(job)
 			timer.Reset(idleDBCloseTimeout)
 		case <-timer.C:
 			glog.Infof("No message received for %s. Close DB tenant=%s.", idleDBCloseTimeout, worker.tenant)
@@ -213,4 +213,16 @@ func (worker *TenantWorker) Run() {
 			return
 		}
 	}
+}
+
+// execute fuehrt eine Nachricht aus. Eine Panic in einer einzelnen Nachricht wird protokolliert
+// und beendet nicht den ganzen Dienst: der Worker laeuft ohne recover in einer eigenen Goroutine,
+// und eine weiterhin zugestellte Nachricht fuehrte nach dem Neustart wieder zum Absturz.
+func (worker *TenantWorker) execute(job mqtt.Message) {
+	defer func() {
+		if r := recover(); r != nil {
+			glog.Errorf("panic while executing message for tenant=%s: %v", worker.tenant, r)
+		}
+	}()
+	worker.executor.Execute(job)
 }

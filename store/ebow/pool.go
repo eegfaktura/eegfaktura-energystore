@@ -34,10 +34,16 @@ type DbObject struct {
 	Db *DB
 }
 
+// DbPoolObject verwaltet die geoeffnete Badger-DB einer (tenant, ecId) und zaehlt, wie viele
+// Handles gerade ausgegeben sind. Ausgeben, Zuruecknehmen und Schliessen entscheiden alle unter
+// mu: frueher prueften Put und Get den Fuellstand eines Channels ohne gemeinsame Sperre, sodass
+// Put die DB schliessen konnte, waehrend ein Get sie gerade ausgegeben hatte -- der Aufrufer
+// schrieb dann in eine geschlossene DB.
 type DbPoolObject struct {
-	pool chan *DbObject
-	mu   sync.Mutex
-	//cl   sync.Mutex
+	mu    sync.Mutex
+	freed *sync.Cond // signalisiert, dass ein Handle zurueckgegeben wurde
+	size  int        // hoechstens so viele Handles gleichzeitig
+	inUse int
 
 	db     *DB
 	ecId   string
@@ -45,59 +51,61 @@ type DbPoolObject struct {
 }
 
 func newDbPoolObject(size int, ecId, tenant string) *DbPoolObject {
-	pool := make(chan *DbObject, size)
-	for i := 0; i < size; i++ {
-		pool <- &DbObject{Db: nil}
-	}
-	return &DbPoolObject{pool: pool, ecId: ecId, tenant: strings.ToLower(tenant)}
+	dpo := &DbPoolObject{size: size, ecId: ecId, tenant: strings.ToLower(tenant)}
+	dpo.freed = sync.NewCond(&dpo.mu)
+	return dpo
 }
 
+// Get gibt ein Handle auf die DB aus und oeffnet sie beim ersten Bedarf. Sind alle size Handles
+// vergeben, wartet Get, bis eines zurueckkommt. Schlaegt das Oeffnen fehl, kommt nil zurueck.
 func (dpo *DbPoolObject) Get() *DbObject {
 	dpo.mu.Lock()
 	defer dpo.mu.Unlock()
 
-	glog.V(4).Infof("B:dpo.Get(): Pool-Size %d of %d tenant=%s", len(dpo.pool), cap(dpo.pool), dpo.tenant)
-
-	select {
-	case dbObject := <-dpo.pool:
-		if dpo.db == nil {
-			var err error
-			dpo.db, err = dpo.OpenStorage()
-			if err != nil {
-				glog.Errorf("%v tenant=%s", err, dpo.tenant)
-				return nil
-			}
-		}
-		glog.V(4).Infof("dpo.Get(): Pool-Size %d of %d tenant=%s", len(dpo.pool), cap(dpo.pool), dpo.tenant)
-		dbObject.Db = dpo.db
-		return dbObject
+	for dpo.inUse >= dpo.size {
+		dpo.freed.Wait()
 	}
+	if dpo.db == nil {
+		db, err := dpo.OpenStorage()
+		if err != nil {
+			glog.Errorf("%v tenant=%s", err, dpo.tenant)
+			return nil
+		}
+		dpo.db = db
+	}
+	dpo.inUse++
+	glog.V(4).Infof("dpo.Get(): %d of %d in use tenant=%s", dpo.inUse, dpo.size, dpo.tenant)
+	return &DbObject{Db: dpo.db}
 }
 
+// Put nimmt ein Handle zurueck. Ist danach keines mehr ausgegeben, wird die DB geschlossen.
+// Ein schon zurueckgegebenes Handle (Db == nil) wird ignoriert.
 func (dpo *DbPoolObject) Put(obj *DbObject) {
-	obj.Db = nil
-	if len(dpo.pool) == cap(dpo.pool) {
+	dpo.mu.Lock()
+	defer dpo.mu.Unlock()
+
+	if obj == nil || obj.Db == nil || dpo.inUse == 0 {
 		glog.Warningf("Needless object release! tenant=%s", dpo.tenant)
 		return
 	}
-	glog.V(4).Infof("B:dpo.Put(): Pool-Size %d of %d tenant=%s", len(dpo.pool), cap(dpo.pool), dpo.tenant)
-	select {
-	case dpo.pool <- obj:
-		if len(dpo.pool) == cap(dpo.pool) {
-			dpo.mu.Lock()
-			defer dpo.mu.Unlock()
-
-			dpo.close()
-			glog.V(4).Infof("DB connection %s closed ... Object Pool max (%d) tenant=%s", dpo.ecId, len(dpo.pool), dpo.tenant)
-		}
+	obj.Db = nil
+	dpo.inUse--
+	if dpo.inUse == 0 {
+		dpo.close()
+		glog.V(4).Infof("DB connection %s closed, no handle in use tenant=%s", dpo.ecId, dpo.tenant)
 	}
-	glog.V(4).Infof("E:dpo.Put(): Pool-Size %d of %d tenant=%s", len(dpo.pool), cap(dpo.pool), dpo.tenant)
+	dpo.freed.Signal()
 }
 
-func (dpo *DbPoolObject) close() {
-	//dpo.cl.Lock()
-	//defer dpo.cl.Unlock()
+// available liefert die Zahl der noch freien Handles (fuer Tests).
+func (dpo *DbPoolObject) available() int {
+	dpo.mu.Lock()
+	defer dpo.mu.Unlock()
+	return dpo.size - dpo.inUse
+}
 
+// close schliesst die DB. Aufrufer halten dpo.mu.
+func (dpo *DbPoolObject) close() {
 	if dpo.db != nil {
 		_ = dpo.db.Close()
 		dpo.db = nil
@@ -135,12 +143,12 @@ func (dpo *DbPoolObject) OpenStorage() (*DB, error) {
 	return db, nil
 }
 
+// Pool haelt je (tenant, ecId) ein DbPoolObject. mu schuetzt nur die Map; das Warten auf ein
+// freies Handle passiert ausserhalb, damit ein ausgelasteter Mandant die anderen nicht aufhaelt.
 type Pool struct {
 	pool     map[string]*DbPoolObject
 	poolSize int
-	nextID   int
-	mutex    sync.Mutex
-	mutexPut sync.Mutex
+	mu       sync.Mutex
 }
 
 func NewPool(size int) *Pool {
@@ -158,33 +166,38 @@ func poolKey(tenant, ecId string) string {
 	return strings.ToLower(tenant) + "/" + ecId
 }
 
-func (p *Pool) Put(tenant, ecId string, e *DbObject) {
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
+func (p *Pool) lookup(tenant, ecId string) (*DbPoolObject, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	obj, ok := p.pool[poolKey(tenant, ecId)]
+	return obj, ok
+}
 
-	if poolObj, ok := p.pool[poolKey(tenant, ecId)]; ok {
+func (p *Pool) Put(tenant, ecId string, e *DbObject) {
+	if poolObj, ok := p.lookup(tenant, ecId); ok {
 		poolObj.Put(e)
 	}
 }
 
 func (p *Pool) Get(tenant, ecId string) *DbObject {
-	p.mutexPut.Lock()
-	defer p.mutexPut.Unlock()
-
+	p.mu.Lock()
 	key := poolKey(tenant, ecId)
 	poolObj, ok := p.pool[key]
 	if !ok {
 		poolObj = newDbPoolObject(p.poolSize, ecId, tenant)
 		p.pool[key] = poolObj
 	}
+	p.mu.Unlock()
 
 	return poolObj.Get()
 }
 
 func (p *Pool) Close() {
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	for _, poolObj := range p.pool {
+		poolObj.mu.Lock()
 		poolObj.close()
+		poolObj.mu.Unlock()
 	}
 }
