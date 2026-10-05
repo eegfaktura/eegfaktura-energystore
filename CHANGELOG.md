@@ -8,6 +8,8 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+## [1.5.2] – 2026-10-05
+
 ### Fixed
 - **Pool shutdown:** after `Pool.Close` a waiting `Get` is woken and gets nil instead of hanging,
   and no later `Get` reopens a database — not even for an ecId the pool had not seen yet. Handles
