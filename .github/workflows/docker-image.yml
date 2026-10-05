@@ -5,7 +5,7 @@
 # Build-Flow:
 #   1. Checkout
 #   2. Go-Setup + protoc-Codegen (scripts/dev/generate.sh), Tests mit -race,
-#      Coverage-Untergrenzen, gofmt/vet (M0 docs/improve-test-environment)
+#      Coverage-Untergrenzen, gofmt/vet (M0 des Testumgebungs-Plans)
 #   3. docker/login-action mit VFEEG_DEV_PUSH_PAT (Cross-Org-Push)
 #   4. docker/build-push-action -> ghcr.io/vfeeg-development/eegfaktura-energystore
 #   5. Build-Provenance-Attestation
