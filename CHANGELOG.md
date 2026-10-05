@@ -8,6 +8,8 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+## [1.5.1] – 2026-10-05
+
 ### Fixed
 - **Connection pool: handing out and closing a database no longer race.** The per-database
   pool object decided "last handle returned, close the database" by looking at the fill level
