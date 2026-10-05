@@ -40,10 +40,11 @@ type DbObject struct {
 // Put die DB schliessen konnte, waehrend ein Get sie gerade ausgegeben hatte -- der Aufrufer
 // schrieb dann in eine geschlossene DB.
 type DbPoolObject struct {
-	mu    sync.Mutex
-	freed *sync.Cond // signalisiert, dass ein Handle zurueckgegeben wurde
-	size  int        // hoechstens so viele Handles gleichzeitig
-	inUse int
+	mu     sync.Mutex
+	freed  *sync.Cond // signalisiert, dass ein Handle zurueckgegeben wurde
+	size   int        // hoechstens so viele Handles gleichzeitig
+	inUse  int
+	closed bool // nach shutdown: kein Get mehr, die DB bleibt zu
 
 	db     *DB
 	ecId   string
@@ -57,18 +58,25 @@ func newDbPoolObject(size int, ecId, tenant string) *DbPoolObject {
 }
 
 // Get gibt ein Handle auf die DB aus und oeffnet sie beim ersten Bedarf. Sind alle size Handles
-// vergeben, wartet Get, bis eines zurueckkommt. Schlaegt das Oeffnen fehl, kommt nil zurueck.
+// vergeben, wartet Get, bis eines zurueckkommt. Schlaegt das Oeffnen fehl oder ist der Pool
+// heruntergefahren, kommt nil zurueck.
 func (dpo *DbPoolObject) Get() *DbObject {
 	dpo.mu.Lock()
 	defer dpo.mu.Unlock()
 
-	for dpo.inUse >= dpo.size {
+	for !dpo.closed && dpo.inUse >= dpo.size {
 		dpo.freed.Wait()
+	}
+	if dpo.closed {
+		return nil
 	}
 	if dpo.db == nil {
 		db, err := dpo.OpenStorage()
 		if err != nil {
 			glog.Errorf("%v tenant=%s", err, dpo.tenant)
+			// Dieser Get wurde eventuell fuer einen freien Platz geweckt, nimmt ihn aber nicht:
+			// den naechsten Wartenden wecken, sonst bliebe der Platz ungenutzt liegen.
+			dpo.freed.Signal()
 			return nil
 		}
 		dpo.db = db
@@ -102,6 +110,17 @@ func (dpo *DbPoolObject) available() int {
 	dpo.mu.Lock()
 	defer dpo.mu.Unlock()
 	return dpo.size - dpo.inUse
+}
+
+// shutdown schliesst die DB endgueltig: wartende und spaetere Get bekommen nil, statt zu
+// haengen oder die DB beim Herunterfahren wieder zu oeffnen. Noch ausgegebene Handles duerfen
+// danach zurueckgegeben werden.
+func (dpo *DbPoolObject) shutdown() {
+	dpo.mu.Lock()
+	defer dpo.mu.Unlock()
+	dpo.closed = true
+	dpo.close()
+	dpo.freed.Broadcast()
 }
 
 // close schliesst die DB. Aufrufer halten dpo.mu.
@@ -149,6 +168,7 @@ type Pool struct {
 	pool     map[string]*DbPoolObject
 	poolSize int
 	mu       sync.Mutex
+	closed   bool
 }
 
 func NewPool(size int) *Pool {
@@ -181,6 +201,10 @@ func (p *Pool) Put(tenant, ecId string, e *DbObject) {
 
 func (p *Pool) Get(tenant, ecId string) *DbObject {
 	p.mu.Lock()
+	if p.closed {
+		p.mu.Unlock()
+		return nil
+	}
 	key := poolKey(tenant, ecId)
 	poolObj, ok := p.pool[key]
 	if !ok {
@@ -192,12 +216,13 @@ func (p *Pool) Get(tenant, ecId string) *DbObject {
 	return poolObj.Get()
 }
 
+// Close faehrt den Pool herunter: alle DBs werden geschlossen, wartende Get geweckt, und kein
+// spaeteres Get oeffnet eine DB wieder.
 func (p *Pool) Close() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.closed = true
 	for _, poolObj := range p.pool {
-		poolObj.mu.Lock()
-		poolObj.close()
-		poolObj.mu.Unlock()
+		poolObj.shutdown()
 	}
 }

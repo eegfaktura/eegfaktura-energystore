@@ -1,11 +1,14 @@
 package ebow
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -196,6 +199,61 @@ func TestPoolConcurrentGetPut(t *testing.T) {
 		dbObj, ok := connectionPool.lookup(tenant, testEcId)
 		if assert.True(t, ok) {
 			assert.Equal(t, 20, dbObj.available())
+		}
+	}
+}
+
+// TestPoolCloseWakesWaitersAndRefusesGet: nach Close bekommt ein wartendes Get nil statt zu
+// haengen, und ein spaeteres Get oeffnet keine DB mehr; ausgegebene Handles lassen sich noch
+// zurueckgeben.
+func TestPoolCloseWakesWaitersAndRefusesGet(t *testing.T) {
+	vlogGCTestBase(t)
+	p := NewPool(1)
+	held := p.Get(testRc, testEcId)
+	assert.NotNil(t, held)
+
+	got := make(chan *DbObject)
+	go func() { got <- p.Get(testRc, testEcId) }()
+	time.Sleep(50 * time.Millisecond)
+
+	p.Close()
+	select {
+	case o := <-got:
+		assert.Nil(t, o)
+	case <-time.After(2 * time.Second):
+		t.Fatal("wartendes Get haengt nach Close")
+	}
+	assert.Nil(t, p.Get(testRc, testEcId))
+	assert.Nil(t, p.Get(testRc, "OTHERECID01"), "auch fuer eine neue ecId kein Oeffnen nach Close")
+	p.Put(testRc, testEcId, held)
+}
+
+// TestFailedOpenWakesNextWaiter: schlaegt das Oeffnen fuer einen geweckten Get fehl, muss er
+// den naechsten Wartenden wecken, sonst haengt dieser trotz freiem Platz.
+func TestFailedOpenWakesNextWaiter(t *testing.T) {
+	base := vlogGCTestBase(t)
+	p := NewPool(1)
+	held := p.Get(testRc, testEcId)
+	assert.NotNil(t, held)
+
+	got := make(chan *DbObject, 2)
+	for i := 0; i < 2; i++ {
+		go func() { got <- p.Get(testRc, testEcId) }()
+	}
+	time.Sleep(50 * time.Millisecond)
+
+	// Ab jetzt schlaegt jedes Oeffnen fehl: der Basispfad ist eine Datei.
+	notDir := filepath.Join(base, "not-a-dir")
+	assert.NoError(t, os.WriteFile(notDir, []byte("x"), 0o600))
+	viper.Set("persistence.path", notDir)
+
+	p.Put(testRc, testEcId, held) // letzte Rueckgabe schliesst die DB, beide Wartenden muessen oeffnen
+	for i := 0; i < 2; i++ {
+		select {
+		case o := <-got:
+			assert.Nil(t, o)
+		case <-time.After(2 * time.Second):
+			t.Fatal("zweiter Wartender wurde nach fehlgeschlagenem Oeffnen nicht geweckt")
 		}
 	}
 }

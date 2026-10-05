@@ -8,6 +8,14 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Fixed
+- **Pool shutdown:** after `Pool.Close` a waiting `Get` is woken and gets nil instead of hanging,
+  and no later `Get` reopens a database — not even for an ecId the pool had not seen yet. Handles
+  still out may be returned afterwards. (`TestPoolCloseWakesWaitersAndRefusesGet`)
+- **Lost wakeup in the pool:** a `Get` that was woken for a free handle but then failed to open the
+  database returned without waking the next waiter, so that handle stayed unused while others
+  waited. (`TestFailedOpenWakesNextWaiter`, which hangs without the fix)
+
 ## [1.5.1] – 2026-10-05
 
 ### Fixed
