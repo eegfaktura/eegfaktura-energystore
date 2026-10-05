@@ -404,8 +404,8 @@ type collectResult struct {
 // Unter derselben Sperre wie Pool.Get, das die Map beschreibt; Eintraege werden nie ersetzt oder
 // entfernt, zwischen Nachschauen und Oeffnen kann sich also nichts aendern.
 func (p *Pool) holdsEntry(ecId, tenant string) (exists, sameTenant bool) {
-	p.mutexPut.Lock()
-	defer p.mutexPut.Unlock()
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	obj, ok := p.pool[poolKey(tenant, ecId)]
 	if !ok {
 		return false, false

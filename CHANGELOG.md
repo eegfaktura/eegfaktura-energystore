@@ -8,6 +8,24 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Fixed
+- **Connection pool: handing out and closing a database no longer race.** The per-database
+  pool object decided "last handle returned, close the database" by looking at the fill level
+  of a channel without the lock that `Get` held; a `Get` could hand out the database in exactly
+  that window and the caller then wrote to a closed database. The pool map itself was written
+  under one mutex and read under another. Handles are now counted under a single mutex per
+  database, which also decides when to close, and one mutex guards the map; waiting for a free
+  handle happens outside it, so a busy community no longer holds up the others. Relevant before
+  the value-log GC is switched on, which shares the pool with the imports. Concurrency test
+  `TestPoolConcurrentGetPut` (with `-race`); `TestOpenMaxObject` rewritten without its own race.
+- **One failed store open no longer crashes the service.** When opening a store failed (invalid
+  ecId, tenant longer than 8 characters), the importer set its whole store map to nil; the next
+  message of that community wrote into the nil map and the panic took the service down, and with
+  the broker's persistent session the redelivered message crashed it again after the restart.
+  Now only the entry of that ecId is dropped and the message is reported as an error. As a second
+  line of defence the tenant worker recovers from a panic in a single message and logs it.
+  Tests `TestEnsureDbInvalidThenValid`, `TestEnsureDbTenantTooLong`.
+
 ## [1.5.0] – 2026-10-04
 
 ### Security
