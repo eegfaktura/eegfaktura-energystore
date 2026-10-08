@@ -15,15 +15,16 @@ import (
 var Vienna = tz.Vienna
 
 // UseTempPersistence points viper's persistence.path at a fresh t.TempDir(). The cleanup closes
-// the process-wide ebow pool first (it keeps stores open across tests) and then restores the
-// old path; t.TempDir()'s own cleanup was registered before and therefore runs last.
+// the process-wide ebow pool and replaces it with a fresh one (it keeps stores open across tests,
+// and a closed pool stays closed since upstream #66 — see pool.go), then restores the old path;
+// t.TempDir()'s own cleanup was registered before and therefore runs last.
 func UseTempPersistence(t testing.TB) string {
 	t.Helper()
 	dir := t.TempDir()
 	old := viper.Get("persistence.path")
 	viper.Set("persistence.path", dir)
 	t.Cleanup(func() {
-		ebow.ClosePool()
+		resetPool()
 		viper.Set("persistence.path", old)
 	})
 	return dir
