@@ -40,7 +40,9 @@ jobs:
 
       - name: Unit tests
         run: |
+          set -euo pipefail
           mapfile -t pkgs < <(bash scripts/dev/packages.sh)
+          [ "${#pkgs[@]}" -gt 0 ]
           go test -count=1 -timeout 300s "${pkgs[@]}"
 
   full:
