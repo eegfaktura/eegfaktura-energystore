@@ -12,6 +12,10 @@ this changelog highlights the changes relevant for overview and operations.
 - Test fixtures: an unused spreadsheet removed, the Excel import test file replaced by a neutral
   copy with test metering point numbers (`TestImportExcelEnergyFile` unchanged).
 
+### CI
+- `pr-checks.yml`: unit tests and the full test suite on every pull request (unit = `go test` of every tested package; full = `scripts/dev/static-check.sh`, `test.sh` (race, coverage) and the coverage floors).
+- `security-scan.yml`: leaked secrets in the new commits (Gitleaks, Trivy), vulnerable dependencies (Trivy, OSV-Scanner) and misconfigurations (Trivy). A pull request fails on what it adds; pushes to the default branch and a weekly run fail on every HIGH/CRITICAL finding. Scanners are fixed versions checked by SHA-256, each release at least 7 days old; actions pinned by commit SHA.
+
 ## [1.5.2] – 2026-10-05
 
 ### Fixed
