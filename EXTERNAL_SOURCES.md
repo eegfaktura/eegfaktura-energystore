@@ -16,6 +16,11 @@ module's own `LICENSE` file in the local module cache on 2026-10-02.
 | `google.golang.org/protobuf/cmd/protoc-gen-go`, `google.golang.org/grpc/cmd/protoc-gen-go-grpc` | protobuf/gRPC code generation | v1.36.11 (2025-12-12), v1.6.2 (2026-05-07); BSD-3-Clause / Apache-2.0 | `go install …@vX.Y.Z` in CI, checked by `generate.sh` |
 | `golang.org/x/vuln/cmd/govulncheck` | CI vulnerability report (reporting only, ES-12) | v1.8.0 (2026-09-08); BSD-3-Clause (read from its `LICENSE`) | `go install …@v1.8.0` in CI |
 | `actions/upload-artifact` | CI coverage artefact | v7.0.1 (2026-04-10); MIT | by SHA `043fb46d1a93c77aae656e7c1c64a875d1fc6a0a` |
+| Trivy (`aquasecurity/trivy` release binary) | CI `security-scan.yml`: secrets in changed files, vulnerable dependencies, misconfigurations | 0.75.0 (2026-10-01); Apache-2.0 | SHA-256 checked in the workflow |
+| OSV-Scanner (`google/osv-scanner` release binary) | CI `security-scan.yml`: vulnerable dependencies | 2.6.0 (2026-09-14); Apache-2.0 | SHA-256 checked in the workflow |
+| Gitleaks (`gitleaks/gitleaks` release binary) | CI `security-scan.yml`: secrets in the new commits | 8.30.1 (2026-03-21); MIT | SHA-256 checked in the workflow |
+| Trivy vulnerability/check databases, OSV database (osv.dev, deps.dev) | data the scanners fetch on every CI run | — | official; data, not pinned |
+| `actions/setup-go` in `pr-checks.yml` | Go toolchain for the PR test jobs | v7.0.0 (2026-07-16); MIT — Go 1.25.14 (2026-08-19), BSD-3-Clause | by SHA `b7ad1dad31e06c5925ef5d2fc7ad053ef454303e`; exact Go version |
 | `github.com/99designs/gqlgen` (generator) | `graph/generated/` | MIT | same version as the runtime module |
 | GitHub Actions in `docker-image.yml`: `actions/checkout@v4`, `actions/setup-go@v5`, `docker/metadata-action@v5`, `docker/login-action@v3`, `docker/build-push-action@v6`, `actions/attest-build-provenance@v1` | CI | MIT / Apache-2.0 | **by major tag** (#10) |
 | GitHub Actions in `snyk.yml`: `actions/checkout` v4.2.2, `actions/setup-node` v4.1.0, `github/codeql-action/upload-sarif` v3.27.9; Snyk CLI from npm | SAST | MIT; Snyk CLI Apache-2.0 | by SHA; the Snyk CLI is installed unpinned |
