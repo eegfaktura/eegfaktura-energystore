@@ -19,6 +19,7 @@ module's own `LICENSE` file in the local module cache on 2026-10-02.
 | Trivy (`aquasecurity/trivy` release binary) | CI `security-scan.yml`: secrets in changed files, vulnerable dependencies, misconfigurations | 0.75.0 (2026-10-01); Apache-2.0 | SHA-256 checked in the workflow |
 | OSV-Scanner (`google/osv-scanner` release binary) | CI `security-scan.yml`: vulnerable dependencies | 2.6.0 (2026-09-14); Apache-2.0 | SHA-256 checked in the workflow |
 | Gitleaks (`gitleaks/gitleaks` release binary) | CI `security-scan.yml`: secrets in the new commits | 8.30.1 (2026-03-21); MIT | SHA-256 checked in the workflow |
+| `actions/upload-artifact` v7.0.1, `actions/download-artifact` v8.0.1 (2026-03-11) in `security-scan.yml` | the poms of the sbt export between two jobs (unused here: no `build.sbt`) | MIT | by SHA `043fb46…`, `3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c` |
 | Trivy vulnerability/check databases, OSV database (osv.dev, deps.dev) | data the scanners fetch on every CI run | — | official; data, not pinned |
 | `actions/setup-go` in `pr-checks.yml` | Go toolchain for the PR test jobs | v7.0.0 (2026-07-16); MIT — Go 1.25.14 (2026-08-19), BSD-3-Clause | by SHA `b7ad1dad31e06c5925ef5d2fc7ad053ef454303e`; exact Go version |
 | `github.com/99designs/gqlgen` (generator) | `graph/generated/` | MIT | same version as the runtime module |
