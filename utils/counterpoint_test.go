@@ -26,3 +26,14 @@ func TestDetermineDirection(t *testing.T) {
 		})
 	}
 }
+
+// DetermineDirection slices without a length check (known-errors #46, F31). No production caller
+// today; a short id must not panic.
+func TestDetermineDirectionShortId(t *testing.T) {
+	t.Skip("known-errors #46")
+	for _, id := range []string{"", "AT00", "AT003000", "AT0030000000000000"} {
+		assert.NotPanics(t, func() {
+			assert.Equal(t, model.CONSUMER_DIRECTION, DetermineDirection(id), "id %q", id)
+		}, "id %q", id)
+	}
+}

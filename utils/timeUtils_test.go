@@ -44,8 +44,7 @@ func TestParseTime(t *testing.T) {
 func TestConvertUnixTimeToRowId(t *testing.T) {
 	rowId, err := ConvertUnixTimeToRowId("CP/", time.UnixMilli(1688680800000).UTC())
 	require.NoError(t, err)
-
-	fmt.Printf("RowID: %v\n", rowId)
+	assert.Equal(t, "CP/2023/07/06/22/00/00", rowId, "the id is the wall clock of the given location")
 }
 
 // The store writes its period metadata with DateToString and reads it back with

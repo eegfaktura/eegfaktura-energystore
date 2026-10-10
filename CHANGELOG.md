@@ -8,6 +8,13 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### CI
+- `pr-checks.yml`: unit tests and the full test suite on every pull request (unit = `go test` of every tested package; full = `scripts/dev/static-check.sh`, `test.sh` (race, coverage) and the coverage floors).
+- `security-scan.yml`: leaked secrets in the new commits (Gitleaks, Trivy), vulnerable dependencies (Trivy, OSV-Scanner) and misconfigurations (Trivy). A pull request fails on what it adds; pushes to the default branch and a weekly run fail on every CRITICAL finding (HIGH is reported; `SCAN_FAIL_ON`). Scanners are fixed versions checked by SHA-256, each release at least 7 days old; actions pinned by commit SHA.
+- `security-scan.yml`: for now the vulnerable-dependency and misconfiguration findings are only reported (`SCAN_FAIL_ON: none` — the gate prints a warning in every run that it is off); leaked secrets still fail. To be tightened again once the known findings are paid down.
+- `security-scan.yml`: the dependency scan no longer asks Maven Central for each pom — a new job "Build dependencies" resolves the poms beforehand (pinned Maven 3.9.11, cached) and hands them to Trivy; on GitHub's shared runner IPs Trivy's own lookups ended in `429 Too Many Requests` and failed the scan. The secret scan runs with `--offline-scan`; the gates no longer run (with a misleading "unreadable report") after a failed scan.
+- `docker-image.yml`: no image build on a draft pull request — it runs when the pull request is marked ready for review (`ready_for_review`) and on every later push to it; `pr-checks.yml` still checks drafts. Pushes, tags and the deploy dispatch are unchanged.
+
 ## [1.5.2] – 2026-10-05
 
 ### Fixed
@@ -37,6 +44,22 @@ this changelog highlights the changes relevant for overview and operations.
   Now only the entry of that ecId is dropped and the message is reported as an error. As a second
   line of defence the tenant worker recovers from a panic in a single message and logs it.
   Tests `TestEnsureDbInvalidThenValid`, `TestEnsureDbTenantTooLong`.
+
+### Build and CI
+- **A red test now blocks the image.** The CI job checks that the committed protobuf stubs match a
+  regeneration (`scripts/dev/generate.sh`, pinned protoc 29.3 and plugins), runs `gofmt`/`go vet`
+  (`scripts/dev/static-check.sh`), the whole test suite with the race detector (`scripts/dev/test.sh`,
+  every package except the root) and per-package coverage floors, uploads the coverage report and runs
+  `govulncheck` (reporting only) — all before the image is built.
+- `protoc/masterdata*.pb.go` are committed; `docker build` works from a fresh checkout. The build paths
+  of `energystore`/`estore` are unchanged (moving the entry points to `cmd/` was not done, `open-points.md` ES-24).
+- Tests write Badger data only into temporary directories and fix the time zone to `Europe/Vienna`;
+  the intermittent hang of the `calculation` tests is gone (`known-errors.md` #3).
+
+### Documentation
+- `EXTERNAL_SOURCES.md` lists every source of the build, the tests and the service. The concept for
+  repairing the test environment and raising the test coverage, the storage-format concepts and the
+  working files of that work are kept outside the repository. No code change.
 
 ## [1.5.0] – 2026-10-04
 

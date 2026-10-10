@@ -2,11 +2,11 @@ package ebow
 
 import (
 	"fmt"
-	"io/ioutil"
 	"math"
 	"math/rand"
 	"os"
 	"reflect"
+	"sort"
 	"testing"
 )
 
@@ -73,7 +73,11 @@ func Test(t *testing.T) {
 	db.Open()
 
 	// Make sure we got all the buckets.
-	if !reflect.DeepEqual(db.DB().Buckets(), []string{"arrows", "new_arrows"}) {
+	// Buckets() ranges over a map: the order is random (known-errors #49, the test compared it
+	// with a fixed order and failed in about one of five runs).
+	buckets := db.DB().Buckets()
+	sort.Strings(buckets)
+	if !reflect.DeepEqual(buckets, []string{"arrows", "new_arrows"}) {
 		t.Fatalf("lost/gained buckets after re-opening: %v", db.DB().Buckets())
 	}
 
@@ -235,7 +239,7 @@ type TestDB struct {
 func OpenTestDB(t *testing.T, options ...Option) *TestDB {
 	tdb := &TestDB{
 		t:    t,
-		dir:  tempfile("bow-"),
+		dir:  t.TempDir(),
 		fail: t.Fatal,
 	}
 	tdb.Open(options...)
@@ -323,19 +327,4 @@ func (t *TestDB) Close() {
 func (t *TestDB) Drop() {
 	defer os.RemoveAll(t.dir)
 	t.Close()
-}
-
-// tempfile returns a temporary file path.
-func tempfile(prefix string) string {
-	f, err := ioutil.TempFile("", prefix)
-	if err != nil {
-		panic(err)
-	}
-	if err := f.Close(); err != nil {
-		panic(err)
-	}
-	if err := os.Remove(f.Name()); err != nil {
-		panic(err)
-	}
-	return f.Name()
 }
