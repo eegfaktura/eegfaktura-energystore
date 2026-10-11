@@ -420,3 +420,40 @@ func TestMassImport(t *testing.T) {
 	//fmt.Printf("Response: %+v\n", resp["AT0030000000000000000000000383545"])
 
 }
+
+// TestEnsureDbInvalidThenValid deckt #18 ab: ein fehlgeschlagenes Oeffnen (ungueltige ecId)
+// darf die Store-Map nicht zerstoeren; die naechste Nachricht mit gueltiger ecId geht durch,
+// statt in eine nil-Map zu schreiben und den Dienst abstuerzen zu lassen.
+func TestEnsureDbInvalidThenValid(t *testing.T) {
+	viper.Set("persistence.path", t.TempDir())
+
+	importer := NewTenantEnergyImporter("TE999997", &MQTTStreamer{})
+	defer importer.Close()
+
+	_, err := importer.ensureDb("a/b")
+	require.Error(t, err)
+
+	st, err := importer.ensureDb("ECIDVALID0001")
+	require.NoError(t, err)
+	assert.True(t, st.IsOpen())
+
+	_, err = importer.ensureDb("../x")
+	require.Error(t, err)
+
+	again, err := importer.ensureDb("ECIDVALID0001")
+	require.NoError(t, err)
+	assert.Same(t, st, again, "offener Store der gueltigen ecId bleibt erhalten")
+}
+
+// TestEnsureDbTenantTooLong: ein zu langer Mandant liefert einen Fehler statt einer Panic.
+func TestEnsureDbTenantTooLong(t *testing.T) {
+	viper.Set("persistence.path", t.TempDir())
+
+	importer := NewTenantEnergyImporter("GC100403001", &MQTTStreamer{})
+	defer importer.Close()
+
+	for i := 0; i < 2; i++ {
+		_, err := importer.ensureDb("ECIDVALID0001")
+		require.Error(t, err)
+	}
+}

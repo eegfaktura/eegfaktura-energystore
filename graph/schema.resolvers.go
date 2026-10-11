@@ -10,12 +10,17 @@ import (
 	"at.ourproject/energystore/excel"
 	"at.ourproject/energystore/graph/generated"
 	"at.ourproject/energystore/services"
+	"at.ourproject/energystore/tenantctx"
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/golang/glog"
 )
 
 // SingleUpload is the resolver for the singleUpload field.
 func (r *mutationResolver) SingleUpload(ctx context.Context, tenant string, ecID string, sheet string, file graphql.Upload) (bool, error) {
+	if err := tenantctx.Check(ctx, tenant); err != nil {
+		glog.Warningf("singleUpload refused: tenant argument %s does not match the checked tenant", tenant)
+		return false, err
+	}
 	glog.Infof("START UPLOAD: %+v %+v", tenant, sheet)
 	err := excel.ImportFile(tenant, ecID, file.Filename, sheet, file.File)
 	return err == nil, err
@@ -23,6 +28,10 @@ func (r *mutationResolver) SingleUpload(ctx context.Context, tenant string, ecID
 
 // LastEnergyDate is the resolver for the lastEnergyDate field.
 func (r *queryResolver) LastEnergyDate(ctx context.Context, tenant string, ecID string) (string, error) {
+	if err := tenantctx.Check(ctx, tenant); err != nil {
+		glog.Warningf("lastEnergyDate refused: tenant argument %s does not match the checked tenant", tenant)
+		return "", err
+	}
 	return services.GetLastEnergyEntry(tenant, ecID)
 }
 

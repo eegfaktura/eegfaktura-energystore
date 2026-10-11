@@ -8,7 +8,8 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
-### Added
+> **Branch `env/billing`:** the entries from here to the next note are only on this branch (feature environment), not on the default branch yet.
+
 - Time-of-use window folding (ZVT): the participant report request
   (`POST /eeg/v2/{ecid}/report`) accepts up to two generic time windows per
   metering point (`timeWindows: [{key: T1|T2, from: "HH:MM", to: "HH:MM"}]`,
@@ -23,6 +24,106 @@ this changelog highlights the changes relevant for overview and operations.
   Invalid windows (key, raster, `from == to`, >2 per meter) are rejected
   with 400.
 
+> **End of the `env/billing`-only entries.**
+
+## [1.5.2] – 2026-10-05
+
+### Fixed
+- **Pool shutdown:** after `Pool.Close` a waiting `Get` is woken and gets nil instead of hanging,
+  and no later `Get` reopens a database — not even for an ecId the pool had not seen yet. Handles
+  still out may be returned afterwards. (`TestPoolCloseWakesWaitersAndRefusesGet`)
+- **Lost wakeup in the pool:** a `Get` that was woken for a free handle but then failed to open the
+  database returned without waking the next waiter, so that handle stayed unused while others
+  waited. (`TestFailedOpenWakesNextWaiter`, which hangs without the fix)
+
+## [1.5.1] – 2026-10-05
+
+### Fixed
+- **Connection pool: handing out and closing a database no longer race.** The per-database
+  pool object decided "last handle returned, close the database" by looking at the fill level
+  of a channel without the lock that `Get` held; a `Get` could hand out the database in exactly
+  that window and the caller then wrote to a closed database. The pool map itself was written
+  under one mutex and read under another. Handles are now counted under a single mutex per
+  database, which also decides when to close, and one mutex guards the map; waiting for a free
+  handle happens outside it, so a busy community no longer holds up the others. Relevant before
+  the value-log GC is switched on, which shares the pool with the imports. Concurrency test
+  `TestPoolConcurrentGetPut` (with `-race`); `TestOpenMaxObject` rewritten without its own race.
+- **One failed store open no longer crashes the service.** When opening a store failed (invalid
+  ecId, tenant longer than 8 characters), the importer set its whole store map to nil; the next
+  message of that community wrote into the nil map and the panic took the service down, and with
+  the broker's persistent session the redelivered message crashed it again after the restart.
+  Now only the entry of that ecId is dropped and the message is reported as an error. As a second
+  line of defence the tenant worker recovers from a panic in a single message and logs it.
+  Tests `TestEnsureDbInvalidThenValid`, `TestEnsureDbTenantTooLong`.
+
+## [1.5.0] – 2026-10-04
+
+### Security
+- GraphQL (`singleUpload`, `lastEnergyDate`): the `tenant` argument is now checked against the
+  tenant that `GQLProtect` verified against the token (case-insensitive, `superuser` exempt); a
+  mismatch is refused before any store is opened. The middleware passes the verified tenant on in
+  the request context (new package `tenantctx`, no dependencies, so `graph` stays testable without
+  Keycloak). The web sends the same tenant in header and argument and is not affected.
+- **Tenant isolation: the connection pool was keyed by `ecId` alone.** A pool object opens its
+  Badger store under `basePath/<tenant>/<ecId>`, using the tenant of whoever created the entry
+  first. A later request for the same `ecId` under a *different* tenant received the first
+  tenant's store back — cross-tenant read/write of energy data. The pool is now keyed by
+  tenant **and** ecId (`poolKey`), so each tenant gets its own store.
+- **`ecid` from the URL path was unvalidated before reaching `filepath.Join`.** A value
+  containing `/` or `..` could escape the intended directory. `OpenStorage` now rejects any
+  tenant or ecId that is not strictly alphanumeric, before it touches the filesystem. All
+  real identifiers are alphanumeric and stay valid; every runtime caller goes through
+  `OpenStorage`.
+- The container no longer runs as root. The service listens on 8080, well above 1024, so the
+  privileges were never needed. A dedicated `app` user (UID/GID 1000) owns `/opt/rawdata` and
+  `/opt/energy`; the `chown` deliberately runs **before** the `VOLUME` instruction, because
+  later changes to a declared volume do not end up in the image.
+  The Badger data lives on a PVC, which is mounted `root:root` by default — the deployment
+  therefore needs `fsGroup: 1000` alongside this. Order matters: `fsGroup` first, then the
+  image, otherwise the service can no longer write to its data directory, and only at runtime.
+  Note for production: the PVC there holds about 1.2 TB, and the kubelet walks the whole
+  volume when applying `fsGroup`. `fsGroupChangePolicy: OnRootMismatch` keeps that from
+  delaying every pod start.
+- `google.golang.org/grpc` 1.83.1 -> 1.83.2 (Dependabot #40), patch release on top of the
+  CVE-2026-84304 fix.
+
+### Added
+- **Value-log garbage collection** (#45), **off by default**. The production volume fills up by
+  about 5 GiB a day: 96.6 % of it is Badger's value log, which only `RunValueLogGC` frees — and
+  nothing called it. The cause is the community-wide metadata record `cpmeta/0`: above roughly
+  750 metering points it exceeds the 128 KB `ValueThreshold` and every period extension writes a
+  complete new copy into the value log (found by @artmanns).
+
+  A background run inside the service (not a CronJob: Badger locks each directory exclusively, an
+  external job could make imports fail) opens the largest databases one after another through the
+  pool, calls `RunValueLogGC` until nothing is left or the budget is used, and logs the value-log
+  size before and after for each database plus a summary line — all visible at `-v=3`.
+
+  Configuration under `persistence.vlogGC`, also settable as `ENERGYSTORE_PERSISTENCE_VLOGGC_*`:
+  `enabled` (false), `window` ("02:00-04:30", evaluated in Europe/Vienna whatever the container's
+  time zone), `checkEvery` (10m), `discardRatio` (0.5), `probeRatio` (0.1, one diagnostic call when
+  nothing qualifies), `minVlogMB` (100), `maxGBPerRun` (50, counted in bytes because Badger takes
+  the largest files first). On shutdown the run is awaited before the pool closes.
+
+  Safeguards: the directory of the database the pool actually returned is checked against the
+  enumerated one, and for an ecId that exists under more than one tenant the run only works on a
+  database the pool already holds under that tenant and never creates the pool entry itself.
+  Value-log sizes leave out the newest file while it is pre-allocated at 2 GiB (database open); in
+  a closed database it holds data and counts.
+
+  A read-only diagnosis of production on 2026-09-11 found the whole backlog (1 087 GiB) already
+  accounted as discardable, so the GC will reclaim it. Tests with a real Badger
+  (`go test -run TestVlogGC ./store/ebow/`, now a separate CI step): 93 MB value log reclaimed to
+  0 in 12 rewrites of ~6–10 ms each; one 976 MB file in 349 ms (local disk, warm cache).
+
+  **Dry run** (`dryRun`, default false, env `ENERGYSTORE_PERSISTENCE_VLOGGC_DRYRUN`): with
+  `enabled=true` and `dryRun=true` the run keeps its schedule, window and budget but opens no
+  database. Per database it only reads `DISCARD` and the value-log file sizes and logs which files
+  `RunValueLogGC` would rewrite (largest discard first, stopping at the first file under
+  `discardRatio`, as Badger's `pickLog` does), how much it would read and the estimated space freed.
+  All lines are tagged `vlogGC [DRY-RUN]`. Meant for checking production before switching the run
+  on; run time, memory and the effect of open iterators only show in a real run. In the test the
+  prediction matched the real run exactly (12 rewrites, 93 MB).
 - CI builds `env/**` branches and deploys the resulting image into the matching feature
   environment (ADR-0008): a push to `env/<name>` pins this service in namespace `env-<name>`
   to that branch's `sha-…` image. Previously only the default branch, tags and `preview/**`
@@ -113,6 +214,16 @@ this changelog highlights the changes relevant for overview and operations.
   Without L2 the sheet shrinks by 28 % on that file (5 492 -> 3 936 rows). It does not shrink
   further because one or two metering points without any readings (L0) put 3 360 rows in there,
   each a full-width copy of all metering points.
+
+  Verified on Dev with a synthetic community of 900 metering points fed through MQTT like
+  production (value log 981 MB → 134 MB, later 2.7 GB → 31 MB): the discard statistics build up
+  by themselves, imports run alongside, a restart mid-run stops cleanly before the pool closes,
+  the next pod finishes the job. Reading runs at **35–50 MB/s on network storage, and one call on
+  a 1 GB file took 28 s** — close to Kubernetes' default 30 s grace period. Opening a database is
+  not interruptible either: Badger reads the newest value-log file in full to check whether it
+  needs truncating (`value.go:593`), which took 22 s for a 900 MB file; the per-database log line
+  shows the open time. Raise `terminationGracePeriodSeconds` (e.g. to 90) before enabling this
+  where 1 GB value-log files exist, as in production.
 
 ## [1.2.2] – 2026-09-09
 
