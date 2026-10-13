@@ -8,6 +8,10 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Changed
+- Test fixtures: an unused spreadsheet removed, the Excel import test file replaced by a neutral
+  copy with test metering point numbers (`TestImportExcelEnergyFile` unchanged).
+
 ## [1.5.2] – 2026-10-05
 
 ### Fixed
