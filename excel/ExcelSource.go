@@ -20,8 +20,42 @@ import (
 var dateLine = regexp.MustCompile(`^[0-9]{2}\.[0-9]{2}\.[0-9]{4}\s[0-9]{2}:[0-9]{2}(?::[0-9]{2})?$`)
 var numberPattern = regexp.MustCompile(`^[0-9\\.,]+$`)
 
+// Unzip limits for workbooks opened by this package. excelize defaults to about
+// 16 GB, so a small crafted workbook (zip bomb) could fill memory and the temp
+// directory.
+//
+// unzipSizeLimit caps the total uncompressed size of all parts. Uploads are capped
+// at 50 MB by the ingress (proxy-body-size); real energy data workbooks expand
+// about 7x (test/zaehlpunkte-beispieldatei.xlsx: 21.7 MB -> 153 MB,
+// test/230903 Energiedaten AUFBEREITET.xlsx: 3.9 MB -> 28.6 MB), so a 50 MB
+// upload is about 350 MB unzipped. 1 GiB leaves room for a ratio of about 20x.
+//
+// unzipXMLSizeLimit is the excelize default (16 MiB): worksheets and the shared
+// string table above it are unzipped to the temp directory instead of memory.
+// It is set explicitly because it must not exceed unzipSizeLimit.
+const (
+	unzipSizeLimit    int64 = 1 << 30
+	unzipXMLSizeLimit int64 = 16 << 20
+)
+
+// withUnzipLimits returns the given options (or empty ones) with the package's
+// unzip limits filled in where the caller left them unset.
+func withUnzipLimits(opt ...excelize.Options) excelize.Options {
+	var o excelize.Options
+	if len(opt) > 0 {
+		o = opt[0]
+	}
+	if o.UnzipSizeLimit == 0 {
+		o.UnzipSizeLimit = unzipSizeLimit
+	}
+	if o.UnzipXMLSizeLimit == 0 {
+		o.UnzipXMLSizeLimit = unzipXMLSizeLimit
+	}
+	return o
+}
+
 func OpenExceFile(path string) (*excelize.File, error) {
-	f, err := excelize.OpenFile(path)
+	f, err := excelize.OpenFile(path, withUnzipLimits())
 	if err != nil {
 		glog.Error(err)
 		return nil, err
@@ -30,7 +64,7 @@ func OpenExceFile(path string) (*excelize.File, error) {
 }
 
 func OpenReader(r io.Reader, filename string, opt ...excelize.Options) (*excelize.File, error) {
-	f, err := excelize.OpenReader(r, opt...)
+	f, err := excelize.OpenReader(r, withUnzipLimits(opt...))
 	if err != nil {
 		return nil, err
 	}
