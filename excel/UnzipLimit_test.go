@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/xuri/excelize/v2"
 )
 
 // isolatedTempDir points the process temp dir at an empty directory for the
@@ -62,11 +63,9 @@ func TestOpenReaderRejectsOversizedEntry(t *testing.T) {
 }
 
 // Each entry stays below the limit, their declared total does not. The first
-// worksheet is above UnzipXMLSizeLimit, so excelize has already unzipped it to
-// a temp file when the second entry crosses the limit; that file must not be
-// left behind.
+// worksheet is above UnzipXMLSizeLimit, so excelize unzips it to a temp file
+// before the second entry crosses the limit.
 func TestOpenReaderRejectsOversizedTotalAndCleansUp(t *testing.T) {
-	tmp := isolatedTempDir(t)
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	w, err := zw.Create("xl/worksheets/sheet1.xml")
@@ -77,6 +76,21 @@ func TestOpenReaderRejectsOversizedTotalAndCleansUp(t *testing.T) {
 	addForgedEntry(t, zw, "xl/worksheets/sheet2.xml", uint64(openOptions.UnzipSizeLimit-first)+1)
 	require.NoError(t, zw.Close())
 
+	// Without OpenReader's cleanup: excelize fails, returns no File and
+	// leaves the temp file of the first worksheet behind.
+	plainDir := t.TempDir()
+	opts := openOptions
+	opts.TmpDir = plainDir
+	f, err := excelize.OpenReader(bytes.NewReader(buf.Bytes()), opts)
+	requireUnzipLimitError(t, err)
+	require.Nil(t, f)
+	left, err := os.ReadDir(plainDir)
+	require.NoError(t, err)
+	require.Len(t, left, 1)
+	require.True(t, strings.HasPrefix(left[0].Name(), "excelize-"), left[0].Name())
+
+	// OpenReader removes it: nothing at all is left in the temp dir.
+	tmp := isolatedTempDir(t)
 	f, closeFile, err := OpenReader(bytes.NewReader(buf.Bytes()), "bomb.xlsx")
 	requireUnzipLimitError(t, err)
 	require.Nil(t, f)

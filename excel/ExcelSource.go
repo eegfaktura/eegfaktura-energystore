@@ -29,16 +29,16 @@ var numberPattern = regexp.MustCompile(`^[0-9\\.,]+$`)
 // the zip entries; excelize stops at the first entry that crosses it (entries
 // read before that are already unzipped). Uploads reach the service through
 // gqlgen's multipart transport, whose default MaxUploadSize is 32 MiB (server.go:
-// handler.NewDefaultServer). Real energy data workbooks expand about 7x
-// (test/zaehlpunkte-beispieldatei.xlsx: 21.7 MB -> 153 MB,
-// test/230903 Energiedaten AUFBEREITET.xlsx: 3.9 MB -> 28.6 MB), so a 32 MiB
-// upload is about 225 MB unzipped. 256 MiB covers that.
+// handler.NewDefaultServer). The workbooks in test/ expand 7x to 27x (largest
+// ratio: test/ShortTest-Energiedaten New.xlsx, 0.13 MB -> 3.4 MB, 26.7x; the
+// largest file, test/zaehlpunkte-beispieldatei.xlsx, 21.7 MB -> 153 MB, 7.1x).
+// 1 GiB is the 32 MiB cap times 32, above the largest observed ratio.
 //
 // UnzipXMLSizeLimit is the excelize default (16 MiB): worksheets and the shared
 // string table above it are unzipped to the temp directory instead of memory.
 // It is set explicitly because it must not exceed UnzipSizeLimit.
 var openOptions = excelize.Options{
-	UnzipSizeLimit:    256 << 20,
+	UnzipSizeLimit:    1 << 30,
 	UnzipXMLSizeLimit: 16 << 20,
 }
 
@@ -57,13 +57,19 @@ func OpenExceFile(path string) (*excelize.File, error) {
 // OpenReader opens an uploaded workbook. Its temp files go to a directory of
 // their own: when opening fails while unzipping, excelize returns no File and
 // so cannot remove the temp files written so far; the directory is removed
-// instead. The returned func closes the File and removes the directory; call
-// it when done with the File.
+// instead (also if excelize panics). The returned func closes the File and
+// removes the directory; call it when done with the File.
 func OpenReader(r io.Reader, filename string) (*excelize.File, func(), error) {
 	tmpDir, err := os.MkdirTemp("", "energystore-import-")
 	if err != nil {
 		return nil, nil, err
 	}
+	keepTmpDir := false
+	defer func() {
+		if !keepTmpDir {
+			_ = os.RemoveAll(tmpDir)
+		}
+	}()
 	opts := openOptions
 	opts.TmpDir = tmpDir
 	f, err := excelize.OpenReader(r, opts)
@@ -71,12 +77,14 @@ func OpenReader(r io.Reader, filename string) (*excelize.File, func(), error) {
 		if f != nil {
 			_ = f.Close()
 		}
-		_ = os.RemoveAll(tmpDir)
 		return nil, nil, err
 	}
 	f.Path = filename
 
-	glog.V(3).Infof("Read Excel File with Sheets %+v", f.GetSheetList())
+	if glog.V(3) {
+		glog.Infof("Read Excel File with Sheets %+v", f.GetSheetList())
+	}
+	keepTmpDir = true
 	return f, func() {
 		_ = f.Close()
 		_ = os.RemoveAll(tmpDir)
