@@ -144,8 +144,13 @@ jobs:
             --go-grpc_out=. --go-grpc_opt=paths=source_relative ./protoc/*.proto
 
       - name: Known red packages (race detector)
+        id: reportonly
         # Report-only: these packages have known failing tests; the step must not turn a PR red.
         continue-on-error: true
         run: |
           read -ra known <<< "$KNOWN_RED_PACKAGES"
           go test -race -count=1 -timeout 300s "${known[@]/#/./}"
+
+      - name: Report the known failure
+        if: steps.reportonly.outcome == 'failure'
+        run: echo "::warning::Known red packages failed (report-only): see the step log."
