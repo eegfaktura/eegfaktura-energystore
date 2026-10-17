@@ -10,6 +10,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/xuri/excelize/v2"
 	"io"
+	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -20,24 +21,74 @@ import (
 var dateLine = regexp.MustCompile(`^[0-9]{2}\.[0-9]{2}\.[0-9]{4}\s[0-9]{2}:[0-9]{2}(?::[0-9]{2})?$`)
 var numberPattern = regexp.MustCompile(`^[0-9\\.,]+$`)
 
+// openOptions are the unzip limits for every workbook this package opens.
+// excelize defaults to an unzip limit of about 16 GB, so a small crafted
+// workbook (zip bomb) could fill memory and the temp directory.
+//
+// UnzipSizeLimit caps the running total of the uncompressed sizes declared by
+// the zip entries; excelize stops at the first entry that crosses it (entries
+// read before that are already unzipped). Uploads reach the service through
+// gqlgen's multipart transport, whose default MaxUploadSize is 32 MiB (server.go:
+// handler.NewDefaultServer). The workbooks in test/ expand 7x to 27x (largest
+// ratio: test/ShortTest-Energiedaten New.xlsx, 0.13 MB -> 3.4 MB, 26.7x; the
+// largest file, test/zaehlpunkte-beispieldatei.xlsx, 21.7 MB -> 153 MB, 7.1x).
+// 1 GiB is the 32 MiB cap times 32, above the largest observed ratio.
+//
+// UnzipXMLSizeLimit is the excelize default (16 MiB): worksheets and the shared
+// string table above it are unzipped to the temp directory instead of memory.
+// It is set explicitly because it must not exceed UnzipSizeLimit.
+var openOptions = excelize.Options{
+	UnzipSizeLimit:    1 << 30,
+	UnzipXMLSizeLimit: 16 << 20,
+}
+
 func OpenExceFile(path string) (*excelize.File, error) {
-	f, err := excelize.OpenFile(path)
+	f, err := excelize.OpenFile(path, openOptions)
 	if err != nil {
+		if f != nil {
+			_ = f.Close()
+		}
 		glog.Error(err)
 		return nil, err
 	}
 	return f, nil
 }
 
-func OpenReader(r io.Reader, filename string, opt ...excelize.Options) (*excelize.File, error) {
-	f, err := excelize.OpenReader(r, opt...)
+// OpenReader opens an uploaded workbook. Its temp files go to a directory of
+// their own: when opening fails while unzipping, excelize returns no File and
+// so cannot remove the temp files written so far; the directory is removed
+// instead (also if excelize panics). The returned func closes the File and
+// removes the directory; call it when done with the File.
+func OpenReader(r io.Reader, filename string) (*excelize.File, func(), error) {
+	tmpDir, err := os.MkdirTemp("", "energystore-import-")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	keepTmpDir := false
+	defer func() {
+		if !keepTmpDir {
+			_ = os.RemoveAll(tmpDir)
+		}
+	}()
+	opts := openOptions
+	opts.TmpDir = tmpDir
+	f, err := excelize.OpenReader(r, opts)
+	if err != nil {
+		if f != nil {
+			_ = f.Close()
+		}
+		return nil, nil, err
 	}
 	f.Path = filename
 
-	glog.V(3).Infof("Read Excel File with Sheets %+v", f.GetSheetList())
-	return f, nil
+	if glog.V(3) {
+		glog.Infof("Read Excel File with Sheets %+v", f.GetSheetList())
+	}
+	keepTmpDir = true
+	return f, func() {
+		_ = f.Close()
+		_ = os.RemoveAll(tmpDir)
+	}, nil
 }
 
 type MeterCodeType int

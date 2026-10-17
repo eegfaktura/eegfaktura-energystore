@@ -26,6 +26,25 @@ this changelog highlights the changes relevant for overview and operations.
 
 > **End of the `env/billing`-only entries.**
 
+## [1.5.3] – 2026-10-17
+
+### Changed
+- Test fixtures: an unused spreadsheet removed, the Excel import test file replaced by a neutral
+  copy with test metering point numbers (`TestImportExcelEnergyFile` unchanged).
+
+### Fixed
+- **Excel import: unzip size limit.** Workbooks are opened with a limit of 1 GiB on the total
+  uncompressed size declared by their entries (excelize default: about 16 GB); opening stops at the
+  first entry that crosses it. Uploads are capped at 32 MiB by the GraphQL multipart transport
+  (gqlgen default); the workbooks in `test/` expand 7x to 27x, so 1 GiB (32x the cap) covers the
+  largest observed ratio. Worksheets above 16 MiB still go to the temp directory as before.
+- **Excel upload: temp files on failed opens.** An uploaded workbook (`OpenReader`) gets its own
+  temp directory, removed when the import ends and also when opening fails or panics; before,
+  temp files written before the failure stayed behind. `OpenExceFile` (tests only) keeps the
+  default temp directory. The cause of a failed open is now logged.
+  (`TestOpenReaderRejectsOversizedEntry`, `TestOpenReaderRejectsOversizedTotalAndCleansUp`,
+  `TestOpenWorkbookWithinUnzipLimits`)
+
 ## [1.5.2] – 2026-10-05
 
 ### Fixed

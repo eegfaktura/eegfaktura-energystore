@@ -47,7 +47,7 @@ func TestImportExcelEnergyFile(t *testing.T) {
 		os.RemoveAll("../test/rawdata/dashboard")
 	}()
 
-	excelFile, err := OpenExceFile("../test/221220 Daten VIERE 04-10 bis 18-12.xlsx")
+	excelFile, err := OpenExceFile("../test/221220 Testdaten Energiegemeinschaft 04-10 bis 18-12.xlsx")
 	require.NoError(t, err)
 	defer excelFile.Close()
 
