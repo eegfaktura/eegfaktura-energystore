@@ -10,45 +10,99 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// A workbook whose worksheet declares an uncompressed size above the limit is
-// rejected before anything is unzipped. archive/zip refuses to read more bytes
-// than an entry declares, so the declared size is binding.
-func TestOpenReaderRejectsOversizedWorkbook(t *testing.T) {
-	var buf bytes.Buffer
-	zw := zip.NewWriter(&buf)
+// isolatedTempDir points the process temp dir at an empty directory for the
+// test, so the test can check that nothing is left behind.
+func isolatedTempDir(t *testing.T) string {
+	dir := t.TempDir()
+	t.Setenv("TMPDIR", dir)
+	t.Setenv("TMP", dir)
+	t.Setenv("TEMP", dir)
+	return dir
+}
+
+func requireEmptyDir(t *testing.T, dir string) {
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	require.Empty(t, entries)
+}
+
+// addForgedEntry adds an entry that declares more uncompressed bytes than it
+// holds. excelize checks the declared sizes; archive/zip refuses to read more
+// bytes than an entry declares.
+func addForgedEntry(t *testing.T, zw *zip.Writer, name string, declared uint64) {
 	data := []byte("<worksheet/>")
 	w, err := zw.CreateRaw(&zip.FileHeader{
-		Name:               "xl/worksheets/sheet1.xml",
+		Name:               name,
 		Method:             zip.Store,
 		CompressedSize64:   uint64(len(data)),
-		UncompressedSize64: uint64(unzipSizeLimit) + 1,
+		UncompressedSize64: declared,
 	})
 	require.NoError(t, err)
 	_, err = w.Write(data)
 	require.NoError(t, err)
-	require.NoError(t, zw.Close())
+}
 
-	f, err := OpenReader(bytes.NewReader(buf.Bytes()), "bomb.xlsx")
+func requireUnzipLimitError(t *testing.T, err error) {
 	require.Error(t, err)
-	require.Nil(t, f)
 	require.True(t, strings.Contains(err.Error(), "unzip size exceeds"), err.Error())
 }
 
+func TestOpenReaderRejectsOversizedEntry(t *testing.T) {
+	tmp := isolatedTempDir(t)
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	addForgedEntry(t, zw, "xl/worksheets/sheet1.xml", uint64(openOptions.UnzipSizeLimit)+1)
+	require.NoError(t, zw.Close())
+
+	f, closeFile, err := OpenReader(bytes.NewReader(buf.Bytes()), "bomb.xlsx")
+	requireUnzipLimitError(t, err)
+	require.Nil(t, f)
+	require.Nil(t, closeFile)
+	requireEmptyDir(t, tmp)
+}
+
+// Each entry stays below the limit, their declared total does not. The first
+// worksheet is above UnzipXMLSizeLimit, so excelize has already unzipped it to
+// a temp file when the second entry crosses the limit; that file must not be
+// left behind.
+func TestOpenReaderRejectsOversizedTotalAndCleansUp(t *testing.T) {
+	tmp := isolatedTempDir(t)
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	w, err := zw.Create("xl/worksheets/sheet1.xml")
+	require.NoError(t, err)
+	first := openOptions.UnzipXMLSizeLimit + 1<<20
+	_, err = w.Write(bytes.Repeat([]byte(" "), int(first)))
+	require.NoError(t, err)
+	addForgedEntry(t, zw, "xl/worksheets/sheet2.xml", uint64(openOptions.UnzipSizeLimit-first)+1)
+	require.NoError(t, zw.Close())
+
+	f, closeFile, err := OpenReader(bytes.NewReader(buf.Bytes()), "bomb.xlsx")
+	requireUnzipLimitError(t, err)
+	require.Nil(t, f)
+	require.Nil(t, closeFile)
+	requireEmptyDir(t, tmp)
+}
+
 // The largest real workbook in the repo (21.7 MB, 153 MB unzipped) still opens
-// with the limits, through OpenReader (upload path) and OpenExceFile.
+// with the limits, through OpenReader (upload path) and OpenExceFile, and
+// closing it leaves no temp files behind.
 func TestOpenWorkbookWithinUnzipLimits(t *testing.T) {
 	const path = "../test/zaehlpunkte-beispieldatei.xlsx"
+	tmp := isolatedTempDir(t)
 
 	r, err := os.Open(path)
 	require.NoError(t, err)
 	defer r.Close()
-	f, err := OpenReader(r, path)
+	f, closeFile, err := OpenReader(r, path)
 	require.NoError(t, err)
 	require.NotEmpty(t, f.GetSheetList())
-	require.NoError(t, f.Close())
+	closeFile()
+	requireEmptyDir(t, tmp)
 
 	f, err = OpenExceFile(path)
 	require.NoError(t, err)
 	require.NotEmpty(t, f.GetSheetList())
 	require.NoError(t, f.Close())
+	requireEmptyDir(t, tmp)
 }

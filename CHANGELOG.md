@@ -13,11 +13,16 @@ this changelog highlights the changes relevant for overview and operations.
   copy with test metering point numbers (`TestImportExcelEnergyFile` unchanged).
 
 ### Fixed
-- **Excel import: unzip size limit.** Workbooks are opened with an explicit limit of 1 GiB
-  uncompressed (excelize default: about 16 GB); larger workbooks are rejected before they are
-  unzipped. Real imports stay far below it: a 50 MB upload (ingress limit) unzips to about
-  350 MB. Worksheets above 16 MiB still go to the temp directory as before.
-  (`TestOpenReaderRejectsOversizedWorkbook`, `TestOpenWorkbookWithinUnzipLimits`)
+- **Excel import: unzip size limit.** Workbooks are opened with a limit of 256 MiB on the total
+  uncompressed size declared by their entries (excelize default: about 16 GB); opening stops at the
+  first entry that crosses it. Uploads are capped at 32 MiB by the GraphQL multipart transport
+  (gqlgen default), and real energy data workbooks expand about 7x, so real imports stay at about
+  225 MB at most. Worksheets above 16 MiB still go to the temp directory as before.
+- **Excel import: temp files on failed opens.** An uploaded workbook gets its own temp directory,
+  removed when the import ends and also when opening fails; before, temp files written before the
+  failure stayed behind. The cause of a failed open is now logged.
+  (`TestOpenReaderRejectsOversizedEntry`, `TestOpenReaderRejectsOversizedTotalAndCleansUp`,
+  `TestOpenWorkbookWithinUnzipLimits`)
 
 ## [1.5.2] – 2026-10-05
 

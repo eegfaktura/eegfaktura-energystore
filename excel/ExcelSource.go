@@ -10,6 +10,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/xuri/excelize/v2"
 	"io"
+	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -20,58 +21,66 @@ import (
 var dateLine = regexp.MustCompile(`^[0-9]{2}\.[0-9]{2}\.[0-9]{4}\s[0-9]{2}:[0-9]{2}(?::[0-9]{2})?$`)
 var numberPattern = regexp.MustCompile(`^[0-9\\.,]+$`)
 
-// Unzip limits for workbooks opened by this package. excelize defaults to about
-// 16 GB, so a small crafted workbook (zip bomb) could fill memory and the temp
-// directory.
+// openOptions are the unzip limits for every workbook this package opens.
+// excelize defaults to an unzip limit of about 16 GB, so a small crafted
+// workbook (zip bomb) could fill memory and the temp directory.
 //
-// unzipSizeLimit caps the total uncompressed size of all parts. Uploads are capped
-// at 50 MB by the ingress (proxy-body-size); real energy data workbooks expand
-// about 7x (test/zaehlpunkte-beispieldatei.xlsx: 21.7 MB -> 153 MB,
-// test/230903 Energiedaten AUFBEREITET.xlsx: 3.9 MB -> 28.6 MB), so a 50 MB
-// upload is about 350 MB unzipped. 1 GiB leaves room for a ratio of about 20x.
+// UnzipSizeLimit caps the running total of the uncompressed sizes declared by
+// the zip entries; excelize stops at the first entry that crosses it (entries
+// read before that are already unzipped). Uploads reach the service through
+// gqlgen's multipart transport, whose default MaxUploadSize is 32 MiB (server.go:
+// handler.NewDefaultServer). Real energy data workbooks expand about 7x
+// (test/zaehlpunkte-beispieldatei.xlsx: 21.7 MB -> 153 MB,
+// test/230903 Energiedaten AUFBEREITET.xlsx: 3.9 MB -> 28.6 MB), so a 32 MiB
+// upload is about 225 MB unzipped. 256 MiB covers that.
 //
-// unzipXMLSizeLimit is the excelize default (16 MiB): worksheets and the shared
+// UnzipXMLSizeLimit is the excelize default (16 MiB): worksheets and the shared
 // string table above it are unzipped to the temp directory instead of memory.
-// It is set explicitly because it must not exceed unzipSizeLimit.
-const (
-	unzipSizeLimit    int64 = 1 << 30
-	unzipXMLSizeLimit int64 = 16 << 20
-)
-
-// withUnzipLimits returns the given options (or empty ones) with the package's
-// unzip limits filled in where the caller left them unset.
-func withUnzipLimits(opt ...excelize.Options) excelize.Options {
-	var o excelize.Options
-	if len(opt) > 0 {
-		o = opt[0]
-	}
-	if o.UnzipSizeLimit == 0 {
-		o.UnzipSizeLimit = unzipSizeLimit
-	}
-	if o.UnzipXMLSizeLimit == 0 {
-		o.UnzipXMLSizeLimit = unzipXMLSizeLimit
-	}
-	return o
+// It is set explicitly because it must not exceed UnzipSizeLimit.
+var openOptions = excelize.Options{
+	UnzipSizeLimit:    256 << 20,
+	UnzipXMLSizeLimit: 16 << 20,
 }
 
 func OpenExceFile(path string) (*excelize.File, error) {
-	f, err := excelize.OpenFile(path, withUnzipLimits())
+	f, err := excelize.OpenFile(path, openOptions)
 	if err != nil {
+		if f != nil {
+			_ = f.Close()
+		}
 		glog.Error(err)
 		return nil, err
 	}
 	return f, nil
 }
 
-func OpenReader(r io.Reader, filename string, opt ...excelize.Options) (*excelize.File, error) {
-	f, err := excelize.OpenReader(r, withUnzipLimits(opt...))
+// OpenReader opens an uploaded workbook. Its temp files go to a directory of
+// their own: when opening fails while unzipping, excelize returns no File and
+// so cannot remove the temp files written so far; the directory is removed
+// instead. The returned func closes the File and removes the directory; call
+// it when done with the File.
+func OpenReader(r io.Reader, filename string) (*excelize.File, func(), error) {
+	tmpDir, err := os.MkdirTemp("", "energystore-import-")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	opts := openOptions
+	opts.TmpDir = tmpDir
+	f, err := excelize.OpenReader(r, opts)
+	if err != nil {
+		if f != nil {
+			_ = f.Close()
+		}
+		_ = os.RemoveAll(tmpDir)
+		return nil, nil, err
 	}
 	f.Path = filename
 
 	glog.V(3).Infof("Read Excel File with Sheets %+v", f.GetSheetList())
-	return f, nil
+	return f, func() {
+		_ = f.Close()
+		_ = os.RemoveAll(tmpDir)
+	}, nil
 }
 
 type MeterCodeType int
