@@ -28,15 +28,17 @@ func ImportEEG(db *ebow.BowStorage, r io.Reader, filename, sheet, tenant string)
 	ext := filepath.Ext(filename)
 	glog.Infof("Import Raw-Data: %+v Ext: %s", filename, ext)
 	if ext == ".xlsx" || ext == ".xls" {
-		if f, err := OpenReader(r, filename); err == nil {
-			defer f.Close()
-			var err error
-			if err = ImportExcelEnergyFileNew(f, sheet, db); err != nil {
-				glog.Infof("Import Execl Error: %v\n", err)
-				return err
-			}
-			return nil
+		f, closeFile, err := OpenReader(r, filename)
+		if err != nil {
+			glog.Infof("Open Excel Error: %v", err)
+			return errors.New("Invalid Text File")
 		}
+		defer closeFile()
+		if err = ImportExcelEnergyFileNew(f, sheet, db); err != nil {
+			glog.Infof("Import Execl Error: %v\n", err)
+			return err
+		}
+		return nil
 	}
 	return errors.New("Invalid Text File")
 }
