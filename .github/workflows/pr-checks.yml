@@ -1,0 +1,201 @@
+# Tests on every pull request: the unit tests (the packages that are green on main, as in
+# docker-image.yml; quick: no race detector) and the full suite (every package except the root,
+# with the race detector). The root package (three func main) does not compile as one package and
+# is left out. The packages with known failing tests run in their own job "Known errors", so the
+# two test jobs keep a clean signal; that job is report-only, and a package leaves
+# KNOWN_RED_PACKAGES with its fix.
+#
+# Only protoc/excel.pb.go is committed, so every job generates the protobuf stubs first.
+# Versions fixed, each release older than 7 days (checked 2026-10-09): Go 1.25.14 (2026-08-19),
+# protoc 29.3 (2025-01-08), protoc-gen-go v1.36.11 (go.mod), protoc-gen-go-grpc v1.6.2.
+# Actions pinned by commit SHA.
+# Every job keeps its output as an artifact for 30 days (test-results-<job>, known-errors-<job>),
+# for the CI report collector (vfeeg-development/eegfaktura-dev).
+
+name: PR Checks
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: '1.25.14'
+  PROTOC_VERSION: '29.3'
+  PROTOC_SHA256: '3e866620c5be27664f3d2fa2d656b5f3e09b5152b42f1bedbf427b333e90021a'
+  PROTOC_GEN_GO_GRPC_VERSION: 'v1.6.2'
+  # Known failing tests: calculation exceeds the 300 s timeout under the race detector, model and
+  # mqttclient fail on their test fixtures.
+  KNOWN_RED_PACKAGES: 'calculation model mqttclient'
+  # go test -json is kept as the result file; the console shows the test output read back from it
+  # (as with go test -v). Exit codes are go test's (pipefail).
+  GO_TEST_OUTPUT: '(fromjson? // {Action: "output", Output: (. + "\n")}) | select(.Action == "output" or .Action == "build-output") | .Output'
+
+jobs:
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Generate code
+        run: |
+          set -euo pipefail
+          curl -fsSLo "$RUNNER_TEMP/protoc.zip" \
+            "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip"
+          echo "${PROTOC_SHA256}  $RUNNER_TEMP/protoc.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/protoc.zip" -d "$RUNNER_TEMP/protoc"
+          gopath="$(go env GOPATH)"
+          export PATH="$RUNNER_TEMP/protoc/bin:$gopath/bin:$PATH"
+          # protoc-gen-go inside the module: the version comes from go.mod
+          go install google.golang.org/protobuf/cmd/protoc-gen-go
+          go install "google.golang.org/grpc/cmd/protoc-gen-go-grpc@${PROTOC_GEN_GO_GRPC_VERSION}"
+          protoc --experimental_allow_proto3_optional=true --proto_path=. \
+            --go_out=. --go_opt=paths=source_relative \
+            --go-grpc_out=. --go-grpc_opt=paths=source_relative ./protoc/*.proto
+
+      - name: Unit tests
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/results"
+          go test -json -count=1 -timeout 300s ./utils/ ./store/ ./store/function/ ./excel/ ./tenantctx/ ./graph/ \
+            | tee "$RUNNER_TEMP/results/unit.json" | jq -Rrj --unbuffered "$GO_TEST_OUTPUT"
+
+      - name: Unit tests (vlog GC, real Badger)
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/results"
+          go test -json -count=1 -timeout 300s -run TestVlogGC ./store/ebow/ \
+            | tee "$RUNNER_TEMP/results/unit-vlog-gc.json" | jq -Rrj --unbuffered "$GO_TEST_OUTPUT"
+
+      - name: Keep the test results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-results-unit
+          path: ${{ runner.temp }}/results
+          if-no-files-found: ignore
+          retention-days: 30
+
+  full:
+    name: Full test suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Generate code
+        run: |
+          set -euo pipefail
+          curl -fsSLo "$RUNNER_TEMP/protoc.zip" \
+            "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip"
+          echo "${PROTOC_SHA256}  $RUNNER_TEMP/protoc.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/protoc.zip" -d "$RUNNER_TEMP/protoc"
+          gopath="$(go env GOPATH)"
+          export PATH="$RUNNER_TEMP/protoc/bin:$gopath/bin:$PATH"
+          # protoc-gen-go inside the module: the version comes from go.mod
+          go install google.golang.org/protobuf/cmd/protoc-gen-go
+          go install "google.golang.org/grpc/cmd/protoc-gen-go-grpc@${PROTOC_GEN_GO_GRPC_VERSION}"
+          protoc --experimental_allow_proto3_optional=true --proto_path=. \
+            --go_out=. --go_opt=paths=source_relative \
+            --go-grpc_out=. --go-grpc_opt=paths=source_relative ./protoc/*.proto
+
+      - name: Tests (race detector)
+        run: |
+          set -euo pipefail
+          module="$(go list -m)"
+          read -ra known <<< "$KNOWN_RED_PACKAGES"
+          # the root package and the known red ones
+          exclude="$(printf "^${module}(/%s)?\$\n" "${known[@]}" | paste -sd'|')"
+          mapfile -t pkgs < <(go list ./... | grep -vE "$exclude")
+          printf 'Package: %s\n' "${pkgs[@]}"
+          mkdir -p "$RUNNER_TEMP/results"
+          go test -json -race -count=1 -timeout 300s "${pkgs[@]}" \
+            | tee "$RUNNER_TEMP/results/full.json" | jq -Rrj --unbuffered "$GO_TEST_OUTPUT"
+
+      - name: Keep the test results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-results-full
+          path: ${{ runner.temp }}/results
+          if-no-files-found: ignore
+          retention-days: 30
+
+  known:
+    name: Known errors
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Generate code
+        run: |
+          set -euo pipefail
+          curl -fsSLo "$RUNNER_TEMP/protoc.zip" \
+            "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip"
+          echo "${PROTOC_SHA256}  $RUNNER_TEMP/protoc.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/protoc.zip" -d "$RUNNER_TEMP/protoc"
+          gopath="$(go env GOPATH)"
+          export PATH="$RUNNER_TEMP/protoc/bin:$gopath/bin:$PATH"
+          # protoc-gen-go inside the module: the version comes from go.mod
+          go install google.golang.org/protobuf/cmd/protoc-gen-go
+          go install "google.golang.org/grpc/cmd/protoc-gen-go-grpc@${PROTOC_GEN_GO_GRPC_VERSION}"
+          protoc --experimental_allow_proto3_optional=true --proto_path=. \
+            --go_out=. --go_opt=paths=source_relative \
+            --go-grpc_out=. --go-grpc_opt=paths=source_relative ./protoc/*.proto
+
+      - name: Known red packages (race detector)
+        id: reportonly
+        # Report-only: these packages have known failing tests; the step must not turn a PR red.
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          read -ra known <<< "$KNOWN_RED_PACKAGES"
+          mkdir -p "$RUNNER_TEMP/results"
+          go test -json -race -count=1 -timeout 300s "${known[@]/#/./}" \
+            | tee "$RUNNER_TEMP/results/known.json" | jq -Rrj --unbuffered "$GO_TEST_OUTPUT"
+
+      - name: Report the known failure
+        if: steps.reportonly.outcome == 'failure'
+        run: echo "::warning::Known red packages failed (report-only), see the step log."
+
+      - name: Keep the test results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: known-errors-known
+          path: ${{ runner.temp }}/results
+          if-no-files-found: ignore
+          retention-days: 30
