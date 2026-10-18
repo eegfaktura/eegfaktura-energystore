@@ -21,6 +21,7 @@ func TestBillingCheckRequestValidate(t *testing.T) {
 		"end before start":  {Start: endOfYear, End: start},
 		"longer than year":  {Start: start, End: start + 400*24*3600*1000},
 		"huge end":          {Start: start, End: 1 << 62},
+		"far future":        {Start: 1 << 62, End: 1 << 62},
 		"metering point":    {Start: start, End: start, Cps: []BillingCheckCp{{Direction: CONSUMER_DIRECTION}}},
 		"invalid direction": {Start: start, End: start, Cps: []BillingCheckCp{{MeteringPoint: "AT003", Direction: "IN"}}},
 		"too many":          {Start: start, End: start, Cps: make([]BillingCheckCp, billingCheckMaxCps+1)},

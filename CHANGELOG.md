@@ -12,9 +12,11 @@ this changelog highlights the changes relevant for overview and operations.
 - **`POST /eeg/v2/{ecid}/billing-check`** for the checks before billing in web (platform#148), read only,
   protected like `/eeg/v2/{ecid}/report`. Request: period (`start`, `end`, epoch ms of the first and the
   last day) and the metering points with their active windows (`cps`, like the Excel export). Response per
-  entry: quarter hours with an L3 value and their days, first and last quarter hour with a value; and the
-  community totals (production, consumption, G.02 allocated, G.03 self coverage, P.01 surplus) over the
-  active windows. A period longer than one year, more than 10,000 entries or an invalid direction → 400.
+  entry: quarter hours with an L3 value and their days, first and last quarter hour with a value (each
+  entry's active window ends at the end of its inactive day, local time); and the totals of all metering
+  points of the community in the period (production, consumption, G.02 allocated, G.03 self coverage,
+  P.01 surplus). A period longer than one year or ending after 2999, more than 10,000 entries, an invalid
+  direction or a body above 4 MiB → 400.
 - CI: PR checks (tests on every pull request) and a security scan (leaked secrets in new commits,
   vulnerable dependencies, Dockerfile/Kubernetes misconfigurations). Dependency and misconfiguration
   findings are only reported and do not block; a leaked secret in new commits fails the check. Jobs for

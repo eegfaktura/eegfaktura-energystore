@@ -10,6 +10,9 @@ const (
 	billingCheckMaxCps    = 10000
 )
 
+// billingCheckMaxEnd keeps the period inside the dates the stores can represent.
+var billingCheckMaxEnd = time.Date(2999, 12, 31, 0, 0, 0, 0, time.UTC).UnixMilli()
+
 // BillingCheckRequest asks for the data checks before a billing run (platform#148): the period
 // [Start, End] (epoch ms, the first and the last day of the period) and the metering points active
 // in it, each with its own active window (epoch ms of the day, like the Excel export).
@@ -43,7 +46,7 @@ type BillingCheckMeter struct {
 	LastData  *int64 `json:"lastData"`
 }
 
-// BillingCheckTotals sums the community's values over the active windows of the requested entries.
+// BillingCheckTotals sums the values of all metering points of the community in the period.
 type BillingCheckTotals struct {
 	Produced    float64 `json:"produced"`    // producer G.01 (production)
 	Consumed    float64 `json:"consumed"`    // consumer G.01 (consumption)
@@ -63,7 +66,7 @@ type BillingCheckResponse struct {
 
 // Validate rejects requests that cannot be a billing period of one community.
 func (req *BillingCheckRequest) Validate() error {
-	if req.Start <= 0 || req.End < req.Start {
+	if req.Start <= 0 || req.End < req.Start || req.End > billingCheckMaxEnd {
 		return errors.New("invalid period")
 	}
 	if req.End-req.Start > billingCheckMaxPeriod.Milliseconds() {

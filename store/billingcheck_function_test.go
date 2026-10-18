@@ -131,8 +131,10 @@ func TestBillingCheck_CoverageAndTotals(t *testing.T) {
 	assert.Equal(t, time.Date(2026, 2, 9, 23, 45, 0, 0, time.Local).UnixMilli(), *res.Meters[4].LastData)
 	assert.Equal(t, bcDay(9).UnixMilli(), res.Meters[4].InactiveSince, "request values are echoed")
 
-	// Quarter hours: first consumer 28 days, second 5.-20.02. (16 days), earlier owner 1.-9.02.
-	slots := float64((28 + 16 + 9) * 96)
+	// Totals cover all metering points of the community, not the requested windows: the earlier
+	// owner and the activation of the second consumer do not change them. First consumer 28 days,
+	// second consumer has values until 20.02.
+	slots := float64((28 + 20) * 96)
 	assert.InDelta(t, slots*1, res.Totals.Consumed, 1e-6)
 	assert.InDelta(t, slots*0.5, res.Totals.Allocated, 1e-6)
 	assert.InDelta(t, slots*0.4, res.Totals.SelfCovered, 1e-6)
@@ -159,17 +161,11 @@ func TestBillingCheck_MissingTailDays(t *testing.T) {
 func TestBillingCheck_GapInsidePeriodIsNoValue(t *testing.T) {
 	// Missing rows inside the period are filled by the engine with L0 lines; they are neither a
 	// value nor L3.
-	viper.Set("persistence.path", t.TempDir())
-	db, err := ebow.OpenStorage(bcTenant, bcEcId)
-	require.NoError(t, err)
-	require.NoError(t, db.SetMeta(&model.RawSourceMeta{Id: "cpmeta/0", CounterPoints: []*model.CounterPointMeta{
-		{ID: "cpmeta/0", Name: bcCons, SourceIdx: 0, Dir: model.CONSUMER_DIRECTION},
-	}}))
-	require.NoError(t, db.SetLines([]*model.RawSourceLine{
-		{Id: "CP/2026/02/02/00/00/00", Consumers: []float64{1, 0, 0}, QoVConsumers: []int{1, 1, 1}},
-		{Id: "CP/2026/02/04/00/00/00", Consumers: []float64{1, 0, 0}, QoVConsumers: []int{1, 1, 1}},
-	}))
-	db.Close()
+	bcStore(t, []*model.CounterPointMeta{{ID: "cpmeta/0", Name: bcCons, SourceIdx: 0, Dir: model.CONSUMER_DIRECTION}},
+		[]*model.RawSourceLine{
+			{Id: "CP/2026/02/02/00/00/00", Consumers: []float64{1, 0, 0}, QoVConsumers: []int{1, 1, 1}},
+			{Id: "CP/2026/02/04/00/00/00", Consumers: []float64{1, 0, 0}, QoVConsumers: []int{1, 1, 1}},
+		})
 
 	res, err := QueryBillingCheck(bcTenant, bcEcId, bcRequest(cons(bcCons, 0, 0)))
 	require.NoError(t, err)
@@ -177,6 +173,58 @@ func TestBillingCheck_GapInsidePeriodIsNoValue(t *testing.T) {
 	assert.Equal(t, bcDay(4).UnixMilli(), *res.Meters[0].LastData)
 	assert.Equal(t, 0, res.Meters[0].L3Count)
 	assert.InDelta(t, 2.0, res.Totals.Consumed, 1e-6)
+}
+
+// bcStore writes the given metadata and lines into a fresh store.
+func bcStore(t *testing.T, meta []*model.CounterPointMeta, lines []*model.RawSourceLine) {
+	viper.Set("persistence.path", t.TempDir())
+	db, err := ebow.OpenStorage(bcTenant, bcEcId)
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, db.SetMeta(&model.RawSourceMeta{Id: "cpmeta/0", CounterPoints: meta}))
+	require.NoError(t, db.SetLines(lines))
+}
+
+func TestBillingCheck_ShortArrays(t *testing.T) {
+	// The import grows the arrays only up to the highest index written: the second consumer has only
+	// G.01 (array ends inside its block), the first line has no qualities at all.
+	bcStore(t, []*model.CounterPointMeta{
+		{ID: "cpmeta/0", Name: bcCons, SourceIdx: 0, Dir: model.CONSUMER_DIRECTION},
+		{ID: "cpmeta/0", Name: bcCons2, SourceIdx: 1, Dir: model.CONSUMER_DIRECTION},
+	}, []*model.RawSourceLine{
+		{Id: "CP/2026/02/02/00/00/00", Consumers: []float64{1, 0.5, 0.4, 2}},
+		{Id: "CP/2026/02/02/00/15/00", Consumers: []float64{1, 0.5, 0.4, 2}, QoVConsumers: []int{1, 1, 1, 3}},
+	})
+
+	res, err := QueryBillingCheck(bcTenant, bcEcId, bcRequest(cons(bcCons, 0, 0), cons(bcCons2, 0, 0)))
+	require.NoError(t, err)
+	assert.Equal(t, bcDay(2).UnixMilli(), *res.Meters[0].FirstData, "a value without quality counts as L1")
+	require.NotNil(t, res.Meters[1].FirstData, "values at the end of a short array count")
+	assert.Equal(t, 1, res.Meters[1].L3Count)
+	assert.InDelta(t, 6.0, res.Totals.Consumed, 1e-9)
+}
+
+func TestBillingCheck_InactiveDayWithClockChange(t *testing.T) {
+	// 25.10.2026 has 25 hours: the old owner's window still ends at 23:59 local time, and the new
+	// owner from the same day does not double the totals.
+	lines := []*model.RawSourceLine{}
+	for _, hm := range []string{"22/45", "23/00", "23/15", "23/30", "23/45"} {
+		lines = append(lines, &model.RawSourceLine{Id: "CP/2026/10/25/" + hm + "/00",
+			Consumers: []float64{1, 0, 0}, QoVConsumers: []int{1, 1, 1}})
+	}
+	bcStore(t, []*model.CounterPointMeta{{ID: "cpmeta/0", Name: bcCons, SourceIdx: 0, Dir: model.CONSUMER_DIRECTION}}, lines)
+
+	day := time.Date(2026, 10, 25, 0, 0, 0, 0, time.Local).UnixMilli()
+	res, err := QueryBillingCheck(bcTenant, bcEcId, &model.BillingCheckRequest{
+		Start: time.Date(2026, 10, 1, 0, 0, 0, 0, time.Local).UnixMilli(),
+		End:   time.Date(2026, 10, 31, 0, 0, 0, 0, time.Local).UnixMilli(),
+		Cps:   []model.BillingCheckCp{cons(bcCons, 0, day), cons(bcCons, day, 0)},
+	})
+	require.NoError(t, err)
+	last := time.Date(2026, 10, 25, 23, 45, 0, 0, time.Local).UnixMilli()
+	assert.Equal(t, last, *res.Meters[0].LastData)
+	assert.Equal(t, last, *res.Meters[1].LastData)
+	assert.InDelta(t, 5.0, res.Totals.Consumed, 1e-9)
 }
 
 func TestBillingCheck_NoDataInPeriod(t *testing.T) {
