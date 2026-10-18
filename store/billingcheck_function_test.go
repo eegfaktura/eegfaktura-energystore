@@ -7,6 +7,8 @@ import (
 
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store/ebow"
+	_ "time/tzdata"
+
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -261,18 +263,40 @@ func TestBillingCheck_MissingQuarterHours(t *testing.T) {
 	assert.Equal(t, 0, res.Meters[2].MissingCount)
 	assert.Equal(t, []string{}, res.Meters[2].MissingDays)
 	assert.Equal(t, 28*96, res.Meters[3].MissingCount)
+	assert.Equal(t, []string{}, res.Meters[3].MissingDays, "no data: count only, no day list")
 }
 
 func TestBillingCheck_MissingWithoutRows(t *testing.T) {
 	viper.Set("persistence.path", t.TempDir())
 	res, err := QueryBillingCheck(bcTenant, bcEcId, bcRequest(cons(bcCons, bcDay(27).UnixMilli(), 0)))
 	require.NoError(t, err)
-	assert.Equal(t, []string{"2026-02-27", "2026-02-28"}, res.Meters[0].MissingDays)
+	assert.Equal(t, 2*96, res.Meters[0].MissingCount)
+}
+
+// An activation sent as a later hour of the day (browser in another time zone) still counts from 00:00.
+func TestBillingCheck_ActivationDayFromMidnight(t *testing.T) {
+	bcSeed(t, nil)
+	res, err := QueryBillingCheck(bcTenant, bcEcId, bcRequest(cons(bcCons, bcDay(5).Add(2*time.Hour).UnixMilli(), 0)))
+	require.NoError(t, err)
+	assert.Equal(t, 0, res.Meters[0].MissingCount)
+	assert.Equal(t, bcDay(5).UnixMilli(), *res.Meters[0].FirstData)
+}
+
+// useVienna runs a test in Europe/Vienna, so the clock change days are tested also where the
+// machine runs in UTC (CI).
+func useVienna(t *testing.T) {
+	loc, err := time.LoadLocation("Europe/Vienna")
+	require.NoError(t, err)
+	old := time.Local
+	time.Local = loc
+	t.Cleanup(func() { time.Local = old })
 }
 
 // On clock change days only the wall-clock quarter hours that exist count (in Europe/Vienna 92 on
 // 29.03., 96 on 25.10. as v1 folds the repeated hour into one row).
 func TestBillingCheck_MissingOnClockChangeDays(t *testing.T) {
+	useVienna(t)
+	require.Equal(t, 92, quarterHoursOnDay(time.Date(2026, 3, 29, 0, 0, 0, 0, time.Local)))
 	lines := []*model.RawSourceLine{}
 	for _, d := range []time.Time{time.Date(2026, 3, 29, 0, 0, 0, 0, time.Local), time.Date(2026, 10, 25, 0, 0, 0, 0, time.Local)} {
 		for h := 0; h < 24; h++ {

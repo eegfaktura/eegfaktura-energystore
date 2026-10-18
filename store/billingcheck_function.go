@@ -91,12 +91,14 @@ func (bc *BillingCheck) HandleStart(ctx *EngineContext) error {
 			d := time.UnixMilli(cp.InactiveSince)
 			to = time.Date(d.Year(), d.Month(), d.Day(), 23, 59, 59, 0, time.Local)
 		}
+		// the whole activation day counts, whatever time of day the caller sent
+		a := time.UnixMilli(cp.ActiveSince)
 		bc.present[i] = make([]int16, dayIndex(bc.periodStart, time.UnixMilli(bc.Result.PeriodEnd))+1)
 		bc.entries = append(bc.entries, bcEntry{
 			idx:       i,
 			sourceIdx: meta.SourceIdx,
 			consumer:  cp.Direction == model.CONSUMER_DIRECTION,
-			from:      time.UnixMilli(cp.ActiveSince),
+			from:      time.Date(a.Year(), a.Month(), a.Day(), 0, 0, 0, 0, time.Local),
 			to:        to,
 		})
 	}
@@ -169,9 +171,14 @@ func (bc *BillingCheck) HandleEnd(ctx *EngineContext) error {
 }
 
 // countMissing compares, per entry and local day of its active part of the period, the quarter
-// hours with a value with those of the day. Also runs when the store has no rows in the period.
+// hours with a value with those of the day. Also runs when the store has no rows in the period. An
+// entry without any value gets the count but no day list (the caller shows "no data").
 func (bc *BillingCheck) countMissing() {
 	last := dayIndex(bc.periodStart, time.UnixMilli(bc.Result.PeriodEnd))
+	expectedPerDay := make([]int, last+1)
+	for d := range expectedPerDay {
+		expectedPerDay[d] = quarterHoursOnDay(bc.periodStart.AddDate(0, 0, d))
+	}
 	for i, cp := range bc.cps {
 		from, to := 0, last
 		if cp.ActiveSince > 0 {
@@ -183,14 +190,15 @@ func (bc *BillingCheck) countMissing() {
 		m := &bc.Result.Meters[i]
 		present := bc.present[i]
 		for d := from; d <= to; d++ {
-			day := bc.periodStart.AddDate(0, 0, d)
-			expected, got := quarterHoursOnDay(day), 0
+			expected, got := expectedPerDay[d], 0
 			if present != nil {
 				got = int(present[d])
 			}
 			if got < expected {
 				m.MissingCount += expected - got
-				m.MissingDays = append(m.MissingDays, day.Format("2006-01-02"))
+				if m.FirstData != nil {
+					m.MissingDays = append(m.MissingDays, bc.periodStart.AddDate(0, 0, d).Format("2006-01-02"))
+				}
 			}
 		}
 	}
