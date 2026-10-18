@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"math"
 	"time"
 
 	"at.ourproject/energystore/model"
@@ -15,11 +16,14 @@ import (
 // and the community totals. Like the Excel summary, a quarter hour counts once per entry even if
 // several of its values are L3, and only the entry's active window counts. The totals cover all
 // metering points of the community in the period, so a metering point that is not requested (or
-// listed twice after an owner change) does not change them.
+// listed twice after an owner change) does not change them. Missing quarter hours are counted per
+// entry and local day.
 type BillingCheck struct {
-	cps     []model.BillingCheckCp
-	entries []bcEntry
-	Result  *model.BillingCheckResponse
+	cps         []model.BillingCheckCp
+	entries     []bcEntry
+	periodStart time.Time
+	present     map[int][]int16 // per entry: quarter hours with a value per day of the period
+	Result      *model.BillingCheckResponse
 }
 
 // bcEntry is a requested entry resolved against the community's metadata.
@@ -45,9 +49,33 @@ func NewBillingCheck(req *model.BillingCheckRequest) *BillingCheck {
 			ActiveSince:   cp.ActiveSince,
 			InactiveSince: cp.InactiveSince,
 			L3Days:        []string{},
+			MissingDays:   []string{},
 		}
 	}
-	return &BillingCheck{cps: req.Cps, Result: result}
+	return &BillingCheck{cps: req.Cps, Result: result, present: map[int][]int16{},
+		periodStart: time.UnixMilli(result.PeriodStart)}
+}
+
+// dayIndex is the number of local days from the day of base to the day of t.
+func dayIndex(base, t time.Time) int {
+	b := time.Date(base.Year(), base.Month(), base.Day(), 12, 0, 0, 0, time.UTC)
+	d := time.Date(t.Year(), t.Month(), t.Day(), 12, 0, 0, 0, time.UTC)
+	return int(math.Round(d.Sub(b).Hours() / 24))
+}
+
+// quarterHoursOnDay counts the local wall-clock quarter hours of a day as v1 stores them: 92 on the
+// spring clock change day (02:00-02:45 do not exist), 96 otherwise (the autumn hour is one row).
+func quarterHoursOnDay(day time.Time) int {
+	n := 0
+	for h := 0; h < 24; h++ {
+		for m := 0; m < 60; m += 15 {
+			t := time.Date(day.Year(), day.Month(), day.Day(), h, m, 0, 0, time.Local)
+			if t.Hour() == h && t.Minute() == m {
+				n++
+			}
+		}
+	}
+	return n
 }
 
 // HandleStart resolves the entries once: metering points missing in the metadata or with another
@@ -63,6 +91,7 @@ func (bc *BillingCheck) HandleStart(ctx *EngineContext) error {
 			d := time.UnixMilli(cp.InactiveSince)
 			to = time.Date(d.Year(), d.Month(), d.Day(), 23, 59, 59, 0, time.Local)
 		}
+		bc.present[i] = make([]int16, dayIndex(bc.periodStart, time.UnixMilli(bc.Result.PeriodEnd))+1)
 		bc.entries = append(bc.entries, bcEntry{
 			idx:       i,
 			sourceIdx: meta.SourceIdx,
@@ -99,6 +128,7 @@ func (bc *BillingCheck) HandleLine(ctx *EngineContext, line *model.RawSourceLine
 		}
 	}
 
+	day := dayIndex(bc.periodStart, ts)
 	for _, e := range bc.entries {
 		if ts.Before(e.from) || ts.After(e.to) {
 			continue
@@ -117,6 +147,9 @@ func (bc *BillingCheck) HandleLine(ctx *EngineContext, line *model.RawSourceLine
 				m.FirstData = &t
 			}
 			m.LastData = &t
+			if p := bc.present[e.idx]; day >= 0 && day < len(p) {
+				p[day]++
+			}
 		}
 		if hasL3 {
 			m.L3Count += 1
@@ -133,6 +166,34 @@ func (bc *BillingCheck) HandleLine(ctx *EngineContext, line *model.RawSourceLine
 
 func (bc *BillingCheck) HandleEnd(ctx *EngineContext) error {
 	return nil
+}
+
+// countMissing compares, per entry and local day of its active part of the period, the quarter
+// hours with a value with those of the day. Also runs when the store has no rows in the period.
+func (bc *BillingCheck) countMissing() {
+	last := dayIndex(bc.periodStart, time.UnixMilli(bc.Result.PeriodEnd))
+	for i, cp := range bc.cps {
+		from, to := 0, last
+		if cp.ActiveSince > 0 {
+			from = max(from, dayIndex(bc.periodStart, time.UnixMilli(cp.ActiveSince)))
+		}
+		if cp.InactiveSince > 0 {
+			to = min(to, dayIndex(bc.periodStart, time.UnixMilli(cp.InactiveSince)))
+		}
+		m := &bc.Result.Meters[i]
+		present := bc.present[i]
+		for d := from; d <= to; d++ {
+			day := bc.periodStart.AddDate(0, 0, d)
+			expected, got := quarterHoursOnDay(day), 0
+			if present != nil {
+				got = int(present[d])
+			}
+			if got < expected {
+				m.MissingCount += expected - got
+				m.MissingDays = append(m.MissingDays, day.Format("2006-01-02"))
+			}
+		}
+	}
 }
 
 // slotQuality reports whether one metering point (width 3 for consumers, 2 for producers) has a
@@ -162,6 +223,7 @@ func QueryBillingCheck(tenant, ecid string, req *model.BillingCheckRequest) (*mo
 	if err := e.Query(tenant, ecid, time.UnixMilli(req.Start), time.UnixMilli(req.End)); err != nil && !errors.Is(err, ebow.ErrNoRows) {
 		return nil, err
 	}
+	c.countMissing()
 	glog.V(5).Infof("Query Billing Check took %v (%s)", time.Since(sm).Seconds(), tenant)
 	return c.Result, nil
 }

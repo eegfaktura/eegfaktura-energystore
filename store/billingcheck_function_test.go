@@ -237,3 +237,63 @@ func TestBillingCheck_NoDataInPeriod(t *testing.T) {
 	assert.Equal(t, 0, res.Meters[0].L3Count)
 	assert.Equal(t, model.BillingCheckTotals{}, res.Totals)
 }
+
+func TestBillingCheck_MissingQuarterHours(t *testing.T) {
+	bcSeed(t, func(id string, line *model.RawSourceLine) {
+		if id >= "CP/2026/02/14" && id < "CP/2026/02/15" { // first consumer: 14.02. missing
+			copy(line.QoVConsumers[:3], []int{0, 0, 0})
+			copy(line.Consumers[:3], []float64{0, 0, 0})
+		}
+	})
+
+	res, err := QueryBillingCheck(bcTenant, bcEcId, bcRequest(
+		cons(bcCons, 0, 0),
+		cons(bcCons2, bcDay(5).UnixMilli(), 0),               // values until 20.02.
+		cons(bcCons, 0, bcDay(10).UnixMilli()),               // inactive since 10.02.: complete
+		cons("AT0030000000000000000000000000099", 0, 0),      // unknown: everything missing
+	))
+	require.NoError(t, err)
+	assert.Equal(t, 96, res.Meters[0].MissingCount)
+	assert.Equal(t, []string{"2026-02-14"}, res.Meters[0].MissingDays)
+	assert.Equal(t, 8*96, res.Meters[1].MissingCount)
+	assert.Equal(t, "2026-02-21", res.Meters[1].MissingDays[0])
+	assert.Len(t, res.Meters[1].MissingDays, 8)
+	assert.Equal(t, 0, res.Meters[2].MissingCount)
+	assert.Equal(t, []string{}, res.Meters[2].MissingDays)
+	assert.Equal(t, 28*96, res.Meters[3].MissingCount)
+}
+
+func TestBillingCheck_MissingWithoutRows(t *testing.T) {
+	viper.Set("persistence.path", t.TempDir())
+	res, err := QueryBillingCheck(bcTenant, bcEcId, bcRequest(cons(bcCons, bcDay(27).UnixMilli(), 0)))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"2026-02-27", "2026-02-28"}, res.Meters[0].MissingDays)
+}
+
+// On clock change days only the wall-clock quarter hours that exist count (in Europe/Vienna 92 on
+// 29.03., 96 on 25.10. as v1 folds the repeated hour into one row).
+func TestBillingCheck_MissingOnClockChangeDays(t *testing.T) {
+	lines := []*model.RawSourceLine{}
+	for _, d := range []time.Time{time.Date(2026, 3, 29, 0, 0, 0, 0, time.Local), time.Date(2026, 10, 25, 0, 0, 0, 0, time.Local)} {
+		for h := 0; h < 24; h++ {
+			for m := 0; m < 60; m += 15 {
+				ts := time.Date(d.Year(), d.Month(), d.Day(), h, m, 0, 0, time.Local)
+				if ts.Hour() != h || ts.Minute() != m {
+					continue // does not exist on this day
+				}
+				lines = append(lines, &model.RawSourceLine{Id: fmt.Sprintf("CP/%04d/%02d/%02d/%02d/%02d/00", d.Year(), d.Month(), d.Day(), h, m),
+					Consumers: []float64{1, 0, 0}, QoVConsumers: []int{1, 1, 1}})
+			}
+		}
+	}
+	bcStore(t, []*model.CounterPointMeta{{ID: "cpmeta/0", Name: bcCons, SourceIdx: 0, Dir: model.CONSUMER_DIRECTION}}, lines)
+
+	for _, d := range []time.Time{time.Date(2026, 3, 29, 0, 0, 0, 0, time.Local), time.Date(2026, 10, 25, 0, 0, 0, 0, time.Local)} {
+		res, err := QueryBillingCheck(bcTenant, bcEcId, &model.BillingCheckRequest{
+			Start: d.UnixMilli(), End: d.UnixMilli(),
+			Cps: []model.BillingCheckCp{cons(bcCons, 0, 0)},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, 0, res.Meters[0].MissingCount, d.Format("2006-01-02"))
+	}
+}

@@ -13,7 +13,9 @@ this changelog highlights the changes relevant for overview and operations.
   protected like `/eeg/v2/{ecid}/report`. Request: period (`start`, `end`, epoch ms of the first and the
   last day) and the metering points with their active windows (`cps`, like the Excel export). Response per
   entry: quarter hours with an L3 value and their days, first and last quarter hour with a value (each
-  entry's active window ends at the end of its inactive day, local time); and the totals of all metering
+  entry's active window ends at the end of its inactive day, local time), the number of quarter hours
+  without a value in the active part of the period and the days they fall on (gaps anywhere, also in the
+  middle; a day has its local wall-clock quarter hours, 92 on the spring clock change day); and the totals of all metering
   points of the community in the period (production, consumption, G.02 allocated, G.03 self coverage,
   P.01 surplus). A period longer than one year or ending after 2999, more than 10,000 entries, an invalid
   direction or a body above 4 MiB → 400.

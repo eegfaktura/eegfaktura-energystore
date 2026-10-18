@@ -44,6 +44,11 @@ type BillingCheckMeter struct {
 	// nil if there is none.
 	FirstData *int64 `json:"firstData"`
 	LastData  *int64 `json:"lastData"`
+	// Quarter hours without a value in the active part of the period (also before the first and
+	// after the last value), and the days (YYYY-MM-DD, chronological) with at least one of them.
+	// A day has its quarter hours in local time (92 on the spring clock change day).
+	MissingCount int      `json:"missingCount"`
+	MissingDays  []string `json:"missingDays"`
 }
 
 // BillingCheckTotals sums the values of all metering points of the community in the period.
@@ -56,8 +61,7 @@ type BillingCheckTotals struct {
 }
 
 type BillingCheckResponse struct {
-	// First and last quarter hour of the period (epoch ms): a metering point covers the whole
-	// period if FirstData <= PeriodStart and LastData >= PeriodEnd.
+	// First and last quarter hour of the period (epoch ms).
 	PeriodStart int64               `json:"periodStart"`
 	PeriodEnd   int64               `json:"periodEnd"`
 	Meters      []BillingCheckMeter `json:"meters"`
