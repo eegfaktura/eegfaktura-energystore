@@ -8,6 +8,8 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+## [1.6.0] – 2026-10-18
+
 ### Added
 - **`POST /eeg/v2/{ecid}/billing-check`** for the checks before billing in web (platform#148), read only,
   protected like `/eeg/v2/{ecid}/report`. Request: period (`start`, `end`, epoch ms of the first and the
