@@ -35,6 +35,7 @@ func NewRestServer() *mux.Router {
 	r.HandleFunc("/eeg/v2/{ecid}/combined-report", middleware.ProtectApp(fetchCombinedReportV2())).Methods("POST")
 	r.HandleFunc("/eeg/v2/{ecid}/combined-report", middleware.ProtectApp(getCombinedReportV2())).Methods("GET")
 	r.HandleFunc("/eeg/v2/{ecid}/summary", middleware.ProtectApp(fetchSummaryReportV2())).Methods("POST")
+	r.HandleFunc("/eeg/v2/{ecid}/billing-check", middleware.ProtectApp(fetchBillingCheck())).Methods("POST")
 	r.HandleFunc("/eeg/{ecid}/lastRecordDate", middleware.ProtectApp(lastRecordDate())).Methods("GET")
 	r.HandleFunc("/eeg/{ecid}/excel/export/{year}/{month}", middleware.ProtectApp(exportMeteringData())).Methods("POST")
 	r.HandleFunc("/eeg/{ecid}/excel/report/download", middleware.ProtectApp(exportReport())).Methods("POST")
