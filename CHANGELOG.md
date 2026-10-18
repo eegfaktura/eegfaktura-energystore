@@ -26,6 +26,27 @@ this changelog highlights the changes relevant for overview and operations.
 
 > **End of the `env/billing`-only entries.**
 
+## [1.6.0] – 2026-10-18
+
+### Added
+- **`POST /eeg/v2/{ecid}/billing-check`** for the checks before billing in web (platform#148), read only,
+  protected like `/eeg/v2/{ecid}/report`. Request: period (`start`, `end`, epoch ms of the first and the
+  last day) and the metering points with their active windows (`cps`, like the Excel export). Response per
+  entry: quarter hours with an L3 value and their days, first and last quarter hour with a value (each
+  entry's active window ends at the end of its inactive day, local time), the number of quarter hours
+  without a value in the active part of the period and the days they fall on (gaps anywhere, also in the
+  middle; a day has its local wall-clock quarter hours, 92 on the spring clock change day); and the totals of all metering
+  points of the community in the period (production, consumption, G.02 allocated, G.03 self coverage,
+  P.01 surplus). A period longer than one year or ending after 2999, more than 10,000 entries, an invalid
+  direction or a body above 4 MiB → 400.
+- CI: PR checks (tests on every pull request) and a security scan (leaked secrets in new commits,
+  vulnerable dependencies, Dockerfile/Kubernetes misconfigurations). Dependency and misconfiguration
+  findings are only reported and do not block; a leaked secret in new commits fails the check. Jobs for
+  known failing tests are report-only.
+- CI: every run keeps its scan and test results as artifacts for 30 days (`scan-*`,
+  `test-results-<job>`, `known-errors-<job>`) for a CI report collector; the secret scan keeps
+  outcomes and counts only.
+
 ## [1.5.3] – 2026-10-17
 
 ### Changed
