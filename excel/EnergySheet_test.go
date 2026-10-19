@@ -2,6 +2,7 @@ package excel
 
 import (
 	"bytes"
+	"strconv"
 
 	"at.ourproject/energystore/mocks"
 	"at.ourproject/energystore/model"
@@ -204,6 +205,20 @@ func TestExportedWorkbookSheets(t *testing.T) {
 	defer func() { _ = out.Close() }()
 	assert.Equal(t, []string{"Summary", "Energiedaten"}, out.GetSheetList(), "kein Sheet1 in der Datei")
 	assert.Equal(t, 0, out.GetActiveSheetIndex(), "Summary ist beim Oeffnen aktiv")
+
+	// Mengenbilanz als Formel unter den Summen
+	formula, err := out.GetCellFormula("Summary", "B10")
+	assert.NoError(t, err)
+	assert.Equal(t, "ROUND(B9-B8-B7,3)", formula)
+	// stored value = generation - surplus - self coverage of the summary cells above
+	b := func(c string) float64 {
+		v, _ := out.GetCellValue("Summary", c)
+		f, _ := strconv.ParseFloat(v, 64)
+		return f
+	}
+	assert.InDelta(t, b("B9")-b("B8")-b("B7"), b("B10"), 0.001)
+	label, _ := out.GetCellValue("Summary", "A10")
+	assert.Contains(t, label, "Mengenbilanz")
 }
 
 // Grosse Gemeinschaft, ein Tag: die Breiten muessen bis zur letzten Datenspalte reichen, und

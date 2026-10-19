@@ -2,6 +2,7 @@ package excel
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -224,6 +225,22 @@ func (ss *SummarySheet) closeSheet(ctx *RunnerContext) error {
 		[]interface{}{excelize.Cell{Value: "Gesamte gemeinschaftliche Erzeugung [KWH]", StyleID: styleIdBold},
 			excelize.Cell{Value: sumMeterResult(counterpoints.Producer, func(e *SummaryMeterResult) float64 { return e.Total })}},
 		rowOpts)
+	if err != nil {
+		return err
+	}
+	// Quantity balance as a formula, so the reader sees how it is built: generation (B9) - surplus (B8) - self
+	// coverage (B7). The value is stored as well (mail previews and tools that do not recalculate show it). Close to 0
+	// with complete data (with multiple participation G.01T/P.01T are already this community's share).
+	balance := sumMeterResult(counterpoints.Producer, func(e *SummaryMeterResult) float64 { return e.Total }) -
+		sumMeterResult(counterpoints.Producer, func(e *SummaryMeterResult) float64 { return e.Share }) -
+		sumMeterResult(counterpoints.Consumer, func(e *SummaryMeterResult) float64 { return e.Share })
+	err = sw.SetRow("A10",
+		[]interface{}{excelize.Cell{Value: "Mengenbilanz: Erzeugung - Überschuss - Eigendeckung (sollte nahe 0 sein) [KWH]", StyleID: styleIdBold},
+			excelize.Cell{Formula: "ROUND(B9-B8-B7,3)", Value: math.Round(balance*1000) / 1000}},
+		excelize.RowOpts{StyleID: styleIdRowSummary, Height: 0.34 * 72})
+	if err != nil {
+		return err
+	}
 
 	line := 12
 	err = sw.SetRow(fmt.Sprintf("A%d", line),
