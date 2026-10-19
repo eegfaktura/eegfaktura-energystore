@@ -8,6 +8,8 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+## [1.6.1] – 2026-10-19
+
 ### Added
 - **Energy report: quantity balance in the summary** (customer request 19.10.2026). Row 10 of the summary sheet
   shows „Mengenbilanz: Erzeugung - Überschuss - Eigendeckung“ as the Excel formula `=ROUND(B9-B8-B7,3)`, with the
