@@ -204,6 +204,13 @@ func TestExportedWorkbookSheets(t *testing.T) {
 	defer func() { _ = out.Close() }()
 	assert.Equal(t, []string{"Summary", "Energiedaten"}, out.GetSheetList(), "kein Sheet1 in der Datei")
 	assert.Equal(t, 0, out.GetActiveSheetIndex(), "Summary ist beim Oeffnen aktiv")
+
+	// Mengenbilanz als Formel unter den Summen
+	formula, err := out.GetCellFormula("Summary", "B10")
+	assert.NoError(t, err)
+	assert.Equal(t, "B9-B8-B7", formula)
+	label, _ := out.GetCellValue("Summary", "A10")
+	assert.Contains(t, label, "Mengenbilanz")
 }
 
 // Grosse Gemeinschaft, ein Tag: die Breiten muessen bis zur letzten Datenspalte reichen, und

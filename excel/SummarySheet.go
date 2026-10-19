@@ -224,6 +224,12 @@ func (ss *SummarySheet) closeSheet(ctx *RunnerContext) error {
 		[]interface{}{excelize.Cell{Value: "Gesamte gemeinschaftliche Erzeugung [KWH]", StyleID: styleIdBold},
 			excelize.Cell{Value: sumMeterResult(counterpoints.Producer, func(e *SummaryMeterResult) float64 { return e.Total })}},
 		rowOpts)
+	// quantity balance as a formula, so the reader sees how it is built: generation - surplus - self coverage,
+	// close to 0 when the data is complete
+	err = sw.SetRow("A10",
+		[]interface{}{excelize.Cell{Value: "Mengenbilanz: Erzeugung - Überschuss - Eigendeckung (sollte nahe 0 sein) [KWH]", StyleID: styleIdBold},
+			excelize.Cell{Formula: "B9-B8-B7"}},
+		excelize.RowOpts{StyleID: styleIdRowSummary, Height: 0.34 * 72})
 
 	line := 12
 	err = sw.SetRow(fmt.Sprintf("A%d", line),
