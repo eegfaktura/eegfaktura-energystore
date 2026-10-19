@@ -10,8 +10,9 @@ this changelog highlights the changes relevant for overview and operations.
 
 ### Added
 - **Energy report: quantity balance in the summary** (customer request 19.10.2026). Row 10 of the summary sheet
-  shows „Mengenbilanz: Erzeugung - Überschuss - Eigendeckung“ as the Excel formula `=B9-B8-B7`; with complete data
-  it is close to 0.
+  shows „Mengenbilanz: Erzeugung - Überschuss - Eigendeckung“ as the Excel formula `=ROUND(B9-B8-B7,3)`, with the
+  value stored as well (visible without recalculation, e.g. in mail previews). With complete data it is close to 0;
+  a producer that also takes part in another community keeps that community's share in the balance.
 
 ## [1.6.0] – 2026-10-18
 

@@ -2,6 +2,7 @@ package excel
 
 import (
 	"bytes"
+	"strconv"
 
 	"at.ourproject/energystore/mocks"
 	"at.ourproject/energystore/model"
@@ -208,7 +209,14 @@ func TestExportedWorkbookSheets(t *testing.T) {
 	// Mengenbilanz als Formel unter den Summen
 	formula, err := out.GetCellFormula("Summary", "B10")
 	assert.NoError(t, err)
-	assert.Equal(t, "B9-B8-B7", formula)
+	assert.Equal(t, "ROUND(B9-B8-B7,3)", formula)
+	// stored value = generation - surplus - self coverage of the summary cells above
+	b := func(c string) float64 {
+		v, _ := out.GetCellValue("Summary", c)
+		f, _ := strconv.ParseFloat(v, 64)
+		return f
+	}
+	assert.InDelta(t, b("B9")-b("B8")-b("B7"), b("B10"), 0.001)
 	label, _ := out.GetCellValue("Summary", "A10")
 	assert.Contains(t, label, "Mengenbilanz")
 }
