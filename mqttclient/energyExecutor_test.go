@@ -367,7 +367,7 @@ func TestImportRawdataStore(t *testing.T) {
 
 	fmt.Printf("META_DATA: %+v\n", string(response))
 
-	os.RemoveAll("../test/rawdata/rc100190")
+	os.RemoveAll("../test/rawdata/te100190")
 }
 
 func loadTestData() (*model.MqttEnergyMessage, error) {
