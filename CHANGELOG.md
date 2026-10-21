@@ -8,6 +8,7 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Added
 - Time-of-use window folding (ZVT): the participant report request
   (`POST /eeg/v2/{ecid}/report`) accepts up to two generic time windows per
   metering point (`timeWindows: [{key: T1|T2, from: "HH:MM", to: "HH:MM"}]`,
