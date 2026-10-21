@@ -8,6 +8,32 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Changed
+- CI: no more known failing test packages (platform#181). `calculation`, `model` and `mqttclient` move from the
+  report-only job "Known errors" (removed) into the blocking test jobs, `store/ebow` runs as a whole package
+  instead of only `-run TestVlogGC`; test timeout 400 s, 600 s for the full suite with the race detector
+  (`calculation` takes 220–270 s there).
+- Tests: `model` checks the current CR_MSG wire format (as eda-xp publishes it: no envelope, `energy` as an array,
+  `conversationId`, `messageCode`). `mqttclient` `TestNewMqttEnergyImporter` closes its importer and works in a
+  temporary directory (left Badger files open on Windows and data behind for the next run); `TestMassImport` is
+  skipped while `energy-mass-test-data.json` (real data, not in the repository) is missing. `store/ebow`
+  `TestReadOnly` is skipped on Windows (Badger has no read-only mode there); `Test` compares the bucket names
+  sorted (`Buckets()` returns them in map order, so the test failed about every second run). `excel` „Initiate Metadata extended MM
+  field" removed `test/rawdata/excelsource` instead of its own `excelsource3`: when `go test` ran `excel` and
+  `calculation` in parallel on Linux, that deleted the open store of `calculation`, whose Badger close then hung
+  until the timeout (the cause of the „calculation hangs" in CI).
+- Tests: the `store/ebow` VlogGC tests retry the forced compaction until Badger has written discard statistics
+  (Badger sets the read watermark asynchronously after opening; a compaction before that kept every version and
+  the tests failed now and then with `ErrNoRewrite`). `Test` closes its reopened database, so the cleanup no
+  longer leaves a ~2.2 GB `bow-*` folder in TMP on Windows. `mqttclient` `TestImportRawdataStore` removes
+  `test/rawdata/te100190`, the folder it writes (it removed `rc100190`).
+- CI: the unit job checks `gofmt` and runs `go vet` (every package except the root) before the tests;
+  `calculation` uses a keyed `store.Engine` literal, an unreachable `return` in `excel` is gone.
+
+### Fixed
+- Ops command `reset`: begin and end are now rounded down to the quarter hour as intended (the `Truncate`
+  results were discarded). A begin of 10:07 now also resets the 10:00 slot.
+
 ## [1.6.1] – 2026-10-19
 
 ### Added

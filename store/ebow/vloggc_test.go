@@ -1,8 +1,7 @@
 package ebow
 
-// Tests mit echtem Badger (konzept-energystore-vlog-gc.md, Akzeptanzkriterien). Laufen unter Linux;
-// in CI ueber eine eigene Zeile mit -run TestVlogGC, weil der vorhandene Test "Test" in diesem Paket
-// auf main rot ist. Die grosse Datei (1 GB) nur mit VLOGGC_BIG=1.
+// Tests mit echtem Badger (konzept-energystore-vlog-gc.md, Akzeptanzkriterien). In CI mit dem ganzen
+// Paket. Die grosse Datei (1 GB) nur mit VLOGGC_BIG=1.
 
 import (
 	"context"
@@ -60,12 +59,30 @@ func fillVlog(t *testing.T, tenant, ecId string, cycles, writesPerCycle int) {
 
 // flatten erzwingt die Kompaktierung und damit die Verwurfsstatistik. In Prod ist sie laut Diagnose
 // vom 11.09.2026 bereits zu 100 % verbucht; der Test stellt denselben Ausgangszustand her.
+//
+// Badger setzt die Lese-Wasserlinie beim Oeffnen asynchron (readMark.Done in einer Goroutine). Laeuft
+// Flatten davor, verwirft die Kompaktierung keine alten Versionen, es entsteht keine Statistik und
+// RunValueLogGC meldet ErrNoRewrite. Ein zweites Flatten auf denselben Tabellen findet nichts mehr
+// (unterste Ebene erst nach einer Stunde), daher je Versuch ein neuer Wert und eine kurze Pause nach
+// dem Oeffnen.
 func flatten(t *testing.T, tenant, ecId string) {
 	t.Helper()
-	st, err := OpenStorage(tenant, ecId)
-	require.NoError(t, err)
-	require.NoError(t, st.db.Badger().Flatten(1))
-	st.Close()
+	dir := filepath.Join(viper.GetString("persistence.path"), tenant, ecId)
+	deadline := time.Now().Add(5 * time.Second)
+	for attempt := 0; ; attempt++ {
+		st, err := OpenStorage(tenant, ecId)
+		require.NoError(t, err)
+		if attempt > 0 {
+			time.Sleep(50 * time.Millisecond)
+		}
+		require.NoError(t, st.db.Badger().Flatten(1))
+		st.Close()
+		if discardCandidate(dir, 0).ratio > 0 {
+			return
+		}
+		require.True(t, time.Now().Before(deadline), "keine Verwurfsstatistik nach %d Versuchen", attempt+1)
+		fillVlog(t, tenant, ecId, 1, 1)
+	}
 }
 
 func refFor(base, tenant, ecId string) vlogRef {
