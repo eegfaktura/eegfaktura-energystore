@@ -8,6 +8,8 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+## [1.7.0] – 2026-10-21
+
 ### Added
 - Time-of-use window folding (ZVT): the participant report request
   (`POST /eeg/v2/{ecid}/report`) accepts up to two generic time windows per
