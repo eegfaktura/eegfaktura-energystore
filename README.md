@@ -25,7 +25,7 @@ Eclipse Paho (MQTT) · Viper · Cobra · Keycloak/OIDC (JWT).
 
 ### Prerequisites
 
-- Go 1.24 or later
+- Go 1.26 or later
 - Access to an MQTT broker (for real-time features)
 
 ### Installation
