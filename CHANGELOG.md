@@ -8,6 +8,13 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Notes
+- Go 1.26: with `go 1.26.0` in go.mod the GODEBUG defaults of 1.26 apply (`cryptocustomrand`,
+  `httpservecontentmaxranges`, `tlssecpmlkem`, `urlstrictcolons`); none affects this service (no custom crypto
+  rand, no `ServeContent`, Keycloak URL has a host name). Go 1.26 uses the Green Tea garbage collector by
+  default: watch the pod memory in Dynatrace after the first rollout (opt-out at build time:
+  `GOEXPERIMENT=nogreenteagc`). (platform#181)
+
 ### Changed
 - Build: Go 1.26.9 instead of 1.25 (platform#181) in `go.mod` (`go 1.26.0`, `toolchain go1.26.9`), the Dockerfile
   (`golang:1.26.9`), the PR checks and the image build. Fixes the standard-library vulnerabilities govulncheck reported
