@@ -1,6 +1,6 @@
 # Tests on every pull request: the unit tests (the packages listed as in docker-image.yml; quick:
-# no race detector, after go vet) and the full suite (every package except the root, with the race
-# detector).
+# no race detector, after gofmt and go vet) and the full suite (every package except the root,
+# with the race detector).
 # The root package (three func main) does not compile as one package and is left out.
 #
 # Only protoc/excel.pb.go is committed, so every job generates the protobuf stubs first.
@@ -63,6 +63,12 @@ jobs:
           protoc --experimental_allow_proto3_optional=true --proto_path=. \
             --go_out=. --go_opt=paths=source_relative \
             --go-grpc_out=. --go-grpc_opt=paths=source_relative ./protoc/*.proto
+
+      - name: gofmt
+        run: |
+          set -euo pipefail
+          unformatted="$(git ls-files -z '*.go' | xargs -0 gofmt -l)"
+          if [ -n "$unformatted" ]; then echo "gofmt -w needed:"; echo "$unformatted"; exit 1; fi
 
       - name: go vet
         run: |

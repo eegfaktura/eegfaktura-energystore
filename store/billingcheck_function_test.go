@@ -250,9 +250,9 @@ func TestBillingCheck_MissingQuarterHours(t *testing.T) {
 
 	res, err := QueryBillingCheck(bcTenant, bcEcId, bcRequest(
 		cons(bcCons, 0, 0),
-		cons(bcCons2, bcDay(5).UnixMilli(), 0),               // values until 20.02.
-		cons(bcCons, 0, bcDay(10).UnixMilli()),               // inactive since 10.02.: complete
-		cons("AT0030000000000000000000000000099", 0, 0),      // unknown: everything missing
+		cons(bcCons2, bcDay(5).UnixMilli(), 0),          // values until 20.02.
+		cons(bcCons, 0, bcDay(10).UnixMilli()),          // inactive since 10.02.: complete
+		cons("AT0030000000000000000000000000099", 0, 0), // unknown: everything missing
 	))
 	require.NoError(t, err)
 	assert.Equal(t, 96, res.Meters[0].MissingCount)
