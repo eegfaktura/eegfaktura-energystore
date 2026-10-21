@@ -8,12 +8,20 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
-### Notes
-- Go 1.26: with `go 1.26.0` in go.mod the GODEBUG defaults of 1.26 apply (`cryptocustomrand`,
-  `httpservecontentmaxranges`, `tlssecpmlkem`, `urlstrictcolons`); none affects this service (no custom crypto
-  rand, no `ServeContent`, Keycloak URL has a host name). Go 1.26 uses the Green Tea garbage collector by
-  default: watch the pod memory in Dynatrace after the first rollout (opt-out at build time:
-  `GOEXPERIMENT=nogreenteagc`). (platform#181)
+### Added
+- Time-of-use window folding (ZVT): the participant report request
+  (`POST /eeg/v2/{ecid}/report`) accepts up to two generic time windows per
+  metering point (`timeWindows: [{key: T1|T2, from: "HH:MM", to: "HH:MM"}]`,
+  15-min raster, `from > to` crosses midnight). The report response then
+  carries per-window sums of the billing quantity per metering point
+  (`report.buckets: [{key: BASE|T1|T2, kWh}]`, consumer = utilization,
+  producer = production − allocation). `BASE` is the residual against the
+  period total, so the kWh partition is exact by construction. Window
+  membership is evaluated against the local wall-clock time encoded in the
+  stored row ids (container TZ, Europe/Berlin = Vienna offset). energystore
+  has no tariff or price knowledge — the windows are plain daytime ranges.
+  Invalid windows (key, raster, `from == to`, >2 per meter) are rejected
+  with 400.
 
 ### Changed
 - Build: Go 1.26.9 instead of 1.25 (platform#181) in `go.mod` (`go 1.26.0`, `toolchain go1.26.9`), the Dockerfile
@@ -46,6 +54,13 @@ this changelog highlights the changes relevant for overview and operations.
 ### Fixed
 - Ops command `reset`: begin and end are now rounded down to the quarter hour as intended (the `Truncate`
   results were discarded). A begin of 10:07 now also resets the 10:00 slot.
+
+### Notes
+- Go 1.26: with `go 1.26.0` in go.mod the GODEBUG defaults of 1.26 apply (`cryptocustomrand`,
+  `httpservecontentmaxranges`, `tlssecpmlkem`, `urlstrictcolons`); none affects this service (no custom crypto
+  rand, no `ServeContent`, Keycloak URL has a host name). Go 1.26 uses the Green Tea garbage collector by
+  default: watch the pod memory in Dynatrace after the first rollout (opt-out at build time:
+  `GOEXPERIMENT=nogreenteagc`). (platform#181)
 
 ## [1.6.1] – 2026-10-19
 
