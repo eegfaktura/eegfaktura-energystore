@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"os"
 	"reflect"
+	"runtime"
 	"testing"
 )
 
@@ -176,6 +177,9 @@ func TestKeys(t *testing.T) {
 // Create a database and write to it, then close it, re-open with read-only and
 // try to read what we wrote.
 func TestReadOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Badger does not support read-only mode on Windows; this test runs on Linux (CI)")
+	}
 	db := OpenTestDB(t)
 	defer db.Drop()
 

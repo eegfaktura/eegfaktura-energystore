@@ -5,7 +5,9 @@ import (
 	"compress/gzip"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"testing"
 	"time"
@@ -267,11 +269,14 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 		},
 	}
 
-	viper.Set("persistence.path", "../test/rawdata")
+	// One directory for all cases: they build on each other's data. Each case closes its
+	// importer, so no Badger file stays open and t.TempDir can clean up (also on Windows).
+	viper.Set("persistence.path", t.TempDir())
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			importer := NewTenantEnergyImporter("importer", &MQTTStreamer{})
+			defer importer.Close()
 			err = importer.Import(tt.energy)
 			require.NoError(t, err)
 
@@ -290,8 +295,6 @@ func TestNewMqttEnergyImporter(t *testing.T) {
 			tt.expected(t, &_line)
 		})
 	}
-
-	assert.NoError(t, os.RemoveAll("../test/rawdata/importer"))
 }
 
 func TestImportRawdataStore(t *testing.T) {
@@ -382,6 +385,10 @@ func TestMassImport(t *testing.T) {
 	viper.Set("persistence.path", "../test/rawdata")
 
 	testData, err := loadTestData()
+	if errors.Is(err, fs.ErrNotExist) {
+		t.Skip("../energy-mass-test-data.json is not in the repository (real CR_MSG data of TE100888); " +
+			"place the file in the repository root to run this test")
+	}
 	require.NoError(t, err)
 
 	tenant := "TE100888"

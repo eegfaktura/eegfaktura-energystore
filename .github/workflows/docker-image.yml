@@ -94,18 +94,11 @@ jobs:
       # der Perioden-Metadaten-Logik (PR #26) lief so an einem gruenen Check
       # vorbei, obwohl ein vorhandener Test sie abgefangen haette.
       #
-      # Bewusst KEIN `go test ./...`: auf main sind ./calculation (haengt,
-      # Timeout), ./model, ./mqttclient und ./store/ebow schon rot (Badger-Disk,
-      # Wire-Format-Fixtures). Die Liste deckt die Pakete ab, die auf main
-      # zuverlaessig gruen sind — sie ist als Untergrenze gedacht und gehoert
-      # erweitert, sobald die uebrigen Pakete repariert sind.
-      - name: Run Go tests (gruene Pakete)
-        run: go test -count=1 ./utils/ ./store/ ./store/function/ ./excel/ ./tenantctx/ ./graph/
-
-      # store/ebow bleibt oben draussen (vorhandener Test "Test" rot), die Tests des
-      # Value-Log-Aufraeumens laufen hier gefiltert mit echtem Badger.
-      - name: Run Go tests (vlog GC, echter Badger)
-        run: go test -count=1 -run TestVlogGC ./store/ebow/
+      # Kein `go test ./...`: das Root-Paket (drei func main) kompiliert nicht
+      # als ein Paket. Die Liste ist dieselbe wie im Job "Unit tests" der
+      # pr-checks.yml (dort laeuft zusaetzlich die ganze Suite mit -race).
+      - name: Run Go tests
+        run: go test -count=1 -timeout 400s ./utils/ ./store/ ./store/ebow/ ./store/function/ ./excel/ ./tenantctx/ ./graph/ ./calculation/ ./model/ ./mqttclient/
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta

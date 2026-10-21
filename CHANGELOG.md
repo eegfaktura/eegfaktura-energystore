@@ -8,6 +8,16 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Changed
+- CI: no more known failing test packages (platform#181). `calculation`, `model` and `mqttclient` move from the
+  report-only job "Known errors" (removed) into the blocking test jobs, `store/ebow` runs as a whole package
+  instead of only `-run TestVlogGC`; test timeout 400 s (`calculation` takes about 160 s under the race detector).
+- Tests: `model` checks the current CR_MSG wire format (as eda-xp publishes it: no envelope, `energy` as an array,
+  `conversationId`, `messageCode`). `mqttclient` `TestNewMqttEnergyImporter` closes its importer and works in a
+  temporary directory (left Badger files open on Windows and data behind for the next run); `TestMassImport` is
+  skipped while `energy-mass-test-data.json` (real data, not in the repository) is missing. `store/ebow`
+  `TestReadOnly` is skipped on Windows (Badger has no read-only mode there).
+
 ## [1.6.1] – 2026-10-19
 
 ### Added
