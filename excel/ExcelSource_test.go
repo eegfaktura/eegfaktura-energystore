@@ -686,7 +686,7 @@ func TestBuildMatixMetaStruct(t *testing.T) {
 		require.NoError(t, err)
 		defer func() {
 			db.CloseTestDriver()
-			os.RemoveAll("../test/rawdata/excelsource")
+			os.RemoveAll("../test/rawdata/excelsource3")
 		}()
 		header := excelHeader{
 			meteringPointId: map[int]string{
