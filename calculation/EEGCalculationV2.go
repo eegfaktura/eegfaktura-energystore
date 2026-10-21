@@ -3,6 +3,7 @@ package calculation
 import (
 	"fmt"
 	"math"
+	"sort"
 	"time"
 
 	"at.ourproject/energystore/model"
@@ -237,8 +238,10 @@ func appendToMeterSummary(participants []*model.MeterReport, values []float64, d
 }
 
 func calcDailyScope(iter ValueIterator, allocFunc AllocationHandlerV2, metaInfo *model.CounterPointMetaInfo,
-	startDay time.Time, rowPrefix string, dayCb func(day time.Time, results *calcResults) error) error {
+	startDay time.Time, rowPrefix string, windows []timeWindowRange,
+	dayCb func(day time.Time, results *calcResults, windowResults map[string]*calcResults) error) error {
 	daySummary := newCalcResult(metaInfo)
+	dayWindowSums := map[string]*calcResults{}
 	day := startDay
 	var _line model.RawSourceLine
 	for iter.Next(&_line) {
@@ -249,18 +252,38 @@ func calcDailyScope(iter ValueIterator, allocFunc AllocationHandlerV2, metaInfo 
 		}
 
 		if currentTimeStamp.YearDay() != day.YearDay() {
-			if err := dayCb(day, daySummary); err != nil {
+			if err := dayCb(day, daySummary, dayWindowSums); err != nil {
 				glog.Errorf("Error Daily Summary: %s", err.Error())
 			}
 			daySummary = newCalcResult(metaInfo)
+			dayWindowSums = map[string]*calcResults{}
 			day = currentTimeStamp
 		}
 
 		if err := appendResults(&line, allocFunc, daySummary); err != nil {
 			return err
 		}
+
+		// ZVT: fold the quarter-hour into every matching time-of-use window.
+		// Membership compares against the wall-clock HH:MM encoded in the
+		// row id (local Vienna time, see timeWindows.go).
+		if len(windows) > 0 {
+			minuteOfDay := currentTimeStamp.Hour()*60 + currentTimeStamp.Minute()
+			for _, w := range windows {
+				if w.contains(minuteOfDay) {
+					ws, ok := dayWindowSums[w.rangeKey]
+					if !ok {
+						ws = newCalcResult(metaInfo)
+						dayWindowSums[w.rangeKey] = ws
+					}
+					if err := appendResults(&line, allocFunc, ws); err != nil {
+						return err
+					}
+				}
+			}
+		}
 	}
-	return dayCb(day, daySummary)
+	return dayCb(day, daySummary, dayWindowSums)
 }
 
 func CalculateMonthlyPeriodV2(db *ebow.BowStorage, report *model.ReportResponse, allocFunc AllocationHandlerV2, year, segment int) error {
@@ -364,8 +387,11 @@ func calcParticipantReport(iter ebow.IRange,
 	allocFunc AllocationHandlerV2,
 	cpMeta map[string]*model.CounterPointMeta,
 	metaInfo *model.CounterPointMetaInfo, rowPrefix string, startDate time.Time, switchIntermediate func(time.Time) int) error {
-	err := calcDailyScope(iter, allocFunc, metaInfo, startDate, rowPrefix,
-		func(currentDate time.Time, summary *calcResults) error {
+	windows := distinctWindowRanges(reportValues.meters)
+	bucketSums := map[*model.MeterReport]map[string]float64{}
+	err := calcDailyScope(iter, allocFunc, metaInfo, startDate, rowPrefix, windows,
+		func(currentDate time.Time, summary *calcResults, windowResults map[string]*calcResults) error {
+			appendBucketsToParticipantMeter(windowResults, reportValues, cpMeta, currentDate, bucketSums)
 			err := appendEnergyToParticipantMeter(summary, reportValues, cpMeta, currentDate,
 				func(participantReport *model.MeterReport, values []float64, dir model.MeterDirection) {
 					switch dir {
@@ -412,9 +438,86 @@ func calcParticipantReport(iter ebow.IRange,
 	for _, s := range reportValues.meters {
 		for _, r := range s {
 			r.Report.RoundToFixed(6)
+			buildBuckets(r, cpMeta, bucketSums)
 		}
 	}
 	return err
+}
+
+// appendBucketsToParticipantMeter adds the per-window daily sums to the
+// running bucket totals of every requested meter with time windows. It uses
+// the same day-level from/until gating as appendEnergyToParticipantMeter so
+// the bucket partition stays consistent with the summary.
+func appendBucketsToParticipantMeter(
+	windowSums map[string]*calcResults,
+	reportValues *reportValues,
+	cpMeta map[string]*model.CounterPointMeta,
+	lineTime time.Time,
+	bucketSums map[*model.MeterReport]map[string]float64) {
+
+	if len(windowSums) == 0 {
+		return
+	}
+	for meterId, meterReports := range reportValues.meters {
+		meta, ok := cpMeta[meterId]
+		if !ok {
+			continue
+		}
+		for _, p := range meterReports {
+			if len(p.TimeWindows) == 0 {
+				continue
+			}
+			from := utils.TruncateToDay(time.UnixMilli(p.From))
+			until := utils.TruncateToDay(time.UnixMilli(p.Until))
+			if !(from.Unix() <= lineTime.Unix() && lineTime.Unix() <= until.Unix()) {
+				continue
+			}
+			sums, ok := bucketSums[p]
+			if !ok {
+				sums = map[string]float64{}
+				bucketSums[p] = sums
+			}
+			for _, tw := range p.TimeWindows {
+				ws, ok := windowSums[tw.From+"-"+tw.To]
+				if !ok {
+					continue
+				}
+				switch meta.Dir {
+				case model.CONSUMER_DIRECTION:
+					// billing quantity of a consumer is the utilization
+					sums[tw.Key] += ws.rAlloc.RoundToFixed(6).GetElm(meta.SourceIdx, 0)
+				case model.PRODUCER_DIRECTION:
+					// billing quantity of a producer is production - allocation
+					sums[tw.Key] += ws.rProd.GetElm(meta.SourceIdx, 0) - ws.rDist.GetElm(meta.SourceIdx, 0)
+				}
+			}
+		}
+	}
+}
+
+// buildBuckets writes the final buckets of one meter: T1/T2 as summed window
+// quantities, BASE as the residual against the (rounded) period total - the
+// kWh partition is exact by construction.
+func buildBuckets(r *model.MeterReport, cpMeta map[string]*model.CounterPointMeta, bucketSums map[*model.MeterReport]map[string]float64) {
+	if len(r.TimeWindows) == 0 || r.Report == nil {
+		return
+	}
+	total := r.Report.Summary.Utilization
+	if meta, ok := cpMeta[r.MeterId]; ok && meta.Dir == model.PRODUCER_DIRECTION {
+		total = r.Report.Summary.Production - r.Report.Summary.Allocation
+	}
+	windows := append([]model.TimeWindow{}, r.TimeWindows...)
+	sort.Slice(windows, func(i, j int) bool { return windows[i].Key < windows[j].Key })
+
+	buckets := make([]model.Bucket, 0, len(windows)+1)
+	windowTotal := float64(0)
+	for _, tw := range windows {
+		kwh := utils.RoundToFixed(bucketSums[r][tw.Key], 6)
+		windowTotal += kwh
+		buckets = append(buckets, model.Bucket{Key: tw.Key, KWh: kwh})
+	}
+	base := utils.RoundToFixed(total-windowTotal, 6)
+	r.Report.Buckets = append([]model.Bucket{{Key: "BASE", KWh: base}}, buckets...)
 }
 
 func appendEnergyToParticipantMeter(
