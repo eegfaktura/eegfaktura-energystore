@@ -8,6 +8,22 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Build and CI
+- **The image job's gate is wider.** Besides the tests it checks that the committed protobuf stubs match a
+  regeneration (`scripts/dev/generate.sh`, pinned protoc 29.3 and plugins), runs `gofmt`/`go vet`
+  (`scripts/dev/static-check.sh`), the whole test suite with the race detector (`scripts/dev/test.sh`,
+  every package except the root, was a fixed package list without `-race`) and per-package coverage floors, uploads the coverage report and runs
+  `govulncheck` (reporting only) — all before the image is built.
+- `protoc/masterdata*.pb.go` are committed; `docker build` works from a fresh checkout. The build paths
+  of `energystore`/`estore` are unchanged (moving the entry points to `cmd/` was not done, `open-points.md` ES-24).
+- Tests write Badger data only into temporary directories and fix the time zone to `Europe/Vienna`;
+  the intermittent hang of the `calculation` tests is gone (`known-errors.md` #3).
+
+### Documentation
+- `EXTERNAL_SOURCES.md` lists every source of the build, the tests and the service. The concept for
+  repairing the test environment and raising the test coverage, the storage-format concepts and the
+  working files of that work are kept outside the repository. No code change.
+
 ### CI
 - `docker-image.yml`: no image build on a draft pull request — it runs when the pull request is marked ready for review (`ready_for_review`) and on every later push to it; `pr-checks.yml` still checks drafts. Pushes, tags and the deploy dispatch are unchanged.
 - `pr-checks.yml` on the test environment: the unit job runs every tested package (`scripts/dev/packages.sh`, no race detector), the full job the static check, `scripts/dev/test.sh` (race detector, coverage) and the coverage floors, in `TZ=UTC`; the report-only "Known errors" job and the protobuf generation (the stubs are committed) are gone. The results stay artifacts for the CI report collector.
@@ -151,22 +167,6 @@ this changelog highlights the changes relevant for overview and operations.
   Now only the entry of that ecId is dropped and the message is reported as an error. As a second
   line of defence the tenant worker recovers from a panic in a single message and logs it.
   Tests `TestEnsureDbInvalidThenValid`, `TestEnsureDbTenantTooLong`.
-
-### Build and CI
-- **A red test now blocks the image.** The CI job checks that the committed protobuf stubs match a
-  regeneration (`scripts/dev/generate.sh`, pinned protoc 29.3 and plugins), runs `gofmt`/`go vet`
-  (`scripts/dev/static-check.sh`), the whole test suite with the race detector (`scripts/dev/test.sh`,
-  every package except the root) and per-package coverage floors, uploads the coverage report and runs
-  `govulncheck` (reporting only) — all before the image is built.
-- `protoc/masterdata*.pb.go` are committed; `docker build` works from a fresh checkout. The build paths
-  of `energystore`/`estore` are unchanged (moving the entry points to `cmd/` was not done, `open-points.md` ES-24).
-- Tests write Badger data only into temporary directories and fix the time zone to `Europe/Vienna`;
-  the intermittent hang of the `calculation` tests is gone (`known-errors.md` #3).
-
-### Documentation
-- `EXTERNAL_SOURCES.md` lists every source of the build, the tests and the service. The concept for
-  repairing the test environment and raising the test coverage, the storage-format concepts and the
-  working files of that work are kept outside the repository. No code change.
 
 ## [1.5.0] – 2026-10-04
 
