@@ -82,7 +82,7 @@ func EnergyReportV2(tenant, ecid string, participants []model.ParticipantReport,
 
 func EnergySummary(tenant, ecid string, year, segment int, periodCode string) (interface{}, error) {
 	c, _ := store.NewEnergySummary()
-	e := &store.Engine{c}
+	e := &store.Engine{Consumer: c}
 
 	start, end, err := utils.PeriodToStartEndTime(year, segment, periodCode)
 	if err != nil {

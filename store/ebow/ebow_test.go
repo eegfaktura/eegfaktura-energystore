@@ -7,6 +7,8 @@ import (
 	"math/rand"
 	"os"
 	"reflect"
+	"runtime"
+	"sort"
 	"testing"
 )
 
@@ -72,9 +74,11 @@ func Test(t *testing.T) {
 	db.Close()
 	db.Open()
 
-	// Make sure we got all the buckets.
-	if !reflect.DeepEqual(db.DB().Buckets(), []string{"arrows", "new_arrows"}) {
-		t.Fatalf("lost/gained buckets after re-opening: %v", db.DB().Buckets())
+	// Make sure we got all the buckets (Buckets() returns them in map order).
+	buckets := db.DB().Buckets()
+	sort.Strings(buckets)
+	if !reflect.DeepEqual(buckets, []string{"arrows", "new_arrows"}) {
+		t.Fatalf("lost/gained buckets after re-opening: %v", buckets)
 	}
 
 	// Iterate a bucket and make sure it contains what we put in it before.
@@ -176,6 +180,9 @@ func TestKeys(t *testing.T) {
 // Create a database and write to it, then close it, re-open with read-only and
 // try to read what we wrote.
 func TestReadOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Badger does not support read-only mode on Windows; this test runs on Linux (CI)")
+	}
 	db := OpenTestDB(t)
 	defer db.Drop()
 
@@ -258,6 +265,8 @@ func (t *TestDB) Open(options ...Option) {
 	if err != nil {
 		t.fail(err)
 	}
+	// After Close and Open again, Drop must close the new handle, or RemoveAll fails on Windows.
+	t.closed = false
 }
 
 func (t *TestDB) Put(bucket string, v interface{}) {
