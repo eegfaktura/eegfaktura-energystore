@@ -10,6 +10,7 @@ this changelog highlights the changes relevant for overview and operations.
 
 ### CI
 - `docker-image.yml`: no image build on a draft pull request — it runs when the pull request is marked ready for review (`ready_for_review`) and on every later push to it; `pr-checks.yml` still checks drafts. Pushes, tags and the deploy dispatch are unchanged.
+- `pr-checks.yml` on the test environment: the unit job runs every tested package (`scripts/dev/packages.sh`, no race detector), the full job the static check, `scripts/dev/test.sh` (race detector, coverage) and the coverage floors, in `TZ=UTC`; the report-only "Known errors" job and the protobuf generation (the stubs are committed) are gone. The results stay artifacts for the CI report collector.
 
 ## [1.7.0] – 2026-10-21
 
