@@ -6,6 +6,7 @@ package ebow
 import (
 	"context"
 	"crypto/rand"
+	"encoding/binary"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -65,11 +66,17 @@ func fillVlog(t *testing.T, tenant, ecId string, cycles, writesPerCycle int) {
 // RunValueLogGC meldet ErrNoRewrite. Ein zweites Flatten auf denselben Tabellen findet nichts mehr
 // (unterste Ebene erst nach einer Stunde), daher je Versuch ein neuer Wert und eine kurze Pause nach
 // dem Oeffnen.
+//
+// Erfolg heisst: DIESES Flatten hat Statistik geschrieben. "Irgendeine Statistik vorhanden" reicht
+// nicht -- schon waehrend fillVlog kompaktiert Badger automatisch (mehr als NumLevelZeroTables
+// L0-Tabellen) und verbucht dabei die bis dahin ueberholten Dateien. Verlor Flatten danach das Rennen,
+// fehlten die spaeteren Dateien in der Statistik; der Lauf schrieb dann z. B. nur 8 von 12 um.
 func flatten(t *testing.T, tenant, ecId string) {
 	t.Helper()
 	dir := filepath.Join(viper.GetString("persistence.path"), tenant, ecId)
 	deadline := time.Now().Add(5 * time.Second)
 	for attempt := 0; ; attempt++ {
+		before := discardTotal(dir)
 		st, err := OpenStorage(tenant, ecId)
 		require.NoError(t, err)
 		if attempt > 0 {
@@ -77,12 +84,25 @@ func flatten(t *testing.T, tenant, ecId string) {
 		}
 		require.NoError(t, st.db.Badger().Flatten(1))
 		st.Close()
-		if discardCandidate(dir, 0).ratio > 0 {
+		if discardTotal(dir) > before {
 			return
 		}
 		require.True(t, time.Now().Before(deadline), "keine Verwurfsstatistik nach %d Versuchen", attempt+1)
 		fillVlog(t, tenant, ecId, 1, 1)
 	}
+}
+
+// discardTotal summiert die verworfenen Bytes aller Slots der Datei DISCARD (Aufbau wie in
+// discardCandidate).
+func discardTotal(dir string) (total uint64) {
+	buf, _ := os.ReadFile(filepath.Join(dir, "DISCARD"))
+	for i := 0; i+16 <= len(buf); i += 16 {
+		if binary.BigEndian.Uint64(buf[i:]) == 0 {
+			break
+		}
+		total += binary.BigEndian.Uint64(buf[i+8:])
+	}
+	return total
 }
 
 func refFor(base, tenant, ecId string) vlogRef {

@@ -50,6 +50,12 @@ this changelog highlights the changes relevant for overview and operations.
   `test/rawdata/te100190`, the folder it writes (it removed `rc100190`).
 - CI: the unit job checks `gofmt` and runs `go vet` (every package except the root) before the tests;
   `calculation` uses a keyed `store.Engine` literal, an unreachable `return` in `excel` is gone.
+- Tests: the `store/ebow` VlogGC test helper `flatten` counts a forced compaction as done only when it wrote new
+  discard statistics itself (platform#181). Badger already compacts automatically while the tests fill the
+  value log and records the files superseded up to then; when the forced compaction then lost the race against
+  the asynchronous read watermark, the check "any statistics present" still passed, the later files had none,
+  and `TestVlogGCReclaimsValueLog` failed now and then with 8 instead of 12 rewrites (31 MB value log left).
+  Test code only; the value log GC itself is unchanged.
 
 ### Fixed
 - Ops command `reset`: begin and end are now rounded down to the quarter hour as intended (the `Truncate`
