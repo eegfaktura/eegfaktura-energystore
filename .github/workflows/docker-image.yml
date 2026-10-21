@@ -68,9 +68,10 @@ jobs:
       - name: Install protoc + Go gRPC plugins (pinned, scripts/dev/generate.sh)
         run: |
           set -eu
-          # Versions as in scripts/dev/generate.sh (known-errors #1, #10; open-points ES-2, ES-3).
+          # Versions as in scripts/dev/generate.sh (known-errors #1, #10); the release zip is checked by SHA-256.
           curl -sSfL -o /tmp/protoc.zip \
             https://github.com/protocolbuffers/protobuf/releases/download/v29.3/protoc-29.3-linux-x86_64.zip
+          echo "3e866620c5be27664f3d2fa2d656b5f3e09b5152b42f1bedbf427b333e90021a  /tmp/protoc.zip" | sha256sum -c -
           mkdir -p "$HOME/.local/opt/protoc" && unzip -q /tmp/protoc.zip -d "$HOME/.local/opt/protoc"
           go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
           go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.2
