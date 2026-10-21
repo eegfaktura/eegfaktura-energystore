@@ -180,8 +180,13 @@ func TestExcelExportByMail(t *testing.T) {
 
 func TestExcelReportDownload(t *testing.T) {
 	seed(t)
-	rt := routes()[12]
-	require.Equal(t, "/eeg/{ecid}/excel/report/download", rt.template)
+	var rt route
+	for _, r := range routes() {
+		if r.template == "/eeg/{ecid}/excel/report/download" {
+			rt = r
+		}
+	}
+	require.NotEmpty(t, rt.path, "matrix row of the Excel report download")
 	rec := apitest.Do(apitest.Router(), apitest.Request{Method: "POST", Path: rt.path, Header: appHeader(), Body: rt.body})
 	require.Equal(t, 200, rec.Code, rec.Body.String())
 	assert.Equal(t, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", rec.Header().Get("Content-type"))

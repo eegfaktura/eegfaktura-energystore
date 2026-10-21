@@ -65,8 +65,8 @@ type route struct {
 
 func ms(t time.Time) int64 { return t.UnixMilli() }
 
-// routes lists all 17 entry points (13 ProtectApp, 2 ProtectApi, 2 GraphQL fields), counted on
-// 2026-10-02 (m02). TestRouteWalkGuard fails when the router has a route this list lacks.
+// routes lists all 18 entry points (14 ProtectApp, 2 ProtectApi, 2 GraphQL fields), counted on
+// 2026-10-02 (m02); billing-check (#73) added 2026-10-21. TestRouteWalkGuard fails when the router has a route this list lacks.
 func routes() []route {
 	start, end := ms(day), ms(day.Add(23*time.Hour+45*time.Minute))
 	window := fmt.Sprintf(`{"start":%d,"end":%d}`, start, end)
@@ -86,6 +86,9 @@ func routes() []route {
 		{method: "POST", template: "/eeg/v2/{ecid}/combined-report", path: v2 + "/combined-report", body: fmt.Sprintf(`{"reports":[],"start":%d,"end":%d}`, start, end), ok: 200},
 		{method: "GET", template: "/eeg/v2/{ecid}/combined-report", path: v2 + "/combined-report?" + q, ok: 200},
 		{method: "POST", template: "/eeg/v2/{ecid}/summary", path: v2 + "/summary", body: `{"year":2026,"segment":6,"type":"YM"}`, ok: 200},
+		{method: "POST", template: "/eeg/v2/{ecid}/billing-check", path: v2 + "/billing-check",
+			body: fmt.Sprintf(`{"start":%d,"end":%d,"cps":[{"meteringPoint":"%s","direction":"CONSUMPTION","activeSince":%d,"inactiveSince":%d}]}`,
+				start, end, meter, start, end), ok: 200},
 		{method: "GET", template: "/eeg/{ecid}/lastRecordDate", path: "/eeg/" + ecId + "/lastRecordDate", ok: 200},
 		{method: "POST", template: "/eeg/{ecid}/excel/export/{year}/{month}", path: "/eeg/" + ecId + "/excel/export/2026/6", ok: 200, defect: "#53"},
 		{method: "POST", template: "/eeg/{ecid}/excel/report/download", path: "/eeg/" + ecId + "/excel/report/download",
@@ -235,5 +238,5 @@ func TestRouteWalkGuard(t *testing.T) {
 	require.NoError(t, err)
 	sort.Strings(unlisted)
 	assert.Empty(t, unlisted, "routes without the auth matrix")
-	assert.Len(t, seen, 16, "15 REST routes and /query (two GraphQL fields)")
+	assert.Len(t, seen, 17, "16 REST routes and /query (two GraphQL fields)")
 }
