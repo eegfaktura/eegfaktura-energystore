@@ -60,8 +60,8 @@ func GetMetaMap(db ebow.IBowStorage) (map[string]*model.CounterPointMeta, error)
 }
 
 func ToDataTimeRange(begin, end time.Time) (*DataTimeRange, error) {
-	begin.Truncate(15 * time.Minute)
-	end.Truncate(15 * time.Minute)
+	begin = begin.Truncate(15 * time.Minute)
+	end = end.Truncate(15 * time.Minute)
 
 	beginPeriod, err := utils.ConvertUnixTimeToRowId("", begin)
 	if err != nil {
