@@ -60,7 +60,7 @@ func TestS01_ExportWorkbook(t *testing.T) {
 }
 
 // S5 (periods) — quarter, half year and year add up the stored days. The number and the borders of
-// the intermediate buckets are not asserted: that is open-points ES-14 (scenario S6).
+// the intermediate buckets are not asserted: that is an open question (scenario S6).
 func TestS05_PeriodTotals(t *testing.T) {
 	community(t)
 	importMQTT(t, consumerMsg(june1, 2*96, "L1")) // 1. and 2.6.2026

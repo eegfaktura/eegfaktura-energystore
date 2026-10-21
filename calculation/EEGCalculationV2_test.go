@@ -110,7 +110,7 @@ func TestCalculateBiAnnualParticipantReport(t *testing.T) {
 		participant := report.ParticipantReports[0]
 		assert.Equal(t, len(participant.Meters), 1)
 		require.NotNil(t, participant.Meters[0].Report)
-		// bucket count: known-errors #23, ES-14 — the 26 pinned here came from the code (offsets 0
+		// bucket count: known-errors #23 — the 26 pinned here came from the code (offsets 0
 		// and 1 share bucket 1); the correct count is a business answer, the defect test is M3 S6.
 
 		fmt.Println("REPORT PARTICIPANTS")

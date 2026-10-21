@@ -6,8 +6,8 @@
 #   bash scripts/dev/test.sh -run TestName   # extra arguments go to `go test`
 #
 # The root package (server.go, estore.go, initQoV.go: three func main) is left out: it does not
-# compile as one package (known-errors #1). Moving the two extra entry points to cmd/ (ES-22) is
-# a source change and was not done (open-points ES-24).
+# compile as one package (known-errors #1). Moving the two extra entry points to cmd/ is
+# a source change and was not done.
 # Timeout 300 s: calculation alone takes about 145 s under -race (known-errors #3).
 set -euo pipefail
 cd "$(dirname "$0")/../.."

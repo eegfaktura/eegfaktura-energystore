@@ -10,7 +10,7 @@ import (
 )
 
 // KWhDelta is the tolerance for energy values: sums over 96 values differ in the last digits
-// with the order of addition (AGENTS.md section 4).
+// with the order of addition.
 const KWhDelta = 1e-6
 
 // InDelta fails the test when |want - got| > KWhDelta.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Coverage gate (open-points ES-9): statements per package from a cover profile, compared with
+# Coverage gate: statements per package from a cover profile, compared with
 # the floors in scripts/dev/coverage-floors.txt. Fails when one package falls below its floor.
 # Generated code (*.pb.go, graph/generated/, *_gen.go) and the test helpers (internal/testsupport) are excluded. A profile merged from several
 # test binaries lists a block once per binary; a block counts as covered if any run hit it.

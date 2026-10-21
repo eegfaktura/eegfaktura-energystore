@@ -13,7 +13,7 @@ type line struct {
 	QoV       []int
 }
 
-// Stored values are JSON (AGENTS.md section 8): field names as in the struct, floats unchanged.
+// Stored values are JSON: field names as in the struct, floats unchanged.
 func TestRoundTrip(t *testing.T) {
 	c := Codec{}
 	in := line{Id: "CP/2026/06/01/00/00/00", Consumers: []float64{0.000077, 1.5}, QoV: []int{1, 2}}

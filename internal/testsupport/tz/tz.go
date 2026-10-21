@@ -1,5 +1,5 @@
 // Package tz fixes the time zone of a test binary to Europe/Vienna, the zone the row ids of
-// production are written in (AGENTS.md section 4). It has no dependencies inside the module,
+// production are written in. It has no dependencies inside the module,
 // so in-package tests of model and store/ebow can use it without an import cycle.
 package tz
 

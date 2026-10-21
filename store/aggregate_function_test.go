@@ -365,7 +365,7 @@ func TestAggregateFunction(t *testing.T) {
 }
 
 // calcQoV combines the quality of a cached slot (current) with a new one (target). The table records
-// today's rule; what QoV 0 means and how an aggregate's quality is formed is open-points ES-15, so this
+// today's rule; what QoV 0 means and how an aggregate's quality is formed is an open question, so this
 // is not a statement that the rule is right (known-errors #30).
 func Test_calcQoV(t *testing.T) {
 	tests := []struct{ current, target, want int }{

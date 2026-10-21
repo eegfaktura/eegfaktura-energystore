@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # gofmt and go vet over the tested packages. Fails on any finding that is not one of the known,
 # recorded ones below; those are production code and stay until their own fix (no source change
-# in the test-environment milestones, open-points ES-24).
+# in the test environment).
 #   known-errors #47: store/ebow/pool.go is not gofmt-clean (comment alignment)
 #   known-errors #11: excel/ExcelSource.go:609 unreachable code,
 #                     calculation/energy.go:85 unkeyed fields in a store.Engine literal

@@ -1,8 +1,8 @@
 # External sources
 
 Every source outside this repository that the build, the tests or the running service depends
-on. Adding a source requires a decision first (AGENTS.md section 12): record the question in
-`open-points.md`, then add the row here in the same change. Licences were read from each
+on. A new source is agreed with the maintainers first; its row is added here in the
+same change. Licences were read from each
 module's own `LICENSE` file in the local module cache on 2026-10-02.
 
 ## Build and toolchain
@@ -11,16 +11,19 @@ module's own `LICENSE` file in the local module cache on 2026-10-02.
 |---|---|---|---|
 | Go module proxy (`proxy.golang.org`) and checksum database (`sum.golang.org`) | all modules | — | official; `go.sum` pins every module hash |
 | Go toolchain | build and tests | `go 1.25.0` in `go.mod`; BSD-3-Clause | the `go` line is a minimum, not a pin (local runs 2026-10-02 used go 1.26.0) |
-| Docker Hub `golang:1.25` | build **and runtime** image (single stage) | BSD-3-Clause (Go), Debian | **floating tag** (`known-errors.md` #10, `open-points.md` ES-1, ES-3) |
+| Docker Hub `golang:1.25` | build **and runtime** image (single stage) | BSD-3-Clause (Go), Debian | **floating tag** (`known-errors.md` #10) |
 | `protoc` (protobuf-compiler) | generating `protoc/*.pb.go` | 29.3 (released 2025-01-08); BSD-3-Clause | pinned in `scripts/dev/generate.sh`; CI downloads the release zip `protoc-29.3-linux-x86_64.zip` from GitHub |
 | `google.golang.org/protobuf/cmd/protoc-gen-go`, `google.golang.org/grpc/cmd/protoc-gen-go-grpc` | protobuf/gRPC code generation | v1.36.11 (2025-12-12), v1.6.2 (2026-05-07); BSD-3-Clause / Apache-2.0 | `go install …@vX.Y.Z` in CI, checked by `generate.sh` |
-| `golang.org/x/vuln/cmd/govulncheck` | CI vulnerability report (reporting only, ES-12) | v1.8.0 (2026-09-08); BSD-3-Clause (read from its `LICENSE`) | `go install …@v1.8.0` in CI |
+| `golang.org/x/vuln/cmd/govulncheck` | CI vulnerability report (reporting only) | v1.8.0 (2026-09-08); BSD-3-Clause (read from its `LICENSE`) | `go install …@v1.8.0` in CI |
 | `actions/upload-artifact` | CI coverage artefact | v7.0.1 (2026-04-10); MIT | by SHA `043fb46d1a93c77aae656e7c1c64a875d1fc6a0a` |
 | Trivy (`aquasecurity/trivy` release binary) | CI `security-scan.yml`: secrets in changed files, vulnerable dependencies, misconfigurations | 0.75.0 (2026-10-01); Apache-2.0 | SHA-256 checked in the workflow |
 | OSV-Scanner (`google/osv-scanner` release binary) | CI `security-scan.yml`: vulnerable dependencies | 2.6.0 (2026-09-14); Apache-2.0 | SHA-256 checked in the workflow |
 | Gitleaks (`gitleaks/gitleaks` release binary) | CI `security-scan.yml`: secrets in the new commits | 8.30.1 (2026-03-21); MIT | SHA-256 checked in the workflow |
 | `actions/upload-artifact` v7.0.1, `actions/download-artifact` v8.0.1 (2026-03-11) in `security-scan.yml` | the poms of the sbt export between two jobs (unused here: no `build.sbt`) | MIT | by SHA `043fb46…`, `3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c` |
 | Trivy vulnerability/check databases, OSV database (osv.dev, deps.dev) | data the scanners fetch on every CI run | — | official; data, not pinned |
+| `actions/checkout` v4.2.2 (2024-10-23), `actions/setup-java` v6.0.1 (2026-09-09) in `pr-checks.yml` and `security-scan.yml` | checkout; the JDK of the pom-resolve job | MIT | by SHA `11bd719…`, `de7274f…` |
+| Apache Maven (release binary) and `org.apache.maven.plugins:maven-dependency-plugin` in `security-scan.yml` | resolves the poms before the dependency scan, so Trivy does not ask Maven Central | 3.9.11 (2025-07-12), 3.8.1 (2024-10-24); Apache-2.0 | Maven checked by SHA-512 in the workflow; the plugin by exact version |
+| `actions/cache` v4.2.3 (2025-03-19), `sbt/setup-sbt` v1.5.11 (2026-09-24) in `security-scan.yml` | cache of the resolved poms; sbt for the pom export (unused here: no `build.sbt`) | MIT | by SHA `5a3ec84…`, `6158cb0…` |
 | `actions/setup-go` in `pr-checks.yml` | Go toolchain for the PR test jobs | v7.0.0 (2026-07-16); MIT — Go 1.25.14 (2026-08-19), BSD-3-Clause | by SHA `b7ad1dad31e06c5925ef5d2fc7ad053ef454303e`; exact Go version |
 | `github.com/99designs/gqlgen` (generator) | `graph/generated/` | MIT | same version as the runtime module |
 | GitHub Actions in `docker-image.yml`: `actions/checkout@v4`, `actions/setup-go@v5`, `docker/metadata-action@v5`, `docker/login-action@v3`, `docker/build-push-action@v6`, `actions/attest-build-provenance@v1` | CI | MIT / Apache-2.0 | **by major tag** (#10) |

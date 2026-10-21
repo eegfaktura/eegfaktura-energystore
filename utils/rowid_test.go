@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Row ids are local wall-clock time in Europe/Vienna (AGENTS.md section 8). These tests pin the
+// Row ids are local wall-clock time in Europe/Vienna. These tests pin the
 // conversion in both directions over DST, year and leap-day boundaries (concept T2).
 func TestRowIdWallClockInVienna(t *testing.T) {
 	v := tz.Vienna

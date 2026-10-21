@@ -37,7 +37,7 @@ func TestS07_QualityIsStoredPerSlot(t *testing.T) {
 }
 
 // A later L2 value replaces a stored L1 value today (known-errors #35, F20). Whether it may is the
-// open business question ES-15; this records today's behaviour, it does not say it is right.
+// open business question; this records today's behaviour, it does not say it is right.
 func TestS07_LateMessageOverwrites(t *testing.T) {
 	community(t)
 	importMQTT(t, consumerMsg(june1, 96, "L1"))
@@ -46,7 +46,7 @@ func TestS07_LateMessageOverwrites(t *testing.T) {
 	importMQTT(t, late)
 
 	c := raw(t, consumer, june1, june1)
-	testsupport.InDelta(t, 9.99, c[0].Value[0], "ES-15: today the late L2 value wins")
+	testsupport.InDelta(t, 9.99, c[0].Value[0], "open question: today the late L2 value wins")
 	assert.Equal(t, 2, c[0].Qov[0])
 	testsupport.InDelta(t, cons(1), c[1].Value[0], "the next slot is untouched")
 }

@@ -1,6 +1,6 @@
 # Contract fixtures (M6)
 
-Copied from the neighbours on 2026-10-03 (open-points ES-21: byte-identical where possible, source commit
+Copied from the neighbours on 2026-10-03 (byte-identical where possible, source commit
 and sha256 recorded). Refreshed by hand — no job compares them with the neighbours (a remaining gap).
 All three source repositories are AGPL-3.0 like this one.
 
@@ -19,5 +19,5 @@ recorded; its keys match eda-xp's `EbMsMessage` JSON: `messageId`, `sender`, `re
 `messageCodeVersion`). eda-xp encodes CR_MSG as base64 of gzip of the JSON
 (`src/main/scala/at/energydash/mqtt/MqttSystem.scala:209-214` at `e51492b`).
 
-To check energystore-v2 with the same fixtures (ES-19), point `apitest.Router` at a v2 base URL — not
+To check energystore-v2 with the same fixtures, point `apitest.Router` at a v2 base URL — not
 done here.

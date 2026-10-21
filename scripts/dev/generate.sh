@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Generates the protobuf/gRPC stubs in protoc/ with pinned tool versions (known-errors #1,
-# open-points ES-2). The generated files are committed; CI runs this script and then
+# Generates the protobuf/gRPC stubs in protoc/ with pinned tool versions (known-errors #1).
+# The generated files are committed; CI runs this script and then
 # `git diff --exit-code protoc/` so a drift between .proto and .pb.go turns the build red.
 #
-# Pinned versions (publish dates checked 2026-10-03, all older than 7 days, AGENTS.md 12.1):
+# Pinned versions (publish dates checked 2026-10-03, all older than 7 days):
 #   protoc              29.3     (github.com/protocolbuffers/protobuf release v29.3, 2025-01-08)
 #   protoc-gen-go       v1.36.11 (google.golang.org/protobuf, 2025-12-12)
 #   protoc-gen-go-grpc  v1.6.2   (google.golang.org/grpc/cmd/protoc-gen-go-grpc, 2026-05-07)

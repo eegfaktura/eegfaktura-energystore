@@ -1,5 +1,5 @@
-// Package fakeoidc is an in-process fake Keycloak for the HTTP tests (M2, the fallback of
-// open-points ES-13 without a production change, ES-24).
+// Package fakeoidc is an in-process fake Keycloak for the HTTP tests (M2): the tests need
+// no running Keycloak and no change of production code.
 //
 // middleware's package init() reads KEYCLOAK_CONFIG and runs two OIDC discoveries at start
 // (known-errors #12). Package initialisation follows the Go spec (Go 1.21+): packages sorted by
