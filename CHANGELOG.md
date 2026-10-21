@@ -22,6 +22,17 @@ this changelog highlights the changes relevant for overview and operations.
   field" removed `test/rawdata/excelsource` instead of its own `excelsource3`: when `go test` ran `excel` and
   `calculation` in parallel on Linux, that deleted the open store of `calculation`, whose Badger close then hung
   until the timeout (the cause of the „calculation hangs" in CI).
+- Tests: the `store/ebow` VlogGC tests retry the forced compaction until Badger has written discard statistics
+  (Badger sets the read watermark asynchronously after opening; a compaction before that kept every version and
+  the tests failed now and then with `ErrNoRewrite`). `Test` closes its reopened database, so the cleanup no
+  longer leaves a ~2.2 GB `bow-*` folder in TMP on Windows. `mqttclient` `TestImportRawdataStore` removes
+  `test/rawdata/te100190`, the folder it writes (it removed `rc100190`).
+- CI: the unit job checks `gofmt` and runs `go vet` (every package except the root) before the tests;
+  `calculation` uses a keyed `store.Engine` literal, an unreachable `return` in `excel` is gone.
+
+### Fixed
+- Ops command `reset`: begin and end are now rounded down to the quarter hour as intended (the `Truncate`
+  results were discarded). A begin of 10:07 now also resets the 10:00 slot.
 
 ## [1.6.1] – 2026-10-19
 
