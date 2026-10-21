@@ -12,7 +12,7 @@ this changelog highlights the changes relevant for overview and operations.
 - CI: no more known failing test packages (platform#181). `calculation`, `model` and `mqttclient` move from the
   report-only job "Known errors" (removed) into the blocking test jobs, `store/ebow` runs as a whole package
   instead of only `-run TestVlogGC`; test timeout 400 s, 600 s for the full suite with the race detector
-  (`calculation` takes about 220 s there).
+  (`calculation` takes 220–270 s there).
 - Tests: `model` checks the current CR_MSG wire format (as eda-xp publishes it: no envelope, `energy` as an array,
   `conversationId`, `messageCode`). `mqttclient` `TestNewMqttEnergyImporter` closes its importer and works in a
   temporary directory (left Badger files open on Windows and data behind for the next run); `TestMassImport` is

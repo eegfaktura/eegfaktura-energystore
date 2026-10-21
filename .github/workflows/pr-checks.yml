@@ -130,7 +130,7 @@ jobs:
         run: |
           set -euo pipefail
           module="$(go list -m)"
-          # every package except the root; calculation takes about 220 s under the race detector (CI run 39567979725)
+          # every package except the root; calculation takes 220-270 s under the race detector (CI runs 39567979725, 39577139743)
           mapfile -t pkgs < <(go list ./... | grep -vxF "$module")
           printf 'Package: %s\n' "${pkgs[@]}"
           mkdir -p "$RUNNER_TEMP/results"
