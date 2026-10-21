@@ -1,5 +1,5 @@
 # Tests on every pull request: the unit tests (every tested package, quick: no race detector, no
-# coverage) and the full suite (scripts/dev: gofmt/vet with the recorded findings, the race
+# coverage) and the full suite (scripts/dev: gofmt/vet, the race
 # detector, coverage floors). The root package (three func main) is left out, known-errors #1.
 # The protobuf stubs are committed; docker-image.yml checks that they match the .proto files.
 # Versions fixed, each release older than 7 days (checked 2026-10-09, Go 2026-10-21): Go 1.26.9 (2026-10-08;
