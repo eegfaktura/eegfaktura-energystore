@@ -4,7 +4,8 @@
 # The root package (three func main) does not compile as one package and is left out.
 #
 # Only protoc/excel.pb.go is committed, so every job generates the protobuf stubs first.
-# Versions fixed, each release older than 7 days (checked 2026-10-09): Go 1.25.14 (2026-08-19),
+# Versions fixed, each release older than 7 days (checked 2026-10-09, Go 2026-10-21): Go 1.26.9 (2026-10-08;
+# 1.26.10 of 2026-10-19 was too new),
 # protoc 29.3 (2025-01-08), protoc-gen-go v1.36.11 (go.mod), protoc-gen-go-grpc v1.6.2.
 # Actions pinned by commit SHA.
 # Every job keeps its output as an artifact for 30 days (test-results-<job>),
@@ -24,7 +25,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GO_VERSION: '1.25.14'
+  GO_VERSION: '1.26.9'
   PROTOC_VERSION: '29.3'
   PROTOC_SHA256: '3e866620c5be27664f3d2fa2d656b5f3e09b5152b42f1bedbf427b333e90021a'
   PROTOC_GEN_GO_GRPC_VERSION: 'v1.6.2'

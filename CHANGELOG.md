@@ -24,6 +24,12 @@ this changelog highlights the changes relevant for overview and operations.
   with 400.
 
 ### Changed
+- Build: Go 1.26.9 instead of 1.25 (platform#181) in `go.mod` (`go 1.26.0`, `toolchain go1.26.9`), the Dockerfile
+  (`golang:1.26.9`), the PR checks and the image build. Fixes the standard-library vulnerabilities govulncheck reported
+  for 1.25.14 (`net/http`, `net/textproto`, `crypto/tls`). 1.26.10 (2026-10-19, `crypto/x509`, GO-2026-6809) was less
+  than 7 days old and follows separately.
+- Dependencies: `golang.org/x/net` 0.58.0 → 0.60.0 (platform#181; GO-2026-6603, -6610, -6611, -6612, -6617), which
+  pulls `golang.org/x/crypto` 0.55.0 → 0.57.0 and minor bumps of `x/mod`, `x/sync`, `x/sys`, `x/text`, `x/tools`.
 - CI: no more known failing test packages (platform#181). `calculation`, `model` and `mqttclient` move from the
   report-only job "Known errors" (removed) into the blocking test jobs, `store/ebow` runs as a whole package
   instead of only `-run TestVlogGC`; test timeout 400 s, 600 s for the full suite with the race detector
@@ -48,6 +54,13 @@ this changelog highlights the changes relevant for overview and operations.
 ### Fixed
 - Ops command `reset`: begin and end are now rounded down to the quarter hour as intended (the `Truncate`
   results were discarded). A begin of 10:07 now also resets the 10:00 slot.
+
+### Notes
+- Go 1.26: with `go 1.26.0` in go.mod the GODEBUG defaults of 1.26 apply (`cryptocustomrand`,
+  `httpservecontentmaxranges`, `tlssecpmlkem`, `urlstrictcolons`); none affects this service (no custom crypto
+  rand, no `ServeContent`, Keycloak URL has a host name). Go 1.26 uses the Green Tea garbage collector by
+  default: watch the pod memory in Dynatrace after the first rollout (opt-out at build time:
+  `GOEXPERIMENT=nogreenteagc`). (platform#181)
 
 ## [1.6.1] – 2026-10-19
 
