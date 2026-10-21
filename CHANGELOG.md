@@ -16,7 +16,8 @@ this changelog highlights the changes relevant for overview and operations.
   `conversationId`, `messageCode`). `mqttclient` `TestNewMqttEnergyImporter` closes its importer and works in a
   temporary directory (left Badger files open on Windows and data behind for the next run); `TestMassImport` is
   skipped while `energy-mass-test-data.json` (real data, not in the repository) is missing. `store/ebow`
-  `TestReadOnly` is skipped on Windows (Badger has no read-only mode there). `excel` „Initiate Metadata extended MM
+  `TestReadOnly` is skipped on Windows (Badger has no read-only mode there); `Test` compares the bucket names
+  sorted (`Buckets()` returns them in map order, so the test failed about every second run). `excel` „Initiate Metadata extended MM
   field" removed `test/rawdata/excelsource` instead of its own `excelsource3`: when `go test` ran `excel` and
   `calculation` in parallel on Linux, that deleted the open store of `calculation`, whose Badger close then hung
   until the timeout (the cause of the „calculation hangs" in CI).

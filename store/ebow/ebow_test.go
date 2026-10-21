@@ -8,6 +8,7 @@ import (
 	"os"
 	"reflect"
 	"runtime"
+	"sort"
 	"testing"
 )
 
@@ -73,9 +74,11 @@ func Test(t *testing.T) {
 	db.Close()
 	db.Open()
 
-	// Make sure we got all the buckets.
-	if !reflect.DeepEqual(db.DB().Buckets(), []string{"arrows", "new_arrows"}) {
-		t.Fatalf("lost/gained buckets after re-opening: %v", db.DB().Buckets())
+	// Make sure we got all the buckets (Buckets() returns them in map order).
+	buckets := db.DB().Buckets()
+	sort.Strings(buckets)
+	if !reflect.DeepEqual(buckets, []string{"arrows", "new_arrows"}) {
+		t.Fatalf("lost/gained buckets after re-opening: %v", buckets)
 	}
 
 	// Iterate a bucket and make sure it contains what we put in it before.
