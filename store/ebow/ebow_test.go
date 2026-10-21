@@ -265,6 +265,8 @@ func (t *TestDB) Open(options ...Option) {
 	if err != nil {
 		t.fail(err)
 	}
+	// After Close and Open again, Drop must close the new handle, or RemoveAll fails on Windows.
+	t.closed = false
 }
 
 func (t *TestDB) Put(bucket string, v interface{}) {
