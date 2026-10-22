@@ -15,6 +15,7 @@ import (
 	"at.ourproject/energystore/store/ebow"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/golang/glog"
+	"github.com/spf13/viper"
 )
 
 type TenantEnergyImporter struct {
@@ -199,7 +200,45 @@ func decryptMessage(msg []byte) ([]byte, error) {
 	return decompressed, nil
 }
 
+// maxDecompressedKey limits how far a CR_MSG is unpacked (platform#181), so a small but highly compressed payload
+// cannot fill the memory. A message carries one metering point and stays far below the default.
+// Env: ENERGYSTORE_MQTT_MAXDECOMPRESSEDMB. Read once: messages of several tenants are decoded concurrently and
+// viper is not safe for concurrent writes.
+const (
+	maxDecompressedKey       = "mqtt.maxDecompressedMB"
+	defaultMaxDecompressedMB = 512
+)
+
+var (
+	maxDecompressedOnce sync.Once
+	maxDecompressed     int64
+)
+
+func maxDecompressedBytes() int64 {
+	maxDecompressedOnce.Do(func() { maxDecompressed = readMaxDecompressedBytes(viper.GetViper()) })
+	return maxDecompressed
+}
+
+// readMaxDecompressedBytes falls back to the default for a missing, non-numeric, non-positive or absurdly large
+// value: a limit of 0 would drop every message.
+func readMaxDecompressedBytes(v *viper.Viper) int64 {
+	if !v.IsSet(maxDecompressedKey) {
+		return defaultMaxDecompressedMB << 20
+	}
+	mb := v.GetInt64(maxDecompressedKey)
+	if mb <= 0 || mb > 1<<20 {
+		glog.Warningf("%s=%q is not a positive number of MB, using %d", maxDecompressedKey,
+			v.GetString(maxDecompressedKey), defaultMaxDecompressedMB)
+		return defaultMaxDecompressedMB << 20
+	}
+	return mb << 20
+}
+
 func gunzipData(data []byte) ([]byte, error) {
+	return gunzipLimited(data, maxDecompressedBytes())
+}
+
+func gunzipLimited(data []byte, limit int64) ([]byte, error) {
 	buf := bytes.NewBuffer(data)
 	gz, err := gzip.NewReader(buf)
 	if err != nil {
@@ -208,9 +247,12 @@ func gunzipData(data []byte) ([]byte, error) {
 	defer gz.Close()
 
 	var out bytes.Buffer
-	_, err = io.Copy(&out, gz)
+	n, err := io.Copy(&out, io.LimitReader(gz, limit+1))
 	if err != nil {
 		return nil, err
+	}
+	if n > limit {
+		return nil, fmt.Errorf("decompressed message larger than %d bytes (%s)", limit, maxDecompressedKey)
 	}
 	return out.Bytes(), nil
 }
