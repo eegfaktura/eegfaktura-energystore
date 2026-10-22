@@ -10,7 +10,8 @@ this changelog highlights the changes relevant for overview and operations.
 
 ### Changed
 - Dependencies: `github.com/klauspost/compress` 1.18.0 → 1.18.7 (platform#181; Trivy CVE-2026-63209, HIGH),
-  an indirect dependency of `badger/v4` (`badger/v4/table` imports its `s2` package). Replaces Dependabot #76.
+  an indirect dependency of `badger/v4` (`badger/v4/table` uses its `s2`/`snappy` and `zstd` packages for block
+  compression; same storage format within 1.18.x). Replaces Dependabot #76.
 
 ## [1.7.0] – 2026-10-21
 
