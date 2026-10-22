@@ -8,6 +8,13 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Security
+- **CR_MSG: unpacking is limited** (platform#181). An energy data message from MQTT was unpacked completely into
+  memory; a small but highly compressed payload could have filled the memory of the pod. It is now unpacked up to
+  `mqtt.maxDecompressedMB` (env `ENERGYSTORE_MQTT_MAXDECOMPRESSEDMB`, default 512 MB); a larger one is logged as
+  „Error decoding CR_MSG transport payload … decompressed message larger than …“ and dropped like any undecodable
+  message. A message carries the data of one metering point and stays far below the default.
+
 ### Changed
 - Dependencies: `github.com/klauspost/compress` 1.18.0 → 1.18.7 (platform#181; Trivy CVE-2026-63209, HIGH),
   an indirect dependency of `badger/v4` (`badger/v4/table` uses its `s2`/`snappy` and `zstd` packages for block

@@ -15,6 +15,7 @@ import (
 	"at.ourproject/energystore/store/ebow"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/golang/glog"
+	"github.com/spf13/viper"
 )
 
 type TenantEnergyImporter struct {
@@ -199,7 +200,21 @@ func decryptMessage(msg []byte) ([]byte, error) {
 	return decompressed, nil
 }
 
+// maxDecompressedKey limits how far a CR_MSG is unpacked (platform#181), so a small but highly compressed payload
+// cannot fill the memory. A message carries one metering point and stays far below the default.
+// Env: ENERGYSTORE_MQTT_MAXDECOMPRESSEDMB.
+const maxDecompressedKey = "mqtt.maxDecompressedMB"
+
+func maxDecompressedBytes() int64 {
+	viper.SetDefault(maxDecompressedKey, 512)
+	return viper.GetInt64(maxDecompressedKey) << 20
+}
+
 func gunzipData(data []byte) ([]byte, error) {
+	return gunzipLimited(data, maxDecompressedBytes())
+}
+
+func gunzipLimited(data []byte, limit int64) ([]byte, error) {
 	buf := bytes.NewBuffer(data)
 	gz, err := gzip.NewReader(buf)
 	if err != nil {
@@ -208,9 +223,12 @@ func gunzipData(data []byte) ([]byte, error) {
 	defer gz.Close()
 
 	var out bytes.Buffer
-	_, err = io.Copy(&out, gz)
+	n, err := io.Copy(&out, io.LimitReader(gz, limit+1))
 	if err != nil {
 		return nil, err
+	}
+	if n > limit {
+		return nil, fmt.Errorf("decompressed message larger than %d bytes (%s)", limit, maxDecompressedKey)
 	}
 	return out.Bytes(), nil
 }

@@ -464,3 +464,24 @@ func TestEnsureDbTenantTooLong(t *testing.T) {
 		require.Error(t, err)
 	}
 }
+
+func TestGunzipLimited(t *testing.T) {
+	payload := bytes.Repeat([]byte("0"), 1000)
+	compressed, err := gzipData(payload)
+	require.NoError(t, err)
+
+	out, err := gunzipLimited(compressed, 1000)
+	require.NoError(t, err, "exactly at the limit is accepted")
+	assert.Equal(t, payload, out)
+
+	_, err = gunzipLimited(compressed, 999)
+	require.Error(t, err, "one byte over the limit is rejected")
+	assert.Contains(t, err.Error(), maxDecompressedKey)
+}
+
+func TestMaxDecompressedBytes(t *testing.T) {
+	assert.Equal(t, int64(512)<<20, maxDecompressedBytes(), "default 512 MB")
+	viper.Set(maxDecompressedKey, 1)
+	defer viper.Set(maxDecompressedKey, 512)
+	assert.Equal(t, int64(1)<<20, maxDecompressedBytes())
+}
