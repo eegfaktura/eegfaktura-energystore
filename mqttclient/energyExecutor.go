@@ -202,12 +202,36 @@ func decryptMessage(msg []byte) ([]byte, error) {
 
 // maxDecompressedKey limits how far a CR_MSG is unpacked (platform#181), so a small but highly compressed payload
 // cannot fill the memory. A message carries one metering point and stays far below the default.
-// Env: ENERGYSTORE_MQTT_MAXDECOMPRESSEDMB.
-const maxDecompressedKey = "mqtt.maxDecompressedMB"
+// Env: ENERGYSTORE_MQTT_MAXDECOMPRESSEDMB. Read once: messages of several tenants are decoded concurrently and
+// viper is not safe for concurrent writes.
+const (
+	maxDecompressedKey       = "mqtt.maxDecompressedMB"
+	defaultMaxDecompressedMB = 512
+)
+
+var (
+	maxDecompressedOnce sync.Once
+	maxDecompressed     int64
+)
 
 func maxDecompressedBytes() int64 {
-	viper.SetDefault(maxDecompressedKey, 512)
-	return viper.GetInt64(maxDecompressedKey) << 20
+	maxDecompressedOnce.Do(func() { maxDecompressed = readMaxDecompressedBytes(viper.GetViper()) })
+	return maxDecompressed
+}
+
+// readMaxDecompressedBytes falls back to the default for a missing, non-numeric, non-positive or absurdly large
+// value: a limit of 0 would drop every message.
+func readMaxDecompressedBytes(v *viper.Viper) int64 {
+	if !v.IsSet(maxDecompressedKey) {
+		return defaultMaxDecompressedMB << 20
+	}
+	mb := v.GetInt64(maxDecompressedKey)
+	if mb <= 0 || mb > 1<<20 {
+		glog.Warningf("%s=%q is not a positive number of MB, using %d", maxDecompressedKey,
+			v.GetString(maxDecompressedKey), defaultMaxDecompressedMB)
+		return defaultMaxDecompressedMB << 20
+	}
+	return mb << 20
 }
 
 func gunzipData(data []byte) ([]byte, error) {

@@ -13,7 +13,9 @@ this changelog highlights the changes relevant for overview and operations.
   memory; a small but highly compressed payload could have filled the memory of the pod. It is now unpacked up to
   `mqtt.maxDecompressedMB` (env `ENERGYSTORE_MQTT_MAXDECOMPRESSEDMB`, default 512 MB); a larger one is logged as
   „Error decoding CR_MSG transport payload … decompressed message larger than …“ and dropped like any undecodable
-  message. A message carries the data of one metering point and stays far below the default.
+  message: it is acknowledged and not redelivered, its data would have to be requested again. A message carries the
+  data of one metering point and stays far below the default. The value is read once; a missing, non-numeric or
+  non-positive value falls back to 512 MB with a warning (a limit of 0 would drop every message).
 
 ### Changed
 - Dependencies: `github.com/klauspost/compress` 1.18.0 → 1.18.7 (platform#181; Trivy CVE-2026-63209, HIGH),

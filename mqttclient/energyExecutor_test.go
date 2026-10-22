@@ -479,9 +479,33 @@ func TestGunzipLimited(t *testing.T) {
 	assert.Contains(t, err.Error(), maxDecompressedKey)
 }
 
-func TestMaxDecompressedBytes(t *testing.T) {
-	assert.Equal(t, int64(512)<<20, maxDecompressedBytes(), "default 512 MB")
-	viper.Set(maxDecompressedKey, 1)
-	defer viper.Set(maxDecompressedKey, 512)
-	assert.Equal(t, int64(1)<<20, maxDecompressedBytes())
+func TestReadMaxDecompressedBytes(t *testing.T) {
+	def := int64(defaultMaxDecompressedMB) << 20
+	assert.Equal(t, def, readMaxDecompressedBytes(viper.New()), "unset: default")
+	for value, want := range map[any]int64{
+		64: 64 << 20, "64": 64 << 20,
+		0: def, -1: def, "abc": def, "512MB": def, int64(1) << 40: def,
+	} {
+		v := viper.New()
+		v.Set(maxDecompressedKey, value)
+		assert.Equal(t, want, readMaxDecompressedBytes(v), "value %v", value)
+	}
+}
+
+func TestMaxDecompressedBytesConcurrent(t *testing.T) {
+	// Messages of several tenants are decoded concurrently; reading the limit must not write viper state.
+	done := make(chan int64, 16)
+	for i := 0; i < 16; i++ {
+		go func() {
+			var n int64
+			for j := 0; j < 1000; j++ {
+				n = maxDecompressedBytes()
+			}
+			done <- n
+		}()
+	}
+	first := <-done
+	for i := 1; i < 16; i++ {
+		assert.Equal(t, first, <-done)
+	}
 }
