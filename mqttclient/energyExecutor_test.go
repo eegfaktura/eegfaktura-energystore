@@ -444,3 +444,48 @@ func TestEnsureDbTenantTooLong(t *testing.T) {
 		require.Error(t, err)
 	}
 }
+
+func TestGunzipLimited(t *testing.T) {
+	payload := bytes.Repeat([]byte("0"), 1000)
+	compressed, err := gzipData(payload)
+	require.NoError(t, err)
+
+	out, err := gunzipLimited(compressed, 1000)
+	require.NoError(t, err, "exactly at the limit is accepted")
+	assert.Equal(t, payload, out)
+
+	_, err = gunzipLimited(compressed, 999)
+	require.Error(t, err, "one byte over the limit is rejected")
+	assert.Contains(t, err.Error(), maxDecompressedKey)
+}
+
+func TestReadMaxDecompressedBytes(t *testing.T) {
+	def := int64(defaultMaxDecompressedMB) << 20
+	assert.Equal(t, def, readMaxDecompressedBytes(viper.New()), "unset: default")
+	for value, want := range map[any]int64{
+		64: 64 << 20, "64": 64 << 20,
+		0: def, -1: def, "abc": def, "512MB": def, int64(1) << 40: def,
+	} {
+		v := viper.New()
+		v.Set(maxDecompressedKey, value)
+		assert.Equal(t, want, readMaxDecompressedBytes(v), "value %v", value)
+	}
+}
+
+func TestMaxDecompressedBytesConcurrent(t *testing.T) {
+	// Messages of several tenants are decoded concurrently; reading the limit must not write viper state.
+	done := make(chan int64, 16)
+	for i := 0; i < 16; i++ {
+		go func() {
+			var n int64
+			for j := 0; j < 1000; j++ {
+				n = maxDecompressedBytes()
+			}
+			done <- n
+		}()
+	}
+	first := <-done
+	for i := 1; i < 16; i++ {
+		assert.Equal(t, first, <-done)
+	}
+}

@@ -5,8 +5,10 @@ import (
 	"compress/gzip"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,6 +17,7 @@ import (
 	"at.ourproject/energystore/store/ebow"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/golang/glog"
+	"github.com/spf13/viper"
 )
 
 type TenantEnergyImporter struct {
@@ -70,6 +73,18 @@ func (tmw *TenantEnergyImporter) ensureDb(ecId string) (*ebow.BowStorage, error)
 	return st, nil
 }
 
+// Execute decodes, stores and confirms one CR_MSG. The caller (TenantWorker.execute) acks the message
+// after Execute returns, whatever the outcome (#19):
+//   - stored: the cr_msg_history reply goes to the backend ("Energiedaten empfangen").
+//   - store error (open store, meta record, a corrupt row, Badger write; could succeed later): ERROR log,
+//     no reply. The data is not in the store, the gap shows in the check before billing (#148) and the
+//     day is requested again. The message is still acked: mosquitto redelivers an unacked message only
+//     when the session reconnects, and until then it holds one of the client's inflight slots
+//     (max_inflight_messages, 20 by default) for every tenant.
+//   - undecodable payload (Base64, gzip, larger than mqtt.maxDecompressedMB, JSON): permanent, ERROR log,
+//     no reply.
+//
+// Only a message whose Execute did not finish (crash, OOM, shutdown) stays unacked and is redelivered.
 func (tmw *TenantEnergyImporter) Execute(msg mqtt.Message) {
 	data := decodeMessage(msg.Payload())
 	if data == nil {
@@ -81,7 +96,8 @@ func (tmw *TenantEnergyImporter) Execute(msg mqtt.Message) {
 	glog.V(3).Infof("Execute Energy Data Message for Topic (%v)", tmw.Tenant)
 	err := tmw.Import(data)
 	if err != nil {
-		glog.Errorf("%v tenant=%s", err, tmw.Tenant)
+		glog.Errorf("energy data not stored, no cr_msg_history reply: %v tenant=%s ecId=%s meteringPoint=%s conversationId=%s",
+			err, tmw.Tenant, data.EcId, data.Meter.MeteringPoint, data.ConversationId)
 		return
 	}
 	tmw.streamer.SendMessage(tmw.Tenant, data)
@@ -149,12 +165,50 @@ func SplitEnergyByDay(src model.MqttEnergy) []model.MqttEnergy {
 	return result
 }
 
+// maxImportErrors limits how many day block errors an import reports (the rest is counted), so the
+// log line of a long message stays short.
+const maxImportErrors = 5
+
+// importErrors joins the errors of failed day blocks on one line; errors.Is/As see the listed ones,
+// which always include a meta record error (store.ErrMetaRecord), also beyond the cap.
+type importErrors struct {
+	errs    []error
+	omitted int
+}
+
+func (e *importErrors) Error() string {
+	msgs := make([]string, len(e.errs))
+	for i, err := range e.errs {
+		msgs[i] = err.Error()
+	}
+	s := strings.Join(msgs, "; ")
+	if e.omitted > 0 {
+		s += fmt.Sprintf("; … %d more", e.omitted)
+	}
+	return s
+}
+
+func (e *importErrors) Unwrap() []error { return e.errs }
+
+// Import stores every day block of the message. A block that fails does not stop the others; the
+// errors of the failed blocks are returned together (#19), so the message is not confirmed as stored.
+// An error of the store as a whole (the meta record) ends the import at once: every further block
+// would fail the same way.
 func (tmw *TenantEnergyImporter) Import(data *model.MqttEnergyMessage) error {
 	st, err := tmw.ensureDb(data.EcId)
 	if err != nil {
 		return fmt.Errorf("open store ecId=%s: %w", data.EcId, err)
 	}
 
+	errs := &importErrors{}
+	add := func(err error) {
+		// A meta record error ends the import and is always kept, also beyond the cap.
+		if len(errs.errs) < maxImportErrors || errors.Is(err, store.ErrMetaRecord) {
+			errs.errs = append(errs.errs, err)
+		} else {
+			errs.omitted++
+		}
+	}
 	for i := range data.Energy {
 
 		groupedEnergy := SplitEnergyByDay(data.Energy[i])
@@ -163,11 +217,19 @@ func (tmw *TenantEnergyImporter) Import(data *model.MqttEnergyMessage) error {
 		for n := range groupedEnergy {
 			if err := store.StoreEnergyV2(st, data.Meter.MeteringPoint, &groupedEnergy[n]); err != nil {
 				glog.Errorf("Error storing Energy: %v (Metering-Point: %s)", err, data.Meter.MeteringPoint)
-				continue
+				add(fmt.Errorf("store %s - %s: %w",
+					time.UnixMilli(groupedEnergy[n].Start).Format(time.RFC3339),
+					time.UnixMilli(groupedEnergy[n].End).Format(time.RFC3339), err))
+				if errors.Is(err, store.ErrMetaRecord) {
+					return errs
+				}
 			}
 		}
 	}
-	return nil
+	if len(errs.errs) == 0 {
+		return nil
+	}
+	return errs
 }
 
 func decodeMessage(msg []byte) *model.MqttEnergyMessage {
@@ -199,7 +261,45 @@ func decryptMessage(msg []byte) ([]byte, error) {
 	return decompressed, nil
 }
 
+// maxDecompressedKey limits how far a CR_MSG is unpacked (platform#181), so a small but highly compressed payload
+// cannot fill the memory. A message carries one metering point and stays far below the default.
+// Env: ENERGYSTORE_MQTT_MAXDECOMPRESSEDMB. Read once: messages of several tenants are decoded concurrently and
+// viper is not safe for concurrent writes.
+const (
+	maxDecompressedKey       = "mqtt.maxDecompressedMB"
+	defaultMaxDecompressedMB = 512
+)
+
+var (
+	maxDecompressedOnce sync.Once
+	maxDecompressed     int64
+)
+
+func maxDecompressedBytes() int64 {
+	maxDecompressedOnce.Do(func() { maxDecompressed = readMaxDecompressedBytes(viper.GetViper()) })
+	return maxDecompressed
+}
+
+// readMaxDecompressedBytes falls back to the default for a missing, non-numeric, non-positive or absurdly large
+// value: a limit of 0 would drop every message.
+func readMaxDecompressedBytes(v *viper.Viper) int64 {
+	if !v.IsSet(maxDecompressedKey) {
+		return defaultMaxDecompressedMB << 20
+	}
+	mb := v.GetInt64(maxDecompressedKey)
+	if mb <= 0 || mb > 1<<20 {
+		glog.Warningf("%s=%q is not a positive number of MB, using %d", maxDecompressedKey,
+			v.GetString(maxDecompressedKey), defaultMaxDecompressedMB)
+		return defaultMaxDecompressedMB << 20
+	}
+	return mb << 20
+}
+
 func gunzipData(data []byte) ([]byte, error) {
+	return gunzipLimited(data, maxDecompressedBytes())
+}
+
+func gunzipLimited(data []byte, limit int64) ([]byte, error) {
 	buf := bytes.NewBuffer(data)
 	gz, err := gzip.NewReader(buf)
 	if err != nil {
@@ -208,9 +308,12 @@ func gunzipData(data []byte) ([]byte, error) {
 	defer gz.Close()
 
 	var out bytes.Buffer
-	_, err = io.Copy(&out, gz)
+	n, err := io.Copy(&out, io.LimitReader(gz, limit+1))
 	if err != nil {
 		return nil, err
+	}
+	if n > limit {
+		return nil, fmt.Errorf("decompressed message larger than %d bytes (%s)", limit, maxDecompressedKey)
 	}
 	return out.Bytes(), nil
 }

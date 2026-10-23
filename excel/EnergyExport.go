@@ -263,6 +263,9 @@ func (er *EnergyRunner) run(db ebow.IBowStorage, f *excelize.File, start, end ti
 	g1Ok := iterCP.Next(&_lineG1)
 
 	if !g1Ok {
+		if err := iterCP.Err(); err != nil {
+			return nil, err
+		}
 		return nil, model.ErrNoEntries(errors.New("no Rows found"))
 	}
 
@@ -291,6 +294,10 @@ func (er *EnergyRunner) run(db ebow.IBowStorage, f *excelize.File, start, end ti
 			return nil, err
 		}
 		g1Ok = iterCP.Next(&_lineG1)
+	}
+	// #31: a row that cannot be read ends the loop like the end of the data; no truncated export.
+	if err = iterCP.Err(); err != nil {
+		return nil, err
 	}
 
 	if err = er.closeSheets(rCxt); err != nil {

@@ -20,6 +20,7 @@ func Reset(db ebow.IBowStorage, timeRange *DataTimeRange, meter string) error {
 
 	var lines []*model.RawSourceLine
 	iter := db.GetLineRange("CP", timeRange.key, timeRange.until)
+	defer iter.Close()
 	var _line model.RawSourceLine
 	var affected bool
 	for iter.Next(&_line) {
@@ -43,6 +44,9 @@ func Reset(db ebow.IBowStorage, timeRange *DataTimeRange, meter string) error {
 		if affected {
 			lines = append(lines, &line)
 		}
+	}
+	if err := iter.Err(); err != nil {
+		return err
 	}
 	fmt.Printf("Count %d, lines affected \n", len(lines))
 	for i, line := range lines {

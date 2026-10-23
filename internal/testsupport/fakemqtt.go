@@ -7,12 +7,14 @@ import (
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
-// Message is a fake mqtt.Message (Paho's interface) with a topic and a payload.
+// Message is a fake mqtt.Message (Paho's interface) with a topic and a payload. It counts Ack calls;
+// OnAck, if set, runs on every Ack (a test can check what had happened by then).
 type Message struct {
 	TopicName string
 	Body      []byte
+	OnAck     func()
 	mu        sync.Mutex
-	acked     bool
+	acks      int
 }
 
 // CrMsgMessage wraps an encoded CR_MSG as eda-xp publishes it for tenant.
@@ -28,8 +30,19 @@ func (m *Message) MessageID() uint16 { return 1 }
 func (m *Message) Payload() []byte   { return m.Body }
 func (m *Message) Ack() {
 	m.mu.Lock()
+	m.acks++
+	onAck := m.OnAck
+	m.mu.Unlock()
+	if onAck != nil {
+		onAck()
+	}
+}
+
+// Acks returns how often Ack was called.
+func (m *Message) Acks() int {
+	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.acked = true
+	return m.acks
 }
 
 // Published is one Publish call recorded by FakeClient.
@@ -40,7 +53,7 @@ type Published struct {
 
 // FakeClient is a fake mqtt.Client: it records AddRoute (so a test can call the route's handler
 // like the broker would) and Publish (the cr_msg_history replies), and returns completed tokens.
-// No network. Paho's auto-ack happens inside Paho after the handler returns; a fake cannot show it.
+// No network.
 type FakeClient struct {
 	mu        sync.Mutex
 	Routes    map[string]mqtt.MessageHandler

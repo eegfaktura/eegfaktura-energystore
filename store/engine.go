@@ -269,6 +269,9 @@ func (e *Engine) Query(tenant, ecid string, start, end time.Time) error {
 	var _lineG1 model.RawSourceLine
 	g1Ok := iterCP.Next(&_lineG1)
 	if !g1Ok {
+		if err := iterCP.Err(); err != nil {
+			return err
+		}
 		return ebow.ErrNoRows
 	}
 
@@ -314,6 +317,10 @@ func (e *Engine) Query(tenant, ecid string, start, end time.Time) error {
 			return err
 		}
 		g1Ok = iterCP.Next(&_lineG1)
+	}
+	// #31: a row that cannot be read ends the loop like the end of the data; no truncated result.
+	if err := iterCP.Err(); err != nil {
+		return err
 	}
 
 	return e.Consumer.HandleEnd(ctx)

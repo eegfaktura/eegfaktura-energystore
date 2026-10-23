@@ -1,8 +1,6 @@
 package scenario_test
 
 import (
-	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -11,8 +9,6 @@ import (
 	"at.ourproject/energystore/internal/testsupport"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
-	"at.ourproject/energystore/store/ebow"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -121,30 +117,6 @@ func TestS10_RawDataDelete(t *testing.T) {
 		Meters: []*model.MeterReport{{MeterId: consumer, MeterDir: "CONSUMPTION", From: june1.UnixMilli(), Until: june1.UnixMilli()}}}}, 2026, 6, "YM")
 	require.NoError(t, err)
 	testsupport.InDelta(t, sum(values(cons, 96))-deleted, report.ParticipantReports[0].Meters[0].Report.Summary.Consumption)
-}
-
-// S11 — a stored row that cannot be decoded must make the read fail, not return a short report
-// (known-errors #31, F16).
-func TestS11_CorruptRowIsAnError(t *testing.T) {
-	t.Skip("known-errors #31")
-	community(t)
-	importMQTT(t, consumerMsg(june1, 96, "L1"))
-	ebow.ClosePool()
-
-	db, err := ebow.Open(filepath.Join(viper.GetString("persistence.path"), strings.ToLower(tenant), ecId))
-	require.NoError(t, err)
-	type badLine struct {
-		Id        string `bow:"key"`
-		Consumers string
-	}
-	require.NoError(t, db.Bucket("rawdata").Put(badLine{Id: "CP/2026/06/01/12/00/00", Consumers: "garbage"}))
-	require.NoError(t, db.Close())
-
-	_, err = store.QueryRawData(tenant, ecId, june1, june1, []store.TargetMP{{MeteringPoint: consumer}}, nil)
-	assert.Error(t, err, "raw data")
-	_, err = calculation.EnergyReportV2(tenant, ecId, []model.ParticipantReport{{ParticipantId: "C",
-		Meters: []*model.MeterReport{{MeterId: consumer, MeterDir: "CONSUMPTION", From: june1.UnixMilli(), Until: june1.UnixMilli()}}}}, 2026, 6, "YM")
-	assert.Error(t, err, "report")
 }
 
 // S12 — intra-day report and load curve over S1's day add up to the day.

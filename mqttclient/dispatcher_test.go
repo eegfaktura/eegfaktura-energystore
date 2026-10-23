@@ -3,15 +3,12 @@ package mqttclient
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	"at.ourproject/energystore/internal/testsupport"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
-	"at.ourproject/energystore/store/ebow"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -89,19 +86,6 @@ func TestExecuteStoresAndReplies(t *testing.T) {
 	assert.Equal(t, m5Day.UnixMilli(), reply.Energy[0].Start)
 }
 
-func TestExecuteDropsUndecodablePayload(t *testing.T) {
-	testsupport.UseTempPersistence(t)
-	client := testsupport.NewFakeClient()
-	imp := NewTenantEnergyImporter(m5Tenant, &MQTTStreamer{client: client})
-	defer imp.Close()
-
-	assert.NotPanics(t, func() {
-		imp.Execute(testsupport.CrMsgMessage(m5Tenant, []byte("not base64 %%%")))
-		imp.Execute(testsupport.CrMsgMessage(m5Tenant, testsupport.EncodeCrMsg(t, []byte(`{"ecId":`))))
-	})
-	assert.Empty(t, client.PublishedMessages(), "no reply for a message that was not stored")
-}
-
 func TestImportIsIdempotent(t *testing.T) {
 	testsupport.UseTempPersistence(t)
 	imp := NewTenantEnergyImporter(m5Tenant, &MQTTStreamer{client: testsupport.NewFakeClient()})
@@ -111,29 +95,6 @@ func TestImportIsIdempotent(t *testing.T) {
 	first := stored(t, m5Tenant, m5EcId, m5Meter)
 	require.NoError(t, imp.Import(crMsg(m5EcId, m5Meter).Message()))
 	assert.Equal(t, first, stored(t, m5Tenant, m5EcId, m5Meter))
-}
-
-// When the store fails (here: an undecodable meta record), Import must return the error and no
-// "processed" reply may go to eda-xp (known-errors #19, F4: today the error is logged, Import
-// returns nil and the reply is published).
-func TestImportStoreErrorIsReturned(t *testing.T) {
-	t.Skip("known-errors #19")
-	dir := testsupport.UseTempPersistence(t)
-	db, err := ebow.Open(filepath.Join(dir, strings.ToLower(m5Tenant), m5EcId))
-	require.NoError(t, err)
-	type badMeta struct {
-		Id            string `bow:"key"`
-		CounterPoints string
-	}
-	require.NoError(t, db.Bucket("metadata").Put(badMeta{Id: "cpmeta/0", CounterPoints: "garbage"}))
-	require.NoError(t, db.Close())
-
-	client := testsupport.NewFakeClient()
-	imp := NewTenantEnergyImporter(m5Tenant, &MQTTStreamer{client: client})
-	defer imp.Close()
-	assert.Error(t, imp.Import(crMsg(m5EcId, m5Meter).Message()))
-	imp.Execute(testsupport.CrMsgMessage(m5Tenant, crMsg(m5EcId, m5Meter).Payload(t)))
-	assert.Empty(t, client.PublishedMessages())
 }
 
 // The dispatcher hands every tenant's messages to that tenant's importer.

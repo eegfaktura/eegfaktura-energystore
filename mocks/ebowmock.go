@@ -22,8 +22,9 @@ func Copy(source interface{}, destin interface{}) {
 
 type MockBowStorage struct{ mock.Mock }
 type MockBowRange struct {
-	calls   int
-	Entries []*model.RawSourceLine
+	calls    int
+	Entries  []*model.RawSourceLine
+	ErrValue error
 	mock.Mock
 }
 
@@ -75,7 +76,7 @@ func (mr *MockBowRange) Close() {
 	return
 }
 
+// Err returns ErrValue; the callers check it after every loop (#31), so it needs no expectation.
 func (mr *MockBowRange) Err() error {
-	args := mr.Called()
-	return args.Error(0)
+	return mr.ErrValue
 }

@@ -16,6 +16,7 @@ import (
 	jsoncodec "at.ourproject/energystore/store/ebow/codec/json"
 	keycodec "at.ourproject/energystore/store/ebow/codec/key"
 
+	"github.com/golang/glog"
 	"github.com/sony/sonyflake"
 )
 
@@ -23,6 +24,12 @@ var (
 	ErrNotFound = errors.New("Record doesn't exist")
 	ErrReadOnly = errors.New("Put and Delete aren't allowed in read-only mode")
 	ErrNoRows   = errors.New("no Rows found")
+	// ErrUndecodableRow: a stored record could not be decoded (#31). The cause is logged; the
+	// error itself names only the key, so it can go to a client as it is.
+	ErrUndecodableRow = errors.New("stored record cannot be read")
+	// ErrReadRecord: reading a stored record failed for another reason (Badger value read, result
+	// type). The wrapped cause may contain local file paths: clients get only this text.
+	ErrReadRecord = errors.New("stored record cannot be read")
 )
 
 // version increases when backwards-incompatible change is introduced,
@@ -207,7 +214,17 @@ func Open(dir string, options ...Option) (*DB, error) {
 	}
 	db.db = bdb
 
-	err = db.readMeta(nil)
+	// From here on an error must close Badger again, otherwise its directory lock stays until the
+	// process restarts and every later open of this store fails (#31).
+	if err := db.initMeta(); err != nil {
+		_ = bdb.Close()
+		return nil, err
+	}
+	return db, nil
+}
+
+func (db *DB) initMeta() error {
+	err := db.readMeta(nil)
 	if err == badger.ErrKeyNotFound {
 		db.meta = meta{
 			Version: version,
@@ -216,21 +233,20 @@ func Open(dir string, options ...Option) (*DB, error) {
 		if !db.readOnly {
 			err = db.writeMeta(nil)
 			if err != nil {
-				return nil, err
+				return err
 			}
 		}
 	} else if err != nil {
-		return nil, err
+		return err
 	}
 
 	if !db.readOnly {
 		db.bucketId, err = db.db.GetSequence(bucketIdSequence, 1e3)
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
-
-	return db, nil
+	return nil
 }
 
 // Bucket returns the named bucket, creating it if it doesn't exist.
@@ -368,4 +384,46 @@ type bucketMeta struct {
 type meta struct {
 	Version uint32
 	Buckets map[string]bucketMeta
+}
+
+// ClientMessage is the text of err for an API client: a read error (ErrReadRecord) may carry local
+// file paths in its cause, so only the generic text goes out; other errors are returned as they are.
+func ClientMessage(err error) string {
+	if errors.Is(err, ErrReadRecord) {
+		return ErrReadRecord.Error()
+	}
+	return err.Error()
+}
+
+// decodeItem decodes the value of item into result and sets its key field (#31). A value the codec
+// cannot decode is ErrUndecodableRow (its text names only the key). Any other error (Badger value
+// read, result type) is wrapped as ErrReadRecord with the key and its cause. Both are logged with
+// the key.
+func decodeItem(b *Bucket, resultType **structType, item *badger.Item, result interface{}) error {
+	key := item.Key()[bucketIdSize:]
+	undecodable := false
+	err := item.Value(func(v []byte) error {
+		if *resultType == nil {
+			rt, err := newStructType(result, true)
+			if err != nil {
+				return err
+			}
+			*resultType = rt
+		}
+		if err := b.db.codec.Unmarshal(v, result); err != nil {
+			undecodable = true
+			return err
+		}
+		return (*resultType).value(result).setKey(key)
+	})
+	switch {
+	case err == nil:
+		return nil
+	case undecodable:
+		glog.Errorf("ebow: cannot decode record %s: %v", key, err)
+		return fmt.Errorf("%w (key %s)", ErrUndecodableRow, key)
+	default:
+		glog.Errorf("ebow: cannot read record %s: %v", key, err)
+		return fmt.Errorf("%w: read record %s: %w", ErrReadRecord, key, err)
+	}
 }
