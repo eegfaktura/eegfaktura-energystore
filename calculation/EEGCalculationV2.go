@@ -37,6 +37,7 @@ func AllocDynamicV2(consumerMatrix, producerMatrix *model.Matrix) (*model.Matrix
 
 type ValueIterator interface {
 	Next(result interface{}) bool
+	Err() error
 }
 
 type calcResults struct {
@@ -198,7 +199,7 @@ func CalculateParticipantPeriod(db *ebow.BowStorage, allocFunc AllocationHandler
 			return err
 		}
 	}
-	return nil
+	return iter.Err()
 }
 
 func appendValues(line *model.RawSourceLine, lineTime time.Time, metaInfo map[string]*model.CounterPointMeta, meterpoints map[string][]*model.MeterReport, allocFunc AllocationHandlerV2, results *calcResults) error {
@@ -282,6 +283,11 @@ func calcDailyScope(iter ValueIterator, allocFunc AllocationHandlerV2, metaInfo 
 				}
 			}
 		}
+	}
+	// A row that cannot be read ends the loop like the end of the data: report an error instead
+	// of a truncated result (#31).
+	if err := iter.Err(); err != nil {
+		return err
 	}
 	return dayCb(day, daySummary, dayWindowSums)
 }

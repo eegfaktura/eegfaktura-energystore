@@ -100,7 +100,7 @@ func handleData(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	return nil
+	return iter.Err()
 }
 
 func determinePeriod() (string, string, error) {

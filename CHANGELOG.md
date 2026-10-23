@@ -17,6 +17,34 @@ this changelog highlights the changes relevant for overview and operations.
   data of one metering point and stays far below the default. The value is read once; a missing, non-numeric or
   non-positive value falls back to 512 MB with a warning (a limit of 0 would drop every message).
 
+### Fixed
+- **CR_MSG: acknowledged only after it was processed, store errors no longer reported as stored** (#19). An energy
+  data message was acknowledged to the broker as soon as it was handed to the tenant worker; a crash, OOM kill or
+  restart before the store lost it. A store error was logged, but the message was still confirmed to the backend,
+  which wrote „Energiedaten empfangen“ into the process history although the data was not stored.
+  Now the message is acknowledged after it has been processed (stored, failed, undecodable, or a recovered panic);
+  a message still in process when energystore stops is redelivered by mosquitto when energystore reconnects
+  (persistent session) and imported again (the import is idempotent; the backend may get a second process
+  history entry). If any day block of a message cannot be stored, no `cr_msg_history` reply is sent: EEG admins
+  see no „Energiedaten empfangen“ entry for it, the gap shows in the check before billing, and the data has to be
+  requested again. If only some days of a message fail, the reply is dropped for the whole message; the days that
+  were stored are still in the store (a reply with only the stored days would change the entries in the process
+  history, which list the blocks as sent). An error reading or updating the meta record `cpmeta/0` ends the import
+  of the message at once and is always named in the log line; otherwise the other days are still stored. The log line is „energy data not stored, no cr_msg_history reply“
+  with tenant, ecId, metering point, conversation id and at most five day errors („… N more“).
+- **A stored row that cannot be read is an error, no longer the silent end of the data** (#31). Reports, the
+  billing basis, the raw data and load curve queries and the Excel export stopped at such a row and returned a
+  shortened result as success; they now fail with „stored record cannot be read“ (with the key for a record that
+  cannot be decoded; the cause is in the ERROR log „ebow: cannot decode record …“ or „ebow: cannot read record …“,
+  never in the API response, which could otherwise show local file paths), so a shortened result is no longer
+  passed on as complete. The web app does not present these errors well yet (a report may come back empty or show
+  a raw key such as `E_undefined_undefined`); a clear message there is a follow-up (platform#194). On the import path the store of that day is aborted: before, the rows after the unreadable one were rebuilt with the
+  imported metering point only and the values of the other metering points in those quarter hours were lost; now
+  nothing of the day is written and no „Energiedaten empfangen“ reply is sent (see #19). The CLI tools
+  (`estore data`, `estore move`, `estore reset`) stop with the error as well. Iterators release their read
+  transaction also after such an error, and a store whose meta record cannot be read or written no longer keeps
+  Badger's directory lock until the restart. Without unreadable rows nothing changes.
+
 ### Changed
 - Dependencies: `github.com/klauspost/compress` 1.18.0 → 1.18.7 (platform#181; Trivy CVE-2026-63209, HIGH),
   an indirect dependency of `badger/v4` (`badger/v4/table` uses its `s2`/`snappy` and `zstd` packages for block
