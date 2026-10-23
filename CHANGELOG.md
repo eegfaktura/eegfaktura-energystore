@@ -18,6 +18,11 @@ this changelog highlights the changes relevant for overview and operations.
   non-positive value falls back to 512 MB with a warning (a limit of 0 would drop every message).
 
 ### Changed
+- Build: Go 1.26.10 instead of 1.26.9 (platform#181) in `go.mod` (`toolchain go1.26.10`), the Dockerfile
+  (`golang:1.26.10`), the PR checks and the image build. Go 1.26.10 (released 2026-10-19) fixes the last
+  standard-library finding of govulncheck, GO-2026-6809 (`crypto/x509` distrusts compromised intermediate
+  certificates; reached through the outgoing HTTPS calls). A patch release: the `go 1.26.0` directive, GODEBUG defaults
+  and garbage collector are unchanged.
 - Dependencies: `github.com/klauspost/compress` 1.18.0 → 1.18.7 (platform#181; Trivy CVE-2026-63209, HIGH),
   an indirect dependency of `badger/v4` (`badger/v4/table` uses its `s2`/`snappy` and `zstd` packages for block
   compression; same storage format within 1.18.x). Replaces Dependabot #76.
