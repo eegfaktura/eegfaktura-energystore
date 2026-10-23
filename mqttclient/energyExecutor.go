@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -164,15 +165,48 @@ func SplitEnergyByDay(src model.MqttEnergy) []model.MqttEnergy {
 	return result
 }
 
+// maxImportErrors limits how many day block errors an import reports (the rest is counted), so the
+// log line of a long message stays short.
+const maxImportErrors = 5
+
+// importErrors joins the errors of failed day blocks on one line; errors.Is/As see all of them.
+type importErrors struct {
+	errs    []error
+	omitted int
+}
+
+func (e *importErrors) Error() string {
+	msgs := make([]string, len(e.errs))
+	for i, err := range e.errs {
+		msgs[i] = err.Error()
+	}
+	s := strings.Join(msgs, "; ")
+	if e.omitted > 0 {
+		s += fmt.Sprintf("; … %d more", e.omitted)
+	}
+	return s
+}
+
+func (e *importErrors) Unwrap() []error { return e.errs }
+
 // Import stores every day block of the message. A block that fails does not stop the others; the
-// errors of all failed blocks are returned together (#19), so the message is not confirmed as stored.
+// errors of the failed blocks are returned together (#19), so the message is not confirmed as stored.
+// An error of the store as a whole (the meta record) ends the import at once: every further block
+// would fail the same way.
 func (tmw *TenantEnergyImporter) Import(data *model.MqttEnergyMessage) error {
 	st, err := tmw.ensureDb(data.EcId)
 	if err != nil {
 		return fmt.Errorf("open store ecId=%s: %w", data.EcId, err)
 	}
 
-	var errs []error
+	errs := &importErrors{}
+	add := func(err error) {
+		if len(errs.errs) < maxImportErrors {
+			errs.errs = append(errs.errs, err)
+		} else {
+			errs.omitted++
+		}
+	}
 	for i := range data.Energy {
 
 		groupedEnergy := SplitEnergyByDay(data.Energy[i])
@@ -181,13 +215,19 @@ func (tmw *TenantEnergyImporter) Import(data *model.MqttEnergyMessage) error {
 		for n := range groupedEnergy {
 			if err := store.StoreEnergyV2(st, data.Meter.MeteringPoint, &groupedEnergy[n]); err != nil {
 				glog.Errorf("Error storing Energy: %v (Metering-Point: %s)", err, data.Meter.MeteringPoint)
-				errs = append(errs, fmt.Errorf("store %s - %s: %w",
+				add(fmt.Errorf("store %s - %s: %w",
 					time.UnixMilli(groupedEnergy[n].Start).Format(time.RFC3339),
 					time.UnixMilli(groupedEnergy[n].End).Format(time.RFC3339), err))
+				if errors.Is(err, store.ErrMetaRecord) {
+					return errs
+				}
 			}
 		}
 	}
-	return errors.Join(errs...)
+	if len(errs.errs) == 0 {
+		return nil
+	}
+	return errs
 }
 
 func decodeMessage(msg []byte) *model.MqttEnergyMessage {

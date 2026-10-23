@@ -1,6 +1,7 @@
 package store
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -10,6 +11,10 @@ import (
 	"at.ourproject/energystore/utils"
 	"github.com/golang/glog"
 )
+
+// ErrMetaRecord: the meta record cpmeta/0 of the store could not be read or updated. It affects every
+// store into this community, so an importer stops at it instead of trying the next day (#19).
+var ErrMetaRecord = errors.New("meta record cpmeta/0")
 
 func StoreEnergyV2(db *ebow.BowStorage, meteringPoint string, data *model.MqttEnergy) error {
 
@@ -34,7 +39,7 @@ func StoreEnergyV2(db *ebow.BowStorage, meteringPoint string, data *model.MqttEn
 
 	//// GetRawDataStructur from Period xxxx -> yyyy
 	if err := determineMeta(); err != nil {
-		return err
+		return fmt.Errorf("%w: %w", ErrMetaRecord, err)
 	}
 
 	var resources *map[string]*model.RawSourceLine = &map[string]*model.RawSourceLine{}
