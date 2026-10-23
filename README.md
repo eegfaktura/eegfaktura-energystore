@@ -52,6 +52,30 @@ Key settings: `persistence.path` (BadgerDB directory), `mqtt.host` / `mqtt.id` /
 **Dependencies:** an MQTT broker (mosquitto) for data ingestion, Keycloak for JWT
 validation, and on-disk BadgerDB storage.
 
+### Operations: CR_MSG delivery
+
+energystore subscribes to the energy data messages (CR_MSG) with QoS 1 in a persistent session (fixed client id
+`mqtt.id`, clean session off) and acknowledges a message only after it has been processed. A message that was
+still in process when energystore stopped is delivered again by mosquitto when energystore reconnects. This needs:
+
+- mosquitto with `persistence true`, otherwise the session and its queued messages are lost when the **broker**
+  restarts;
+- a unique `mqtt.id` per running energystore; two instances with the same id disconnect each other;
+- mosquitto sends at most `max_inflight_messages` (default 20) unacknowledged messages at a time, so a large burst
+  is delivered more slowly instead of being buffered in energystore.
+
+A message that is stored, cannot be stored, cannot be decoded or causes a recovered panic is acknowledged and not
+delivered again. Only stored data gets the `cr_msg_history` reply („Energiedaten empfangen“ in the backend). Log
+searches (e.g. Dynatrace): `energy data not stored`, `cannot decode record`, `Error decoding`,
+`panic while executing message`, and OOMKilled restarts of the pod.
+
+**Crash loop right after start:** a message that kills the process outright (e.g. out of memory) is delivered again
+after every restart. To get out of it, stop energystore (scale to 0), then discard its session at the broker by
+connecting once with the **same client id** and a clean session, without subscribing, e.g.
+`mosquitto_pub -h <broker> -p 1883 -i <mqtt.id> -t energystore/session-reset -n` (mosquitto_pub uses a clean
+session by default). This drops **every** message queued for energystore, not only the faulty one: note the time
+and request the energy data of the affected period again (check before billing). Then start energystore again.
+
 ### Running the Service
 
 You can run the server using the provided `Makefile`:

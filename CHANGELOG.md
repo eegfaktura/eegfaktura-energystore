@@ -35,7 +35,9 @@ this changelog highlights the changes relevant for overview and operations.
 - **A stored row that cannot be read is an error, no longer the silent end of the data** (#31). Reports, the
   billing basis, the raw data and load curve queries and the Excel export stopped at such a row and returned a
   shortened result as success; they now fail with „stored record cannot be read (key CP/…)“ (the cause is in the
-  ERROR log „ebow: cannot decode record …“), so EEG admins get an error message instead of too-low values. On the
+  ERROR log „ebow: cannot decode record …“), so a shortened result is no longer passed on as complete. The web app
+  does not present these errors well yet (a report may come back empty or show a raw key such as
+  `E_undefined_undefined`); a clear message there is a follow-up (platform#194). On the
   import path the store of that day is aborted: before, the rows after the unreadable one were rebuilt with the
   imported metering point only and the values of the other metering points in those quarter hours were lost; now
   nothing of the day is written and no „Energiedaten empfangen“ reply is sent (see #19). The CLI tools
