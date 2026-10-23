@@ -17,6 +17,19 @@ this changelog highlights the changes relevant for overview and operations.
   data of one metering point and stays far below the default. The value is read once; a missing, non-numeric or
   non-positive value falls back to 512 MB with a warning (a limit of 0 would drop every message).
 
+### Fixed
+- **CR_MSG: acknowledged only after it was processed, store errors no longer reported as stored** (#19). An energy
+  data message was acknowledged to the broker as soon as it was handed to the tenant worker; a crash, OOM kill or
+  restart before the store lost it. A store error was logged, but the message was still confirmed to the backend,
+  which wrote „Energiedaten empfangen“ into the process history although the data was not stored.
+  Now the message is acknowledged after it has been processed (stored, failed, undecodable, or a recovered panic);
+  a message still in process when energystore stops is redelivered by mosquitto when energystore reconnects
+  (persistent session) and imported again (the import is idempotent; the backend may get a second process
+  history entry). If any day block of a message cannot be stored, no `cr_msg_history` reply is sent: EEG admins
+  see no „Energiedaten empfangen“ entry for it, the gap shows in the check before billing, and the data has to be
+  requested again. The log line is „energy data not stored, no cr_msg_history reply“ with tenant, ecId, metering
+  point and conversation id.
+
 ### Changed
 - Dependencies: `github.com/klauspost/compress` 1.18.0 → 1.18.7 (platform#181; Trivy CVE-2026-63209, HIGH),
   an indirect dependency of `badger/v4` (`badger/v4/table` uses its `s2`/`snappy` and `zstd` packages for block
