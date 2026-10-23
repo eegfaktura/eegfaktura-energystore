@@ -81,3 +81,36 @@ func TestOpenReleasesBadgerOnMetaError(t *testing.T) {
 	require.NoError(t, err, "directory lock released after the failed Open")
 	require.NoError(t, again.Close())
 }
+
+// Iterators of a failed bucket carry the bucket's error and have no Badger iterator or
+// transaction: Close must not panic (review of #85).
+func TestErrorIteratorsCloseWithoutPanic(t *testing.T) {
+	bucketErr := errors.New("bucket failed")
+	b := &Bucket{err: bucketErr}
+
+	r := b.Range("a/", "a/9")
+	assert.NotPanics(t, r.Close)
+	assert.Same(t, bucketErr, r.Err())
+
+	p := b.Prefix("a/")
+	assert.NotPanics(t, p.Close)
+	assert.Same(t, bucketErr, p.Err())
+
+	it := b.Iter()
+	assert.NotPanics(t, it.Close)
+	assert.Same(t, bucketErr, it.Err())
+}
+
+// Only a value the codec cannot decode is ErrUndecodableRow; an error of the result type is
+// passed through unchanged.
+func TestNonCodecErrorIsNotUndecodableRow(t *testing.T) {
+	db := openDecodeDB(t)
+	defer func() { require.NoError(t, db.Close()) }()
+	r := db.Bucket("rows").Range("a/", "a/9")
+	defer r.Close()
+
+	var notAStruct int
+	assert.False(t, r.Next(&notAStruct))
+	require.Error(t, r.Err())
+	assert.False(t, errors.Is(r.Err(), ErrUndecodableRow), "got %v", r.Err())
+}

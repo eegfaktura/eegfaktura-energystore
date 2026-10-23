@@ -2,10 +2,8 @@ package ebow
 
 import (
 	"bytes"
-	"fmt"
 
 	"github.com/dgraph-io/badger/v4"
-	"github.com/golang/glog"
 )
 
 type IRange interface {
@@ -68,28 +66,9 @@ func (ra *Range) Next(result interface{}) bool {
 		return false
 	}
 
-	err := item.Value(func(v []byte) error {
-		var err error
-		if ra.resultType == nil {
-			ra.resultType, err = newStructType(result, true)
-			if err != nil {
-				return err
-			}
-		}
-		err = ra.bucket.db.codec.Unmarshal(v, result)
-		if err != nil {
-			return err
-		}
-		err = ra.resultType.value(result).setKey(ik[bucketIdSize:])
-		if err != nil {
-			return err
-		}
-		return nil
-	})
-	if err != nil {
-		// #31: the caller sees false like at the end of the data and must check Err().
-		glog.Errorf("ebow: cannot decode record %s: %v", ik[bucketIdSize:], err)
-		ra.err = fmt.Errorf("%w (key %s)", ErrUndecodableRow, ik[bucketIdSize:])
+	// #31: on an error the caller sees false like at the end of the data and must check Err().
+	if err := decodeItem(ra.bucket, &ra.resultType, item, result); err != nil {
+		ra.err = err
 		return false
 	}
 
@@ -108,7 +87,8 @@ func (ra *Range) Err() error {
 // result of Err.
 func (ra *Range) Close() {
 	// Release iterator and transaction also after a decode error (#31); only a second Close is a no-op.
-	if ra.closed {
+	// An iterator built with an error (Bucket.Iter/Prefix/Range on a failed bucket) has neither.
+	if ra.closed || ra.it == nil || ra.txn == nil {
 		return
 	}
 	ra.closed = true

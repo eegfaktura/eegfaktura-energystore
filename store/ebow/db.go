@@ -16,6 +16,7 @@ import (
 	jsoncodec "at.ourproject/energystore/store/ebow/codec/json"
 	keycodec "at.ourproject/energystore/store/ebow/codec/key"
 
+	"github.com/golang/glog"
 	"github.com/sony/sonyflake"
 )
 
@@ -380,4 +381,25 @@ type bucketMeta struct {
 type meta struct {
 	Version uint32
 	Buckets map[string]bucketMeta
+}
+
+// decodeItem decodes the value of item into result and sets its key field. Only a value the codec
+// cannot decode is reported as ErrUndecodableRow (#31, cause logged with the key); errors of Badger
+// (reading the value) and of the result type are returned unchanged.
+func decodeItem(b *Bucket, resultType **structType, item *badger.Item, result interface{}) error {
+	key := item.Key()[bucketIdSize:]
+	return item.Value(func(v []byte) error {
+		if *resultType == nil {
+			rt, err := newStructType(result, true)
+			if err != nil {
+				return err
+			}
+			*resultType = rt
+		}
+		if err := b.db.codec.Unmarshal(v, result); err != nil {
+			glog.Errorf("ebow: cannot decode record %s: %v", key, err)
+			return fmt.Errorf("%w (key %s)", ErrUndecodableRow, key)
+		}
+		return (*resultType).value(result).setKey(key)
+	})
 }
