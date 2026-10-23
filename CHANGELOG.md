@@ -17,7 +17,10 @@ this changelog highlights the changes relevant for overview and operations.
   - API verifier (`ProtectApi`): it only checks the ID token the service fetches itself via password grant, so a
     client cannot choose its algorithm. Effect: if the ID-token signature algorithm of the api client in Keycloak
     were ever set to something other than RS256, every `ProtectApi` call would fail with 403.
-  - The Keycloak realms sign with one RS256 key, so logins are not affected.
+  - Logins are not affected. As of 2026-10-23 the public JWKS of Prod/Pilot (login.eegfaktura.at) and Dev hold
+    exactly one signing key (RS256), and the realm sets no different ID-token algorithm. If a realm ever got an
+    active non-RS256 signing key (e.g. on key rotation), logins would fail with 401/403.
+  - Tests also cover HS256 signed with the realm's public key (PEM and DER) and `alg=none`: rejected.
   - The `middleware` package now has tests (fake OIDC provider, no live Keycloak) and runs in the unit-test list
     of `pr-checks.yml` and `docker-image.yml`.
 - **CR_MSG: unpacking is limited** (platform#181). An energy data message from MQTT was unpacked completely into

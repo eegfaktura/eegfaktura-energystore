@@ -17,12 +17,15 @@ import (
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/sha512"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -114,13 +117,9 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// tvSign builds a compact JWS with alg; the kid follows the key type.
-func tvSign(t *testing.T, alg string, key crypto.Signer) string {
+// tvInput builds the signing input (header.payload) of a valid token.
+func tvInput(t *testing.T, alg, kid string) string {
 	t.Helper()
-	kid := tvKid
-	if _, ok := key.(*ecdsa.PrivateKey); ok {
-		kid = tvKidEC
-	}
 	h, err := json.Marshal(map[string]string{"alg": alg, "typ": "JWT", "kid": kid})
 	require.NoError(t, err)
 	now := time.Now()
@@ -130,9 +129,20 @@ func tvSign(t *testing.T, alg string, key crypto.Signer) string {
 		"tenant": []string{"RC100001"},
 	})
 	require.NoError(t, err)
-	input := b64(h) + "." + b64(p)
+	return b64(h) + "." + b64(p)
+}
+
+// tvSign builds a compact JWS with alg; the kid follows the key type.
+func tvSign(t *testing.T, alg string, key crypto.Signer) string {
+	t.Helper()
+	kid := tvKid
+	if _, ok := key.(*ecdsa.PrivateKey); ok {
+		kid = tvKidEC
+	}
+	input := tvInput(t, alg, kid)
 	d256 := sha256.Sum256([]byte(input))
 	var sig []byte
+	var err error
 	switch alg {
 	case "RS256":
 		sig, err = key.Sign(rand.Reader, d256[:], crypto.SHA256)
@@ -157,10 +167,22 @@ func tvSign(t *testing.T, alg string, key crypto.Signer) string {
 	return input + "." + b64(sig)
 }
 
+// tvSignHS256 signs with HS256 and the given secret (key confusion: the
+// realm's public RSA key as HMAC secret).
+func tvSignHS256(t *testing.T, secret []byte) string {
+	t.Helper()
+	input := tvInput(t, "HS256", tvKid)
+	m := hmac.New(sha256.New, secret)
+	m.Write([]byte(input))
+	return input + "." + b64(m.Sum(nil))
+}
+
 // Only RS256 is accepted (CLAUDE.md, Authentication): both go-oidc verifiers
 // are restricted via SupportedSigningAlgs, although the discovery advertises
 // more algorithms. The error must be go-jose's algorithm check, so a broken
-// fixture cannot make a case pass.
+// fixture cannot make a case pass. Trade-off: the match is on go-jose's error
+// text, so a go-jose upgrade that rewords it fails this test (fix the
+// constant then); it does not let a token through.
 func TestTokenValidation_OnlyRS256Accepted(t *testing.T) {
 	require.Nil(t, VerifyTokenClaims, "test hook must be unset, the real verifier is under test")
 	const algErr = "unexpected signature algorithm"
@@ -189,6 +211,29 @@ func TestTokenValidation_OnlyRS256Accepted(t *testing.T) {
 				require.ErrorContains(t, err, algErr)
 				require.ErrorContains(t, errAPI, algErr)
 			}
+		})
+	}
+}
+
+// HS256 with the realm's public key as HMAC secret (key confusion) and
+// alg=none are rejected by both verifiers. Only an error is asserted here:
+// go-oidc/go-jose reject these at different stages (unsupported algorithm,
+// no matching key, malformed JWS) and the message differs between versions.
+func TestTokenValidation_HS256AndNoneRejected(t *testing.T) {
+	der, err := x509.MarshalPKIXPublicKey(&tvKey.PublicKey)
+	require.NoError(t, err)
+	pemKey := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der})
+	tokens := map[string]string{
+		"HS256 public key PEM": tvSignHS256(t, pemKey),
+		"HS256 public key DER": tvSignHS256(t, der),
+		"none":                 tvInput(t, "none", tvKid) + ".",
+	}
+	for name, token := range tokens {
+		t.Run(name, func(t *testing.T) {
+			_, err := verifyAndExtractClaims(context.Background(), token)
+			require.Error(t, err)
+			_, err = kcClientAPI.VerifyToken(token)
+			require.Error(t, err)
 		})
 	}
 }
