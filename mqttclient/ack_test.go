@@ -28,7 +28,7 @@ const (
 	ackRoute  = "eda/response/+/protocol/cr_msg"
 )
 
-var ackDay = time.Date(2026, 6, 1, 0, 0, 0, 0, time.Local)
+var ackDay = time.Date(2026, 6, 1, 0, 0, 0, 0, testsupport.Vienna)
 
 // ackCrMsg is one day of consumption for meter in ecId, value 0.01·(slot+1).
 func ackCrMsg(ecId, meter string) *testsupport.CrMsgBuilder {
@@ -181,6 +181,14 @@ func TestDispatcherAcksOnlyAfterExecute(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	d := NewTopicDispatcher(ctx, ackRoute, &MQTTStreamer{client: client})
+	// Also on a failed wait: release the worker and stop the dispatcher before the cleanup of
+	// UseTempPersistence replaces the store pool (cleanups run last registered first).
+	var releaseOnce sync.Once
+	releaseWorker := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(func() {
+		releaseWorker()
+		d.Close()
+	})
 
 	msg := testsupport.CrMsgMessage(ackTenant, ackCrMsg(ackEcId, ackMeter).Payload(t))
 	client.Deliver(ackRoute, msg)
@@ -191,7 +199,7 @@ func TestDispatcherAcksOnlyAfterExecute(t *testing.T) {
 		t.Fatal("worker did not reach the reply")
 	}
 	assert.Equal(t, 0, msg.Acks(), "not acked while the message is processed")
-	close(release)
+	releaseWorker()
 
 	select {
 	case <-client.Notify:
@@ -199,5 +207,4 @@ func TestDispatcherAcksOnlyAfterExecute(t *testing.T) {
 		t.Fatal("no reply")
 	}
 	require.Eventually(t, func() bool { return msg.Acks() == 1 }, 10*time.Second, 10*time.Millisecond)
-	d.Close()
 }
