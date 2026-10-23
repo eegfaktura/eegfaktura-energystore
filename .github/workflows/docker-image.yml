@@ -98,7 +98,7 @@ jobs:
       # als ein Paket. Die Liste ist dieselbe wie im Job "Unit tests" der
       # pr-checks.yml (dort laeuft zusaetzlich die ganze Suite mit -race).
       - name: Run Go tests
-        run: go test -count=1 -timeout 400s ./utils/ ./store/ ./store/ebow/ ./store/function/ ./excel/ ./tenantctx/ ./graph/ ./calculation/ ./model/ ./mqttclient/
+        run: go test -count=1 -timeout 400s ./utils/ ./store/ ./store/ebow/ ./store/function/ ./excel/ ./tenantctx/ ./graph/ ./calculation/ ./model/ ./mqttclient/ ./middleware/
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta

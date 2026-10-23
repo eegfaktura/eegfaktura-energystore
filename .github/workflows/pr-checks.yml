@@ -84,7 +84,7 @@ jobs:
           set -o pipefail
           mkdir -p "$RUNNER_TEMP/results"
           go test -json -count=1 -timeout 400s ./utils/ ./store/ ./store/ebow/ ./store/function/ ./excel/ ./tenantctx/ \
-            ./graph/ ./calculation/ ./model/ ./mqttclient/ \
+            ./graph/ ./calculation/ ./model/ ./mqttclient/ ./middleware/ \
             | tee "$RUNNER_TEMP/results/unit.json" | jq -Rrj --unbuffered "$GO_TEST_OUTPUT"
 
       - name: Keep the test results
