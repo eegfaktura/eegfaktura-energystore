@@ -2,9 +2,10 @@ package model
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/assert"
-	"os"
 	"testing"
+
+	"at.ourproject/energystore/internal/testsupport/tz"
+	"github.com/stretchr/testify/assert"
 )
 
 /*
@@ -15,9 +16,7 @@ import (
 		ZP2|0.1|0.3|0.4|
 		ZP3|0.5|0.2|0.3|
 */
-func TestMain(m *testing.M) {
-	os.Exit(m.Run())
-}
+func TestMain(m *testing.M) { tz.Main(m) }
 
 func TestMakeQuotaMatrix(t *testing.T) {
 	cpNames := []string{"ZP1", "ZP2", "ZP3"}

@@ -1,5 +1,6 @@
-// Package scenario holds storage, import and report scenarios across packages (ported in part from
-// the branch improve-test-environment, docs/improve-test-environment/m03-storage-scenarios.md). It
-// has test files only: data is imported through the production MQTT importer into a store under
-// t.TempDir() and read back the way the callers read it.
+// Package scenario holds the storage, import and report scenarios S1 – S12 of the test concept
+// (milestone M3) and S13, the eegfaktura-v3 world (CR_MSG payloads recorded in testdata/v3world). It has test files only: data is
+// imported through the production paths (the MQTT importer, the Excel importer) into a store under
+// t.TempDir() and read back the way the callers read it. Expected values come from oracle tables
+// computed in the test files, never from the code's own output.
 package scenario

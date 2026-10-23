@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"at.ourproject/energystore/calculation"
 	"at.ourproject/energystore/internal/testsupport"
@@ -18,41 +17,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// #31: a stored row that cannot be decoded. The day is in time.Local, the zone the importer
-// writes the row ids in.
+// #31: a stored row that cannot be decoded. tenant, ecId, consumer, june1, community, values and
+// storedLine come from helpers_test.go and s07_s12_test.go.
 
 const (
-	tenant    = "TE100001"
-	ecId      = "RC100001"
-	consumer  = "AT0030000000000000000000000000001"
 	consumer2 = "AT0030000000000000000000000000002"
 	badRowId  = "CP/2026/06/01/12/00/00"
 )
 
-var june1 = time.Date(2026, 6, 1, 0, 0, 0, 0, time.Local)
-
-func community(t *testing.T) { t.Helper(); testsupport.UseTempPersistence(t) }
-
-func values(n int, f func(i int) float64) []float64 {
-	v := make([]float64, n)
-	for i := range v {
-		v[i] = f(i)
-	}
-	return v
-}
-
-// consumerMsg is one day of a consumer: G.01, G.02 and G.03, scaled by factor.
-func consumerMsg(meter string, factor float64) *model.MqttEnergyMessage {
+// scaledConsumerMsg is one day of meter: G.01, G.02 and G.03, scaled by factor.
+func scaledConsumerMsg(meter string, factor float64) *model.MqttEnergyMessage {
 	return testsupport.CrMsg(ecId, meter).Direction(model.CONSUMER_DIRECTION).Energy(june1, "L1",
 		map[model.MeterCodeValue][]float64{
-			model.CODE_CON:   values(96, func(i int) float64 { return factor * float64(i+1) / 100 }),
-			model.CODE_SHARE: values(96, func(i int) float64 { return factor * float64(i+1) / 400 }),
-			model.CODE_COVER: values(96, func(i int) float64 { return factor * float64(i+1) / 800 }),
+			model.CODE_CON:   values(func(i int) float64 { return factor * float64(i+1) / 100 }, 96),
+			model.CODE_SHARE: values(func(i int) float64 { return factor * float64(i+1) / 400 }, 96),
+			model.CODE_COVER: values(func(i int) float64 { return factor * float64(i+1) / 800 }, 96),
 		}).Message()
 }
 
-// importMQTT imports CR_MSGs through the production importer and returns its first error.
-func importMQTT(t *testing.T, msgs ...*model.MqttEnergyMessage) error {
+// importMQTTErr imports CR_MSGs through the production importer and returns its first error.
+func importMQTTErr(t *testing.T, msgs ...*model.MqttEnergyMessage) error {
 	t.Helper()
 	imp := mqttclient.NewTenantEnergyImporter(tenant, &mqttclient.MQTTStreamer{})
 	defer imp.Close()
@@ -77,21 +61,11 @@ func corruptRow(t *testing.T, id string) {
 	require.NoError(t, db.Close())
 }
 
-func storedLine(t *testing.T, id string) model.RawSourceLine {
-	t.Helper()
-	db, err := ebow.OpenStorage(tenant, ecId)
-	require.NoError(t, err)
-	defer db.Close()
-	l := model.RawSourceLine{Id: id}
-	require.NoError(t, db.GetLine(&l))
-	return l
-}
-
 // S11 (ported from improve-test-environment, known-errors #31): with one undecodable row the raw
 // read and the report return an error instead of a truncated result.
 func TestS11_CorruptRowIsAnError(t *testing.T) {
 	community(t)
-	require.NoError(t, importMQTT(t, consumerMsg(consumer, 1)))
+	require.NoError(t, importMQTTErr(t, scaledConsumerMsg(consumer, 1)))
 	corruptRow(t, badRowId)
 
 	_, err := store.QueryRawData(tenant, ecId, june1, june1, []store.TargetMP{{MeteringPoint: consumer}}, nil)
@@ -107,14 +81,14 @@ func TestS11_CorruptRowIsAnError(t *testing.T) {
 // values of the other metering points in those slots.
 func TestImportOverCorruptRowAbortsWithoutOverwriting(t *testing.T) {
 	community(t)
-	require.NoError(t, importMQTT(t, consumerMsg(consumer, 1), consumerMsg(consumer2, 1)))
+	require.NoError(t, importMQTTErr(t, scaledConsumerMsg(consumer, 1), scaledConsumerMsg(consumer2, 1)))
 	before := storedLine(t, "CP/2026/06/01/12/15/00")
 	beforeMorning := storedLine(t, "CP/2026/06/01/06/00/00")
 	require.GreaterOrEqual(t, len(before.Consumers), 6, "both metering points in the row")
 
 	corruptRow(t, badRowId)
 
-	err := importMQTT(t, consumerMsg(consumer, 2))
+	err := importMQTTErr(t, scaledConsumerMsg(consumer, 2))
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ebow.ErrUndecodableRow), "got %v", err)
 
