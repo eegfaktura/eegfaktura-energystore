@@ -2,6 +2,7 @@ package ebow
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/dgraph-io/badger/v4"
@@ -113,4 +114,16 @@ func TestNonCodecErrorIsNotUndecodableRow(t *testing.T) {
 	assert.False(t, r.Next(&notAStruct))
 	require.Error(t, r.Err())
 	assert.False(t, errors.Is(r.Err(), ErrUndecodableRow), "got %v", r.Err())
+	assert.True(t, errors.Is(r.Err(), ErrReadRecord), "got %v", r.Err())
+	assert.Contains(t, r.Err().Error(), "read record a/1")
+}
+
+// A read error may carry local file paths: API clients get only the generic text (#31).
+func TestClientMessageHidesReadCause(t *testing.T) {
+	err := fmt.Errorf("%w: read record CP/2026/06/01/12/00/00: %w", ErrReadRecord,
+		errors.New("open /opt/energy/rawdata/te100001/RC100001/000001.vlog: no such file"))
+	assert.Equal(t, "stored record cannot be read", ClientMessage(err))
+
+	undecodable := fmt.Errorf("%w (key CP/x)", ErrUndecodableRow)
+	assert.Equal(t, undecodable.Error(), ClientMessage(undecodable))
 }

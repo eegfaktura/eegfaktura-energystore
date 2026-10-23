@@ -27,6 +27,9 @@ var (
 	// ErrUndecodableRow: a stored record could not be decoded (#31). The cause is logged; the
 	// error itself names only the key, so it can go to a client as it is.
 	ErrUndecodableRow = errors.New("stored record cannot be read")
+	// ErrReadRecord: reading a stored record failed for another reason (Badger value read, result
+	// type). The wrapped cause may contain local file paths: clients get only this text.
+	ErrReadRecord = errors.New("stored record cannot be read")
 )
 
 // version increases when backwards-incompatible change is introduced,
@@ -383,12 +386,23 @@ type meta struct {
 	Buckets map[string]bucketMeta
 }
 
-// decodeItem decodes the value of item into result and sets its key field. Only a value the codec
-// cannot decode is reported as ErrUndecodableRow (#31, cause logged with the key); errors of Badger
-// (reading the value) and of the result type are returned unchanged.
+// ClientMessage is the text of err for an API client: a read error (ErrReadRecord) may carry local
+// file paths in its cause, so only the generic text goes out; other errors are returned as they are.
+func ClientMessage(err error) string {
+	if errors.Is(err, ErrReadRecord) {
+		return ErrReadRecord.Error()
+	}
+	return err.Error()
+}
+
+// decodeItem decodes the value of item into result and sets its key field (#31). A value the codec
+// cannot decode is ErrUndecodableRow (its text names only the key). Any other error (Badger value
+// read, result type) is wrapped as ErrReadRecord with the key and its cause. Both are logged with
+// the key.
 func decodeItem(b *Bucket, resultType **structType, item *badger.Item, result interface{}) error {
 	key := item.Key()[bucketIdSize:]
-	return item.Value(func(v []byte) error {
+	undecodable := false
+	err := item.Value(func(v []byte) error {
 		if *resultType == nil {
 			rt, err := newStructType(result, true)
 			if err != nil {
@@ -397,9 +411,19 @@ func decodeItem(b *Bucket, resultType **structType, item *badger.Item, result in
 			*resultType = rt
 		}
 		if err := b.db.codec.Unmarshal(v, result); err != nil {
-			glog.Errorf("ebow: cannot decode record %s: %v", key, err)
-			return fmt.Errorf("%w (key %s)", ErrUndecodableRow, key)
+			undecodable = true
+			return err
 		}
 		return (*resultType).value(result).setKey(key)
 	})
+	switch {
+	case err == nil:
+		return nil
+	case undecodable:
+		glog.Errorf("ebow: cannot decode record %s: %v", key, err)
+		return fmt.Errorf("%w (key %s)", ErrUndecodableRow, key)
+	default:
+		glog.Errorf("ebow: cannot read record %s: %v", key, err)
+		return fmt.Errorf("%w: read record %s: %w", ErrReadRecord, key, err)
+	}
 }

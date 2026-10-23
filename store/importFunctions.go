@@ -102,9 +102,11 @@ func StoreEnergyV2(db *ebow.BowStorage, meteringPoint string, data *model.MqttEn
 	}
 
 	if c := updateMetaCP(metaCP, begin, end); c {
-		err = updateMeta(db, metaCP, meteringPoint, begin, end)
+		if err = updateMeta(db, metaCP, meteringPoint, begin, end); err != nil {
+			return fmt.Errorf("%w: %w", ErrMetaRecord, err)
+		}
 	}
-	return err
+	return nil
 }
 
 func organizeMetaCodeImport(data []model.MqttEnergyData) []*model.MeterCodeMeta {

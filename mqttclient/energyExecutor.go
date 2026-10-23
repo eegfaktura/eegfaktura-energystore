@@ -169,7 +169,8 @@ func SplitEnergyByDay(src model.MqttEnergy) []model.MqttEnergy {
 // log line of a long message stays short.
 const maxImportErrors = 5
 
-// importErrors joins the errors of failed day blocks on one line; errors.Is/As see all of them.
+// importErrors joins the errors of failed day blocks on one line; errors.Is/As see the listed ones,
+// which always include a meta record error (store.ErrMetaRecord), also beyond the cap.
 type importErrors struct {
 	errs    []error
 	omitted int
@@ -201,7 +202,8 @@ func (tmw *TenantEnergyImporter) Import(data *model.MqttEnergyMessage) error {
 
 	errs := &importErrors{}
 	add := func(err error) {
-		if len(errs.errs) < maxImportErrors {
+		// A meta record error ends the import and is always kept, also beyond the cap.
+		if len(errs.errs) < maxImportErrors || errors.Is(err, store.ErrMetaRecord) {
 			errs.errs = append(errs.errs, err)
 		} else {
 			errs.omitted++

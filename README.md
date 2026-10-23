@@ -60,6 +60,9 @@ still in process when energystore stopped is delivered again by mosquitto when e
 
 - mosquitto with `persistence true`, otherwise the session and its queued messages are lost when the **broker**
   restarts;
+- mosquitto `max_queued_messages` (default 1000) high enough, or `0` for no limit: while energystore is offline
+  or slow, mosquitto queues QoS 1 messages for its session only up to this number and **drops further ones
+  silently** (no log on the energystore side; the gap shows in the check before billing);
 - a unique `mqtt.id` per running energystore; two instances with the same id disconnect each other;
 - mosquitto sends at most `max_inflight_messages` (default 20) unacknowledged messages at a time, so a large burst
   is delivered more slowly instead of being buffered in energystore.
@@ -72,9 +75,12 @@ searches (e.g. Dynatrace): `energy data not stored`, `cannot decode record`, `Er
 **Crash loop right after start:** a message that kills the process outright (e.g. out of memory) is delivered again
 after every restart. To get out of it, stop energystore (scale to 0), then discard its session at the broker by
 connecting once with the **same client id** and a clean session, without subscribing, e.g.
-`mosquitto_pub -h <broker> -p 1883 -i <mqtt.id> -t energystore/session-reset -n` (mosquitto_pub uses a clean
-session by default). This drops **every** message queued for energystore, not only the faulty one: note the time
-and request the energy data of the affected period again (check before billing). Then start energystore again.
+`mosquitto_pub -h <host> -p <port> -i <mqtt.id> -t energystore/session-reset -n` with host and port from
+`mqtt.host` (mosquitto_pub uses a clean session by default). Then start energystore again. This drops **every**
+message queued for energystore, not only the faulty one, and between the reset and the restart there is no
+session, so messages published then are not kept either. The loss window runs from the first crash until
+energystore is connected again: note both times and request the energy data of that period again (check before
+billing).
 
 ### Running the Service
 
