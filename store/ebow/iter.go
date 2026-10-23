@@ -1,9 +1,11 @@
 package ebow
 
 import (
+	"fmt"
 	"runtime"
 
 	"github.com/dgraph-io/badger/v4"
+	"github.com/golang/glog"
 )
 
 type Iter struct {
@@ -67,7 +69,9 @@ func (it *Iter) Next(result interface{}) bool {
 		return nil
 	})
 	if err != nil {
-		it.err = err
+		// #31: the caller sees false like at the end of the data and must check Err().
+		glog.Errorf("ebow: cannot decode record %s: %v", ik[bucketIdSize:], err)
+		it.err = fmt.Errorf("%w (key %s)", ErrUndecodableRow, ik[bucketIdSize:])
 		return false
 	}
 
@@ -87,7 +91,8 @@ func (it *Iter) Err() error {
 // further results, Iter is closed automatically and it will suffice to check the
 // result of Err.
 func (it *Iter) Close() {
-	if it.err != nil {
+	// Release iterator and transaction also after a decode error (#31); only a second Close is a no-op.
+	if it.closed {
 		return
 	}
 	it.closed = true

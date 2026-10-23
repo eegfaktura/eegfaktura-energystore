@@ -23,6 +23,9 @@ var (
 	ErrNotFound = errors.New("Record doesn't exist")
 	ErrReadOnly = errors.New("Put and Delete aren't allowed in read-only mode")
 	ErrNoRows   = errors.New("no Rows found")
+	// ErrUndecodableRow: a stored record could not be decoded (#31). The cause is logged; the
+	// error itself names only the key, so it can go to a client as it is.
+	ErrUndecodableRow = errors.New("stored record cannot be read")
 )
 
 // version increases when backwards-incompatible change is introduced,
@@ -207,7 +210,17 @@ func Open(dir string, options ...Option) (*DB, error) {
 	}
 	db.db = bdb
 
-	err = db.readMeta(nil)
+	// From here on an error must close Badger again, otherwise its directory lock stays until the
+	// process restarts and every later open of this store fails (#31).
+	if err := db.initMeta(); err != nil {
+		_ = bdb.Close()
+		return nil, err
+	}
+	return db, nil
+}
+
+func (db *DB) initMeta() error {
+	err := db.readMeta(nil)
 	if err == badger.ErrKeyNotFound {
 		db.meta = meta{
 			Version: version,
@@ -216,21 +229,20 @@ func Open(dir string, options ...Option) (*DB, error) {
 		if !db.readOnly {
 			err = db.writeMeta(nil)
 			if err != nil {
-				return nil, err
+				return err
 			}
 		}
 	} else if err != nil {
-		return nil, err
+		return err
 	}
 
 	if !db.readOnly {
 		db.bucketId, err = db.db.GetSequence(bucketIdSequence, 1e3)
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
-
-	return db, nil
+	return nil
 }
 
 // Bucket returns the named bucket, creating it if it doesn't exist.

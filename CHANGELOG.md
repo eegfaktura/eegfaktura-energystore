@@ -29,6 +29,16 @@ this changelog highlights the changes relevant for overview and operations.
   see no „Energiedaten empfangen“ entry for it, the gap shows in the check before billing, and the data has to be
   requested again. The log line is „energy data not stored, no cr_msg_history reply“ with tenant, ecId, metering
   point and conversation id.
+- **A stored row that cannot be read is an error, no longer the silent end of the data** (#31). Reports, the
+  billing basis, the raw data and load curve queries and the Excel export stopped at such a row and returned a
+  shortened result as success; they now fail with „stored record cannot be read (key CP/…)“ (the cause is in the
+  ERROR log „ebow: cannot decode record …“), so EEG admins get an error message instead of too-low values. On the
+  import path the store of that day is aborted: before, the rows after the unreadable one were rebuilt with the
+  imported metering point only and the values of the other metering points in those quarter hours were lost; now
+  nothing of the day is written and no „Energiedaten empfangen“ reply is sent (see #19). The CLI tools
+  (`estore data`, `estore move`, `estore reset`) stop with the error as well. Iterators release their read
+  transaction also after such an error, and a store whose meta record cannot be read or written no longer keeps
+  Badger's directory lock until the restart. Without unreadable rows nothing changes.
 
 ### Changed
 - Dependencies: `github.com/klauspost/compress` 1.18.0 → 1.18.7 (platform#181; Trivy CVE-2026-63209, HIGH),

@@ -42,7 +42,11 @@ func StoreEnergyV2(db *ebow.BowStorage, meteringPoint string, data *model.MqttEn
 	end := time.UnixMilli(data.End)
 
 	monitorStart := time.Now()
-	fetchSourceRange(db, "CP", begin.Local(), end.Local(), resources)
+	// A read error must abort the store (#31): the rows after a corrupt one would be missing from
+	// resources, rebuilt from scratch below and written back without the other metering points' values.
+	if err := fetchSourceRange(db, "CP", begin.Local(), end.Local(), resources); err != nil {
+		return fmt.Errorf("read stored rows: %w", err)
+	}
 	glog.V(4).Infof("Fetching source takes %v", time.Since(monitorStart).Milliseconds())
 
 	var err error
@@ -203,7 +207,7 @@ func addEnergyValueToResource(resource *model.RawSourceLine, metaCP *model.Count
 	}
 }
 
-func fetchSourceRange(db *ebow.BowStorage, key string, start, end time.Time, resources *map[string]*model.RawSourceLine) {
+func fetchSourceRange(db *ebow.BowStorage, key string, start, end time.Time, resources *map[string]*model.RawSourceLine) error {
 	sYear, sMonth, sDay := start.Year(), int(start.Month()), start.Day()
 	eYear, eMonth, eDay := end.Year(), int(end.Month()), end.Day()
 
@@ -215,6 +219,7 @@ func fetchSourceRange(db *ebow.BowStorage, key string, start, end time.Time, res
 		l := _line.Copy(len(_line.Consumers))
 		(*resources)[_line.Id] = &l
 	}
+	return iter.Err()
 }
 
 func updateMetaCP(metaCP *model.CounterPointMeta, begin, end time.Time) bool {
