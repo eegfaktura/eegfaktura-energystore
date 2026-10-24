@@ -46,6 +46,32 @@ this changelog highlights the changes relevant for overview and operations.
   Badger's directory lock until the restart. Without unreadable rows nothing changes.
 
 ### Changed
+- **CR_MSG import: batched per community, fair lanes for all tenants** (concept „Energiedaten gebündelt
+  importieren“). A large request (e.g. a month for 2,400 metering points) kept energystore busy for hours, because
+  every metering point and day read and wrote the rows of all metering points; meanwhile the messages of every
+  other tenant were stuck behind it (one dispatch loop for all tenants), and the burst afterwards opened hundreds
+  of stores (OOM kills). Now:
+  - the messages already queued for a tenant are imported together: per community and day the rows and the meta
+    record `cpmeta/0` are read and written once for the whole batch (stored data identical to the single import,
+    no format change);
+  - `import.parallel` lanes (env `ENERGYSTORE_IMPORT_PARALLEL`, default 4) import at the same time, each one batch
+    of at most `import.batchMax` messages of one tenant (env `ENERGYSTORE_IMPORT_BATCHMAX`, default 50); a tenant
+    with more work queues up again behind the others (round robin), so a large request no longer delays the daily
+    data of the other communities by more than one batch per lane. Receiving a message never waits for another
+    tenant;
+  - a store is closed 15 s after its tenant's last batch as before, or earlier when more than `import.parallel`
+    stores are idle, so at most twice `import.parallel` tenants keep their stores open for the import;
+  - per message as before: the `cr_msg_history` reply only when all its days are stored, the same ERROR log line
+    otherwise, ack after processing (#19). A day that fails in a batch is stored again message by message, so only
+    the messages with that day are affected; a meta record error falls back to the message-by-message import.
+  - Both values are read once at start; a missing, non-numeric or non-positive value falls back to the default
+    with a warning.
+  - **Release prerequisite (together with #19, manual ack):** raise mosquitto's `max_inflight_messages` for the
+    energystore client (proposal 1,000; default 20) in prod and pilot, after reading out the current value. With
+    20 unacknowledged messages at a time the batches stay at one or two messages and the throughput depends on the
+    window, not on the import.
+- **Fixed with it:** `Close` of the dispatcher could return before a worker had started and closed its store
+  (known-errors #41); it now returns after every lane finished its batch and every store is closed.
 - Dependencies: `github.com/klauspost/compress` 1.18.0 → 1.18.7 (platform#181; Trivy CVE-2026-63209, HIGH),
   an indirect dependency of `badger/v4` (`badger/v4/table` uses its `s2`/`snappy` and `zstd` packages for block
   compression; same storage format within 1.18.x). Replaces Dependabot #76.
