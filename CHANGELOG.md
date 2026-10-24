@@ -70,7 +70,10 @@ this changelog highlights the changes relevant for overview and operations.
     rows (as stored, including the length of the quality arrays) and the whole record `cpmeta/0` (ID, SourceIdx,
     direction, periods) with the import message by message: they are equal. A batch is unpacked and imported
     in parts of at most about `mqtt.maxDecompressedMB` of unpacked data each, so the limit per message still
-    bounds the memory of a batch (about twice the limit per lane);
+    bounds the memory of a batch (about twice the limit per lane). Two differences that change bytes, not
+    values: when a day batch fails and its blocks are stored one by one, rows created then may be sized with
+    the counts of the whole batch (more trailing zeros); and a day block that spans two days after the DST change
+    rewrites the rows of both days, the other day's unchanged (the single import does the same);
   - `import.parallel` lanes (env `ENERGYSTORE_IMPORT_PARALLEL`, default 4) import at the same time, each one batch
     of at most `import.batchMax` messages of one tenant (env `ENERGYSTORE_IMPORT_BATCHMAX`, default 50); a tenant
     with more work queues up again behind the others (round robin), so a large request no longer delays the daily
