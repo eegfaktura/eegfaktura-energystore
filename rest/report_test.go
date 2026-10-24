@@ -22,6 +22,7 @@ func TestReportWithoutAnyData(t *testing.T) {
 		}
 	}
 	require.NotEmpty(t, body, "matrix row of the report")
+	// RC100009: a valid community id that seed() never writes, so its store has no cpmeta/0.
 	rec := apitest.Do(apitest.Router(), apitest.Request{Method: "POST", Path: "/eeg/v2/RC100009/report", Header: appHeader(), Body: body})
 	require.Equal(t, 200, rec.Code, rec.Body.String())
 
@@ -34,4 +35,14 @@ func TestReportWithoutAnyData(t *testing.T) {
 	assert.Zero(t, resp.TotalConsumption)
 	require.Len(t, resp.ParticipantReports, 1)
 	assert.Equal(t, "P1", resp.ParticipantReports[0].ParticipantId)
+	// each requested meter carries a zero report with empty (not null) intermediate lists
+	require.Len(t, resp.ParticipantReports[0].Meters, 1)
+	r := resp.ParticipantReports[0].Meters[0].Report
+	require.NotNil(t, r)
+	assert.Equal(t, model.Recort{}, r.Summary)
+	for name, s := range map[string][]float64{"consumption": r.Intermediate.Consumption, "utilization": r.Intermediate.Utilization,
+		"allocation": r.Intermediate.Allocation, "production": r.Intermediate.Production} {
+		assert.NotNil(t, s, name)
+		assert.Empty(t, s, name)
+	}
 }
