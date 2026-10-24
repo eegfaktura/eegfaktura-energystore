@@ -37,12 +37,12 @@ func (tmw *TenantEnergyImporter) executeParts(ctx context.Context, msgs []mqtt.M
 	var origin []int
 	var size int64
 	for i, msg := range msgs {
-		if ctx.Err() != nil {
-			break
-		}
 		if tmw.replied[msg] { // replied before a panic of the batch (executeBatch runs it again one by one)
 			delete(tmw.replied, msg)
 			finished[i] = true
+			continue
+		}
+		if ctx.Err() != nil { // stopped: not finished, stays unacked
 			continue
 		}
 		d, n := decodeMessageSize(msg.Payload())

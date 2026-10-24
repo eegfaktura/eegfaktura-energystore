@@ -351,10 +351,9 @@ func executeBatch(ctx context.Context, tenant string, executor Executor, batch [
 		finished = []bool{true} // the message that panics is acked
 	case !ok:
 		finished = make([]bool, len(batch))
+		// Also after ctx ended: the executor then only counts the messages it replied before the panic as
+		// finished (acked, no second reply after a redelivery) and leaves the others.
 		for i := range batch {
-			if ctx.Err() != nil {
-				break
-			}
 			f, ok := runRecovered(ctx, tenant, executor, batch[i:i+1])
 			finished[i] = !ok || f[0]
 		}
