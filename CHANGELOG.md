@@ -60,7 +60,9 @@ this changelog highlights the changes relevant for overview and operations.
     data of the other communities by more than one batch per lane. Receiving a message never waits for another
     tenant;
   - a store is closed 15 s after its tenant's last batch as before, or earlier when more than `import.parallel`
-    stores are idle, so at most twice `import.parallel` tenants keep their stores open for the import;
+    stores are idle (closed in the background, the lanes go on); a tenant waiting for its turn keeps its store
+    open, so under load the number of open stores still grows with the number of waiting tenants (local run:
+    ~60 for 100 delivering communities, instead of ~100 without the early close);
   - per message as before: the `cr_msg_history` reply only when all its days are stored, the same ERROR log line
     otherwise, ack after processing (#19). A day that fails in a batch is stored again message by message, so only
     the messages with that day are affected; a meta record error falls back to the message-by-message import.

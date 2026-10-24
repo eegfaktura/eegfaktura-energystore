@@ -110,8 +110,7 @@ type dispatcherConfig struct {
 //   - A tenant never runs in two lanes at once: its order is kept and cpmeta/0 has one writer.
 //
 // Executors are created on demand and closed (with their stores) after idleTimeout without work, or earlier
-// when more than parallel of them are idle, so the open stores depend on the lanes, not on the number of
-// tenants that delivered.
+// when more than parallel of them are idle. A tenant waiting in ready keeps its store open.
 type TopicDispatcher struct {
 	cfg dispatcherConfig
 
@@ -293,8 +292,9 @@ func (d *TopicDispatcher) janitor(ctx context.Context) {
 	}
 }
 
-// closeIdle closes the executors idle for idleTimeout, and the oldest idle ones beyond parallel. The tenant
-// is busy while its executor closes, so no lane runs it meanwhile.
+// closeIdle closes the executors idle for idleTimeout, and the oldest idle ones beyond parallel, each in its
+// own goroutine (closing a store takes a few hundred ms; the lanes go on meanwhile). The tenant is busy while
+// its executor closes, so no lane runs it meanwhile.
 func (d *TopicDispatcher) closeIdle(now time.Time) {
 	d.mu.Lock()
 	var idle []*tenantQueue
@@ -313,21 +313,26 @@ func (d *TopicDispatcher) closeIdle(now time.Time) {
 	}
 	d.mu.Unlock()
 
+	// The callers (lanes, janitor) still hold their own count, so Close's Wait cannot have returned.
+	d.wg.Add(len(closing))
 	for _, tq := range closing {
-		glog.Infof("No message received for %s. Close DB tenant=%s.", now.Sub(tq.lastUsed).Round(time.Second), tq.tenant)
-		tq.executor.Close()
+		go d.closeExecutor(tq, now.Sub(tq.lastUsed))
 	}
+}
+
+func (d *TopicDispatcher) closeExecutor(tq *tenantQueue, idle time.Duration) {
+	defer d.wg.Done()
+	glog.Infof("No message received for %s. Close DB tenant=%s.", idle.Round(time.Second), tq.tenant)
+	tq.executor.Close()
 
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	for _, tq := range closing {
-		tq.executor = nil
-		tq.busy = false
-		if len(tq.queue) == 0 {
-			delete(d.tenants, tq.tenant)
-		} else {
-			d.markReady(tq)
-		}
+	tq.executor = nil
+	tq.busy = false
+	if len(tq.queue) == 0 {
+		delete(d.tenants, tq.tenant)
+	} else {
+		d.markReady(tq)
 	}
 }
 
