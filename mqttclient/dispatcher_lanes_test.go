@@ -258,7 +258,7 @@ func TestDispatcherClosesIdleExecutors(t *testing.T) {
 		d2.Submit(m)
 		awaitAcks(t, []*testsupport.Message{m})
 	}
-	require.Eventually(t, func() bool { s := rec2.snapshot(); return s.created-s.closed <= 2 }, 5*time.Second, 5*time.Millisecond)
+	require.Eventually(t, func() bool { s := rec2.snapshot(); return s.created-s.closed <= 2 }, 10*time.Second, 5*time.Millisecond)
 	assert.Empty(t, rec.snapshot().misuse)
 	assert.Empty(t, rec2.snapshot().misuse)
 }

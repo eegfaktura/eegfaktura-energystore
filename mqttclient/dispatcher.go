@@ -92,6 +92,9 @@ const (
 	defaultParallel    = 4
 	defaultBatchMax    = 50
 	idleDBCloseTimeout = 15 * time.Second
+	// minIdleClose: an idle executor beyond the newest parallel ones is closed only after this time, so a
+	// tenant that delivers every few seconds does not reopen its store (~0.3 s to close, then open) each time.
+	minIdleClose = 2 * time.Second
 )
 
 type dispatcherConfig struct {
@@ -110,8 +113,9 @@ type dispatcherConfig struct {
 //     request occupies one lane for one batch at a time, and every other waiting tenant comes in between.
 //   - A tenant never runs in two lanes at once: its order is kept and cpmeta/0 has one writer.
 //
-// Executors are created on demand and closed (with their stores) after idleTimeout without work, or earlier
-// when more than parallel of them are idle. A tenant waiting in ready keeps its store open.
+// Executors are created on demand and closed (with their stores) by the janitor after idleTimeout without
+// work, or after minIdleClose when more than parallel of them are idle. A tenant waiting in ready keeps its
+// store open.
 type TopicDispatcher struct {
 	cfg dispatcherConfig
 
@@ -275,7 +279,6 @@ func (d *TopicDispatcher) lane() {
 		tq.lastUsed = time.Now()
 		d.markReady(tq)
 		d.mu.Unlock()
-		d.closeIdle(time.Now())
 	}
 }
 
@@ -294,7 +297,8 @@ func (d *TopicDispatcher) janitor(ctx context.Context) {
 	}
 }
 
-// closeIdle closes the executors idle for idleTimeout, and the oldest idle ones beyond parallel, each in its
+// closeIdle closes the executors idle for idleTimeout, and the idle ones beyond the newest parallel after
+// minIdleClose, each in its
 // own goroutine (closing a store takes a few hundred ms; the lanes go on meanwhile). The tenant is busy while
 // its executor closes, so no lane runs it meanwhile.
 func (d *TopicDispatcher) closeIdle(now time.Time) {
@@ -308,7 +312,8 @@ func (d *TopicDispatcher) closeIdle(now time.Time) {
 	sort.Slice(idle, func(i, j int) bool { return idle[i].lastUsed.After(idle[j].lastUsed) })
 	var closing []*tenantQueue
 	for i, tq := range idle {
-		if i >= d.cfg.parallel || now.Sub(tq.lastUsed) >= d.cfg.idleTimeout {
+		idleFor := now.Sub(tq.lastUsed)
+		if (i >= d.cfg.parallel && idleFor >= minIdleClose) || idleFor >= d.cfg.idleTimeout {
 			tq.busy = true
 			closing = append(closing, tq)
 		}
