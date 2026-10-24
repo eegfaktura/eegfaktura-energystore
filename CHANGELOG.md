@@ -32,6 +32,22 @@ this changelog highlights the changes relevant for overview and operations.
   non-positive value falls back to 512 MB with a warning (a limit of 0 would drop every message).
 
 ### Fixed
+- **Excel energy report download: no panic for a metering point without stored data**
+  (`POST /eeg/{ecid}/excel/report/download`). A requested metering point without an entry in the meta record
+  `cpmeta/0` (no data ever imported for it, or none for the whole community) made the energy sheet dereference the
+  missing meta and the request ended without an answer. Such a metering point now gets no columns (the summary
+  sheet already skipped it); if no rows exist at all, the answer is the usual 404 `no_entries` („no Rows found“).
+  eegfaktura-web only requests metering points from the community's metadata, so its file is unchanged. The
+  export by mail (known error #53) has a different cause and is not changed.
+- **Report of a community without any energy data: empty report instead of 500** (`POST /eeg/v2/{ecid}/report`).
+  Without any imported data the meta record `cpmeta/0` does not exist and the report answered
+  500 `{"error":"Record doesn't exist"}`. It now answers 200 with the same shape as a report without values: the
+  requested participants with zero sums, `"meta": []`, totals 0. Other errors still answer 500. eegfaktura-web
+  (web#191) handles both answers. Summary and billing-check already answered 200 without data.
+- **Raw data export without a meter list: no empty query targets** (`POST /query/rawdata` without `cps`). The target
+  list of the community's metering points started with one empty entry per metering point. No effect on the
+  answer: the duplicates were collapsed to one empty entry and no metering point has an empty name, so it was
+  skipped on every row; only wasted work.
 - **CR_MSG: acknowledged only after it was processed, store errors no longer reported as stored** (#19). An energy
   data message was acknowledged to the broker as soon as it was handed to the tenant worker; a crash, OOM kill or
   restart before the store lost it. A store error was logged, but the message was still confirmed to the backend,

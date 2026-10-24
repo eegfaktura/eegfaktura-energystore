@@ -167,15 +167,18 @@ func createRunnerContext(db ebow.IBowStorage, start, end time.Time, cps *ExportP
 	var producers []*ParticipantCp
 	var consumers []*ParticipantCp
 	for i, _ := range cps.Cps {
+		_cps = append(_cps, &cps.Cps[i])
+		// A metering point without stored data has no meta entry: no columns for it (the energy
+		// sheet dereferenced the missing meta and panicked); the summary sheet skips it as well.
+		if _, ok := metaMap[cps.Cps[i].MeteringPoint]; !ok {
+			continue
+		}
+		cps.Cps[i].QoV = true
 		if cps.Cps[i].Direction == model.PRODUCER_DIRECTION {
 			producers = append(producers, &cps.Cps[i])
 		} else {
 			consumers = append(consumers, &cps.Cps[i])
 		}
-		if _, ok := metaMap[cps.Cps[i].MeteringPoint]; ok {
-			cps.Cps[i].QoV = true
-		}
-		_cps = append(_cps, &cps.Cps[i])
 	}
 
 	return &RunnerContext{
