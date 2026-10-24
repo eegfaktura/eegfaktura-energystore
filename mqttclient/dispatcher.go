@@ -338,23 +338,36 @@ func (d *TopicDispatcher) closeExecutor(tq *tenantQueue, idle time.Duration) {
 
 // executeBatch fuehrt ein Buendel von Nachrichten eines Mandanten aus. Eine Panic wird protokolliert
 // und beendet nicht den ganzen Dienst: die Spur laeuft ohne recover in einer eigenen Goroutine, und eine
-// weiterhin zugestellte Nachricht fuehrte nach dem Neustart wieder zum Absturz.
+// weiterhin zugestellte Nachricht fuehrte nach dem Neustart wieder zum Absturz. Nach einer Panic im Buendel
+// laufen dessen Nachrichten einzeln, jede mit eigenem recover: nur die Nachricht, die wieder abstuerzt,
+// geht verloren; die anderen werden gespeichert und bestaetigt (Import ist idempotent).
 //
-// Ack (#19): jede Nachricht des Buendels genau einmal, erst wenn ExecuteBatch fertig ist, bei Erfolg wie
-// bei Fehler und auch nach einer Panic (sonst stellte der Broker die Nachricht nach jedem Neustart wieder
-// zu). Die Defers laufen in umgekehrter Reihenfolge: erst recover, dann Ack. Nicht geackt bleibt nur, was
-// bei Absturz, OOM oder Shutdown noch nicht fertig war; das stellt mosquitto beim naechsten Verbinden
-// erneut zu (Import ist idempotent).
+// Ack (#19): jede Nachricht des Buendels genau einmal, erst wenn sie verarbeitet ist, bei Erfolg wie bei
+// Fehler und auch nach einer Panic (sonst stellte der Broker die Nachricht nach jedem Neustart wieder zu).
+// Nicht geackt bleibt nur, was bei Absturz, OOM oder Shutdown noch nicht fertig war; das stellt mosquitto
+// beim naechsten Verbinden erneut zu.
 func executeBatch(tenant string, executor Executor, batch []mqtt.Message) {
 	defer func() {
 		for _, msg := range batch {
 			msg.Ack()
 		}
 	}()
+	if runRecovered(tenant, executor, batch) || len(batch) == 1 {
+		return
+	}
+	for i := range batch {
+		runRecovered(tenant, executor, batch[i:i+1])
+	}
+}
+
+// runRecovered runs ExecuteBatch and reports false after a recovered panic.
+func runRecovered(tenant string, executor Executor, batch []mqtt.Message) (ok bool) {
 	defer func() {
 		if r := recover(); r != nil {
 			glog.Errorf("panic while executing message for tenant=%s: %v (%d messages)", tenant, r, len(batch))
+			ok = false
 		}
 	}()
 	executor.ExecuteBatch(batch)
+	return true
 }

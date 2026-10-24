@@ -74,7 +74,9 @@ time, each in batches of at most `import.batchMax` messages (env `ENERGYSTORE_IM
 tenant with more messages queues up again behind the other waiting tenants. Both are read once at start.
 
 A message that is stored, cannot be stored, cannot be decoded or causes a recovered panic is acknowledged and not
-delivered again. Only stored data gets the `cr_msg_history` reply („Energiedaten empfangen“ in the backend). Log
+delivered again. A panic in a batch costs only the message that causes it: the batch is then run message by
+message, and the other messages are stored and replied. Only stored data gets the `cr_msg_history` reply
+(„Energiedaten empfangen“ in the backend). Log
 searches (e.g. Dynatrace): `energy data not stored`, `cannot decode record`, `Error decoding`,
 `panic while executing message`, and OOMKilled restarts of the pod.
 

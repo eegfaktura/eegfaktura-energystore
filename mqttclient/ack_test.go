@@ -2,6 +2,7 @@ package mqttclient
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -208,4 +209,46 @@ func TestDispatcherAcksOnlyAfterExecute(t *testing.T) {
 		t.Fatal("no reply")
 	}
 	require.Eventually(t, func() bool { return msg.Acks() == 1 }, 10*time.Second, 10*time.Millisecond)
+}
+
+// panicOn wraps an executor and panics whenever a batch holds the payload poison.
+type panicOn struct {
+	Executor
+	poison []byte
+}
+
+func (p panicOn) ExecuteBatch(msgs []mqtt.Message) {
+	for _, m := range msgs {
+		if string(m.Payload()) == string(p.poison) {
+			panic("boom")
+		}
+	}
+	p.Executor.ExecuteBatch(msgs)
+}
+
+// A panic in a batch costs only the message that panics: after it, the batch runs message by message; the
+// other four are stored and replied, and every message is acked exactly once.
+func TestBatchPanicLosesOnlyThatMessage(t *testing.T) {
+	testsupport.UseTempPersistence(t)
+	client := testsupport.NewFakeClient()
+	imp := NewTenantEnergyImporter(ackTenant, &MQTTStreamer{client: client})
+	defer imp.Close()
+
+	var batch []mqtt.Message
+	var msgs []*testsupport.Message
+	for i := 0; i < 5; i++ {
+		m := testsupport.CrMsgMessage(ackTenant, ackCrMsg(ackEcId, fmt.Sprintf("AT00300000000000000000000000000%02d", i)).Payload(t))
+		batch, msgs = append(batch, m), append(msgs, m)
+	}
+	executeBatch(ackTenant, panicOn{Executor: imp, poison: msgs[2].Body}, batch)
+
+	assert.Len(t, client.PublishedMessages(), 4)
+	for i, m := range msgs {
+		assert.Equal(t, 1, m.Acks(), "message %d", i)
+		want := 96
+		if i == 2 {
+			want = 0
+		}
+		assert.Len(t, ackStored(t, ackTenant, ackEcId, fmt.Sprintf("AT00300000000000000000000000000%02d", i)), want, "message %d", i)
+	}
 }

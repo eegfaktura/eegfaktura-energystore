@@ -80,6 +80,8 @@ this changelog highlights the changes relevant for overview and operations.
   - per message as before: the `cr_msg_history` reply only when all its days are stored, the same ERROR log line
     otherwise, ack after processing (#19). A day that fails in a batch is stored again message by message, so only
     the messages with that day are affected; a meta record error falls back to the message-by-message import.
+    After a panic in a batch its messages run one by one, so only the message that panics again is lost (acked,
+    no reply).
   - Both values are read once at start; a missing, non-numeric or non-positive value falls back to the default
     with a warning.
   - **Release prerequisite (together with #19, manual ack):** raise mosquitto's `max_inflight_messages` for the
