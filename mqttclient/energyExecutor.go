@@ -230,19 +230,25 @@ func (tmw *TenantEnergyImporter) Import(data *model.MqttEnergyMessage) error {
 }
 
 func decodeMessage(msg []byte) *model.MqttEnergyMessage {
+	m, _ := decodeMessageSize(msg)
+	return m
+}
+
+// decodeMessageSize also returns the size of the unpacked JSON.
+func decodeMessageSize(msg []byte) (*model.MqttEnergyMessage, int64) {
 	decompressed, err := decryptMessage(msg)
 	if err != nil {
 		glog.Errorf("Error decoding CR_MSG transport payload. %s", err.Error())
-		return nil
+		return nil, 0
 	}
 
 	m := model.MqttEnergyMessage{}
 	err = json.Unmarshal(decompressed, &m)
 	if err != nil {
 		glog.Errorf("Error decoding MQTT message. %s", err.Error())
-		return nil
+		return nil, 0
 	}
-	return &m
+	return &m, int64(len(decompressed))
 }
 
 func decryptMessage(msg []byte) ([]byte, error) {

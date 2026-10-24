@@ -68,7 +68,9 @@ this changelog highlights the changes relevant for overview and operations.
   - the messages already queued for a tenant are imported together: per community and day the rows and the meta
     record `cpmeta/0` are read and written once for the whole batch, no format change. Tests compare the stored
     rows (as stored, including the length of the quality arrays) and the whole record `cpmeta/0` (ID, SourceIdx,
-    direction, periods) with the import message by message: they are equal;
+    direction, periods) with the import message by message: they are equal. A batch is unpacked and imported
+    in parts of at most about `mqtt.maxDecompressedMB` of unpacked data each, so the limit per message still
+    bounds the memory of a batch (about twice the limit per lane);
   - `import.parallel` lanes (env `ENERGYSTORE_IMPORT_PARALLEL`, default 4) import at the same time, each one batch
     of at most `import.batchMax` messages of one tenant (env `ENERGYSTORE_IMPORT_BATCHMAX`, default 50); a tenant
     with more work queues up again behind the others (round robin), so a large request no longer delays the daily

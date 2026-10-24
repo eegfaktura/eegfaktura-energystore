@@ -23,21 +23,44 @@ var errStopped = errors.New("import stopped, energystore shuts down")
 // are per message as in Execute. It returns which messages were processed; the caller acks those (#19).
 // When ctx ends it stops between messages, runs and days; the messages not finished by then are not.
 func (tmw *TenantEnergyImporter) ExecuteBatch(ctx context.Context, msgs []mqtt.Message) []bool {
+	return tmw.executeParts(ctx, msgs, maxDecompressedBytes())
+}
+
+// executeParts decodes the messages in order and imports and replies them in parts: a part ends with the
+// message whose unpacked size makes the part reach budget. The limit of one unpacked message
+// (mqtt.maxDecompressedMB, platform#181) thus bounds the decoded data of a batch to about twice that, not
+// batchMax times. The parts run one after the other, so a later message still wins.
+func (tmw *TenantEnergyImporter) executeParts(ctx context.Context, msgs []mqtt.Message, budget int64) []bool {
 	monitor := time.Now()
 	finished := make([]bool, len(msgs))
-	data := make([]*model.MqttEnergyMessage, 0, len(msgs))
-	origin := make([]int, 0, len(msgs))
+	var data []*model.MqttEnergyMessage
+	var origin []int
+	var size int64
 	for i, msg := range msgs {
-		d := decodeMessage(msg.Payload())
+		if ctx.Err() != nil {
+			break
+		}
+		d, n := decodeMessageSize(msg.Payload())
 		if d == nil {
 			glog.Errorf("Data without content. tenant=%s", tmw.Tenant)
 			finished[i] = true
 			continue
 		}
-		data = append(data, d)
-		origin = append(origin, i)
+		data, origin, size = append(data, d), append(origin, i), size+n
+		if size >= budget {
+			tmw.importPart(ctx, data, origin, finished)
+			data, origin, size = nil, nil, 0
+		}
 	}
+	if len(data) > 0 {
+		tmw.importPart(ctx, data, origin, finished)
+	}
+	glog.V(3).Infof("Execution of %d messages finished in %d ms (%v)", len(msgs), time.Since(monitor).Milliseconds(), tmw.Tenant)
+	return finished
+}
 
+// importPart imports decoded messages and replies the stored ones; origin maps them to finished.
+func (tmw *TenantEnergyImporter) importPart(ctx context.Context, data []*model.MqttEnergyMessage, origin []int, finished []bool) {
 	errs := tmw.ImportBatch(ctx, data)
 	for i, d := range data {
 		if errs[i] == errStopped {
@@ -53,8 +76,6 @@ func (tmw *TenantEnergyImporter) ExecuteBatch(ctx context.Context, msgs []mqtt.M
 		}
 		tmw.streamer.SendMessage(tmw.Tenant, d)
 	}
-	glog.V(3).Infof("Execution of %d messages finished in %d ms (%v)", len(msgs), time.Since(monitor).Milliseconds(), tmw.Tenant)
-	return finished
 }
 
 // ImportBatch stores the messages and returns the error of each one (nil: stored), with the same errors as
@@ -120,69 +141,6 @@ func (tmw *TenantEnergyImporter) importEcId(ctx context.Context, ecId string, ms
 			return
 		}
 	}
-}
-
-// run is a sequence of messages of one ecId stored together. single: one message whose own energy entries
-// overlap; it is stored with Import, entry by entry, so its later entry wins as before.
-type run struct {
-	idx    []int
-	single bool
-}
-
-// splitRuns cuts the messages of one ecId into runs in which no metering point has two messages with
-// overlapping periods (Start inclusive, End exclusive as in a CR_MSG: back-to-back days share a run). A run is stored day by day; a later message for the same quarter hours must still
-// overwrite an earlier one, also where SplitEnergyByDay cut their days differently (after a DST change the
-// days of a longer message start at 23:00).
-func splitRuns(msgs []*model.MqttEnergyMessage, idx []int) []run {
-	var runs []run
-	var cur run
-	periods := map[string][][2]int64{}
-	flush := func() {
-		if len(cur.idx) > 0 {
-			runs = append(runs, cur)
-		}
-		cur, periods = run{}, map[string][][2]int64{}
-	}
-	for _, i := range idx {
-		m := msgs[i]
-		mp := m.Meter.MeteringPoint
-		if selfOverlaps(m.Energy) {
-			flush()
-			runs = append(runs, run{idx: []int{i}, single: true})
-			continue
-		}
-		if overlapsAny(m.Energy, periods[mp]) {
-			flush()
-		}
-		cur.idx = append(cur.idx, i)
-		for _, e := range m.Energy {
-			periods[mp] = append(periods[mp], [2]int64{e.Start, e.End})
-		}
-	}
-	flush()
-	return runs
-}
-
-func selfOverlaps(energy []model.MqttEnergy) bool {
-	for i := range energy {
-		for _, e := range energy[i+1:] {
-			if e.Start < energy[i].End && energy[i].Start < e.End {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func overlapsAny(energy []model.MqttEnergy, periods [][2]int64) bool {
-	for _, e := range energy {
-		for _, p := range periods {
-			if e.Start < p[1] && p[0] < e.End {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // importRun stores the messages of one run, day by day in ascending order. It returns false after a meta
