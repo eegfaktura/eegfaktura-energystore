@@ -238,7 +238,8 @@ func decodeMessage(msg []byte) *model.MqttEnergyMessage {
 	return m
 }
 
-// decodeMessageSize also returns the size of the unpacked JSON.
+// decodeMessageSize also returns the size of the unpacked JSON (the decoded message on the heap is several
+// times larger).
 func decodeMessageSize(msg []byte) (*model.MqttEnergyMessage, int64) {
 	decompressed, err := decryptMessage(msg)
 	if err != nil {

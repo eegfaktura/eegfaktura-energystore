@@ -28,8 +28,8 @@ func (tmw *TenantEnergyImporter) ExecuteBatch(ctx context.Context, msgs []mqtt.M
 
 // executeParts decodes the messages in order and imports and replies them in parts: a part ends with the
 // message whose unpacked size makes the part reach budget. The limit of one unpacked message
-// (mqtt.maxDecompressedMB, platform#181) thus bounds the decoded data of a batch to about twice that, not
-// batchMax times. The parts run one after the other, so a later message still wins.
+// (mqtt.maxDecompressedMB, platform#181) thus bounds a batch to about twice that of unpacked JSON, not
+// batchMax times (the decoded structs on the heap are several times larger than the JSON). The parts run one after the other, so a later message still wins.
 func (tmw *TenantEnergyImporter) executeParts(ctx context.Context, msgs []mqtt.Message, budget int64) []bool {
 	monitor := time.Now()
 	finished := make([]bool, len(msgs))

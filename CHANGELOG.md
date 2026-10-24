@@ -70,7 +70,8 @@ this changelog highlights the changes relevant for overview and operations.
     rows (as stored, including the length of the quality arrays) and the whole record `cpmeta/0` (ID, SourceIdx,
     direction, periods) with the import message by message: they are equal. A batch is unpacked and imported
     in parts of at most about `mqtt.maxDecompressedMB` of unpacked data each, so the limit per message still
-    bounds the memory of a batch (about twice the limit per lane). Two differences that change bytes, not
+    bounds a batch: about twice the limit of unpacked JSON per lane (the decoded data on the heap is several
+    times that). Two differences that change bytes, not
     values: when a day batch fails and its blocks are stored one by one, rows created then may be sized with
     the counts of the whole batch (more trailing zeros); and a day block that spans two days after the DST change
     rewrites the rows of both days, the other day's unchanged (the single import does the same);
