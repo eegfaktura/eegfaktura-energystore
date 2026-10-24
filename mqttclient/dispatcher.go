@@ -36,6 +36,7 @@ func NewSubscriber(ctx context.Context, streamer *MQTTStreamer, topic string, wo
 	sub := &Subscriber{}
 	sub.receiver = func(client mqtt.Client, msg mqtt.Message) {
 		glog.V(5).Infof("Receive msg from topic %s - %v", msg.Topic(), string(msg.Payload()))
+		defer msg.Ack() // auto-ack is off (#19)
 		worker.Execute(msg)
 	}
 	//streamer.SubscribeTopic(ctx, topic, sub.receiver)
@@ -218,7 +219,13 @@ func (worker *TenantWorker) Run() {
 // execute fuehrt eine Nachricht aus. Eine Panic in einer einzelnen Nachricht wird protokolliert
 // und beendet nicht den ganzen Dienst: der Worker laeuft ohne recover in einer eigenen Goroutine,
 // und eine weiterhin zugestellte Nachricht fuehrte nach dem Neustart wieder zum Absturz.
+//
+// Ack (#19): erst wenn Execute fertig ist, bei Erfolg wie bei Fehler und auch nach einer Panic (sonst
+// stellte der Broker die Nachricht nach jedem Neustart wieder zu). Die Defers laufen in umgekehrter
+// Reihenfolge: erst recover, dann Ack. Nicht geackt bleibt nur, was bei Absturz, OOM oder Shutdown
+// noch nicht fertig war; das stellt mosquitto beim naechsten Verbinden erneut zu (Import ist idempotent).
 func (worker *TenantWorker) execute(job mqtt.Message) {
+	defer job.Ack()
 	defer func() {
 		if r := recover(); r != nil {
 			glog.Errorf("panic while executing message for tenant=%s: %v", worker.tenant, r)
