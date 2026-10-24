@@ -114,13 +114,14 @@ type dispatcherConfig struct {
 //   - A lane takes the first ready tenant and runs one batch of its queue (at most batchMax messages, no
 //     waiting for more). If the tenant has more, it goes to the back of ready (round robin): a large
 //     request occupies one lane for one batch at a time, and every other waiting tenant comes in between.
-//   - A tenant never runs in two lanes at once: its order is kept and cpmeta/0 has one writer.
+//   - A tenant never runs in two lanes at once: its order is kept and cpmeta/0 has one import writer.
 //
 // Executors are created on demand and closed (with their stores) by the janitor after idleTimeout without
 // work, or after minIdleClose when more than parallel of them are idle. A tenant waiting in ready keeps its
-// store open. Hard cap: at most maxOpen executors exist (open or still closing: they hold their memory until
+// store open, except at the cap with no idle executor left (see below). Hard cap: at most maxOpen executors exist (open or still closing: they hold their memory until
 // Close returns). A lane that needs a new one at the cap first closes the longest unused idle one (else the
-// one of the tenant last in ready) and waits for that close; if every open one is running, it waits.
+// one of the tenant last in ready, which keeps its place and reopens its store on its turn; without that,
+// lanes could wait for each other) and waits for that close; if every open one is running, it waits.
 type TopicDispatcher struct {
 	cfg dispatcherConfig
 
