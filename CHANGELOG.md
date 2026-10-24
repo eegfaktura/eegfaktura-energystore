@@ -32,6 +32,10 @@ this changelog highlights the changes relevant for overview and operations.
   non-positive value falls back to 512 MB with a warning (a limit of 0 would drop every message).
 
 ### Fixed
+- **Raw data export without a meter list: no empty query targets** (`POST /query/rawdata` without `cps`). The target
+  list of the community's metering points started with one empty entry per metering point. No effect on the
+  answer: the duplicates were collapsed to one empty entry and no metering point has an empty name, so it was
+  skipped on every row; only wasted work.
 - **CR_MSG: acknowledged only after it was processed, store errors no longer reported as stored** (#19). An energy
   data message was acknowledged to the broker as soon as it was handed to the tenant worker; a crash, OOM kill or
   restart before the store lost it. A store error was logged, but the message was still confirmed to the backend,
