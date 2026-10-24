@@ -33,7 +33,11 @@ func CalcMetaInfo(db *ebow.BowStorage) (*model.CounterPointMetaInfo, map[string]
 	if err != nil {
 		return nil, nil, err
 	}
+	return metaInfoOf(meta), meta, nil
+}
 
+// metaInfoOf counts the consumers and producers of meta and finds their highest SourceIdx.
+func metaInfoOf(meta map[string]*model.CounterPointMeta) *model.CounterPointMetaInfo {
 	info := &model.CounterPointMetaInfo{
 		ConsumerCount: 0, ProducerCount: 0,
 		MaxConsumerIdx: -1, MaxProducerIdx: -1,
@@ -49,7 +53,7 @@ func CalcMetaInfo(db *ebow.BowStorage) (*model.CounterPointMetaInfo, map[string]
 			info.MaxProducerIdx = int(math.Max(float64(v.SourceIdx), float64(info.MaxProducerIdx)))
 		}
 	}
-	return info, meta, nil
+	return info
 }
 
 func PrepareMetaInfoMap(db *ebow.BowStorage, meterpoint string, direction model.MeterDirection) (map[string]*model.CounterPointMeta, *model.CounterPointMetaInfo, error) {
