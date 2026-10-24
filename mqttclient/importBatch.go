@@ -85,7 +85,7 @@ func (tmw *TenantEnergyImporter) importEcId(ecId string, msgs []*model.MqttEnerg
 }
 
 // splitRuns cuts the messages of one ecId into runs in which no metering point has two messages with
-// overlapping periods. A run is stored day by day; a later message for the same quarter hours must still
+// overlapping periods (Start inclusive, End exclusive as in a CR_MSG: back-to-back days share a run). A run is stored day by day; a later message for the same quarter hours must still
 // overwrite an earlier one, also where SplitEnergyByDay cut their days differently (after a DST change the
 // days of a longer message start at 23:00).
 func splitRuns(msgs []*model.MqttEnergyMessage, idx []int) [][]int {
@@ -113,7 +113,7 @@ func splitRuns(msgs []*model.MqttEnergyMessage, idx []int) [][]int {
 func overlapsAny(energy []model.MqttEnergy, periods [][2]int64) bool {
 	for _, e := range energy {
 		for _, p := range periods {
-			if e.Start <= p[1] && p[0] <= e.End {
+			if e.Start < p[1] && p[0] < e.End {
 				return true
 			}
 		}
