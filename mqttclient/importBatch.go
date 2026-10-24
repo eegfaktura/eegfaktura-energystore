@@ -72,11 +72,15 @@ func (tmw *TenantEnergyImporter) importEcId(ecId string, msgs []*model.MqttEnerg
 	}
 	runs := splitRuns(msgs, idx)
 	for r, run := range runs {
-		if tmw.importRun(st, msgs, run, errs) {
+		if run.single {
+			errs[run.idx[0]] = tmw.Import(msgs[run.idx[0]])
+			continue
+		}
+		if tmw.importRun(st, msgs, run.idx, errs) {
 			continue
 		}
 		for _, rest := range runs[r+1:] {
-			for _, i := range rest {
+			for _, i := range rest.idx {
 				errs[i] = tmw.Import(msgs[i])
 			}
 		}
@@ -84,30 +88,56 @@ func (tmw *TenantEnergyImporter) importEcId(ecId string, msgs []*model.MqttEnerg
 	}
 }
 
+// run is a sequence of messages of one ecId stored together. single: one message whose own energy entries
+// overlap; it is stored with Import, entry by entry, so its later entry wins as before.
+type run struct {
+	idx    []int
+	single bool
+}
+
 // splitRuns cuts the messages of one ecId into runs in which no metering point has two messages with
 // overlapping periods (Start inclusive, End exclusive as in a CR_MSG: back-to-back days share a run). A run is stored day by day; a later message for the same quarter hours must still
 // overwrite an earlier one, also where SplitEnergyByDay cut their days differently (after a DST change the
 // days of a longer message start at 23:00).
-func splitRuns(msgs []*model.MqttEnergyMessage, idx []int) [][]int {
-	var runs [][]int
-	var run []int
+func splitRuns(msgs []*model.MqttEnergyMessage, idx []int) []run {
+	var runs []run
+	var cur run
 	periods := map[string][][2]int64{}
+	flush := func() {
+		if len(cur.idx) > 0 {
+			runs = append(runs, cur)
+		}
+		cur, periods = run{}, map[string][][2]int64{}
+	}
 	for _, i := range idx {
 		m := msgs[i]
 		mp := m.Meter.MeteringPoint
-		if overlapsAny(m.Energy, periods[mp]) {
-			runs = append(runs, run)
-			run, periods = nil, map[string][][2]int64{}
+		if selfOverlaps(m.Energy) {
+			flush()
+			runs = append(runs, run{idx: []int{i}, single: true})
+			continue
 		}
-		run = append(run, i)
+		if overlapsAny(m.Energy, periods[mp]) {
+			flush()
+		}
+		cur.idx = append(cur.idx, i)
 		for _, e := range m.Energy {
 			periods[mp] = append(periods[mp], [2]int64{e.Start, e.End})
 		}
 	}
-	if len(run) > 0 {
-		runs = append(runs, run)
-	}
+	flush()
 	return runs
+}
+
+func selfOverlaps(energy []model.MqttEnergy) bool {
+	for i := range energy {
+		for _, e := range energy[i+1:] {
+			if e.Start < energy[i].End && energy[i].Start < e.End {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func overlapsAny(energy []model.MqttEnergy, periods [][2]int64) bool {

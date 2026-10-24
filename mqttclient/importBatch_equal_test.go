@@ -78,6 +78,16 @@ func TestImportBatchMatchesImport(t *testing.T) {
 				periodMsg(c, model.CONSUMER_DIRECTION, vienna(2026, 10, 26), vienna(2026, 10, 29), small).Message(),
 			}
 		},
+	}, {
+		// One message with two entries of the same meter code: the later entry (the month) wins, as with Import.
+		name: "message with overlapping entries", from: vienna(2026, 10, 1), until: vienna(2026, 10, 31),
+		msgs: func() []*model.MqttEnergyMessage {
+			return []*model.MqttEnergyMessage{
+				periodMsg(b, model.CONSUMER_DIRECTION, vienna(2026, 10, 26), vienna(2026, 10, 28), small).Message(),
+				selfOverlappingMsg(a),
+				periodMsg(c, model.CONSUMER_DIRECTION, vienna(2026, 10, 27), vienna(2026, 10, 28), small).Message(),
+			}
+		},
 	}} {
 		t.Run(tc.name, func(t *testing.T) {
 			testsupport.UseTempPersistence(t)
