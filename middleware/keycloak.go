@@ -32,7 +32,7 @@ func NewKeycloakClient(issuer, clientID, clientSecret, issuerUrl string, client 
 	if err != nil {
 		return nil, err
 	}
-	kc.verifier = kc.oidc.Verifier(&oidc.Config{ClientID: clientID, SkipClientIDCheck: true})
+	kc.verifier = kc.oidc.Verifier(&oidc.Config{ClientID: clientID, SkipClientIDCheck: true, SupportedSigningAlgs: []string{oidc.RS256}})
 	return kc, nil
 }
 
