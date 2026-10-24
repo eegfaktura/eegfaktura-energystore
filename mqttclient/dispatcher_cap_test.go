@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -189,4 +190,101 @@ func TestReadMaxOpen(t *testing.T) {
 		}
 		assert.Equal(t, tc.want, readMaxOpen(v, tc.parallel), "%v parallel %d", tc.set, tc.parallel)
 	}
+}
+
+// closeOnce wraps an executor and records a second Close of the same executor.
+type closeOnce struct {
+	Executor
+	closed *atomic.Bool
+	double *atomic.Int32
+}
+
+func (e closeOnce) Close() {
+	if e.closed.Swap(true) {
+		e.double.Add(1)
+	}
+	e.Executor.Close()
+}
+
+// At the cap with no idle executor, the store of the tenant standing last in ready is closed; that tenant
+// keeps its place, gets its store again and its messages are processed and acked once.
+func TestDispatcherCapClosesStoreOfWaitingTenant(t *testing.T) {
+	releaseA := make(chan struct{})
+	open := make(chan struct{})
+	close(open)
+	started := make(chan string, 10)
+	c := &openCounter{}
+	var closes []string
+	var mu sync.Mutex
+	d := newCapDispatcher(t, 1, 1, c, func(tenant string) Executor {
+		release := open
+		if _, _, created := c.get(); tenant == "TE100001" && created == 1 {
+			release = releaseA // only A's first executor blocks
+		}
+		return closeLog{heldExecutor{release: release, started: started, tenant: tenant}, &mu, &closes}
+	})
+	a1, a2, b := laneMsg("TE100001", 1), laneMsg("TE100001", 2), laneMsg("TE100002", 1)
+	d.Submit(a1)
+	require.Equal(t, "TE100001", <-started)
+	d.Submit(a2) // A: ready with work after its batch, behind B
+	d.Submit(b)
+	close(releaseA)
+	awaitAcks(t, []*testsupport.Message{a1, a2, b})
+
+	for _, m := range []*testsupport.Message{a1, a2, b} {
+		assert.Equal(t, 1, m.Acks())
+	}
+	_, maxOpen, created := c.get()
+	assert.Equal(t, 1, maxOpen)
+	assert.Equal(t, 3, created, "A, B, A again")
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, []string{"TE100001", "TE100002"}, closes, "A closed while waiting in ready, then idle B")
+}
+
+type closeLog struct {
+	heldExecutor
+	mu     *sync.Mutex
+	closes *[]string
+}
+
+func (e closeLog) Close() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	*e.closes = append(*e.closes, e.tenant)
+}
+
+// Janitor (short idle time) and cap close at the same time: never more than maxOpen executors, none closed
+// twice or while running, every message acked once.
+func TestDispatcherJanitorAndCapTogether(t *testing.T) {
+	rec := &laneRecorder{sleep: time.Millisecond, batches: map[string][][]byte{}}
+	c := &openCounter{}
+	var double atomic.Int32
+	d := newTopicDispatcher(context.Background(), dispatcherConfig{parallel: 2, batchMax: 3, maxOpen: 2,
+		idleTimeout: 10 * time.Millisecond, newExecutor: func(tenant string) Executor {
+			c.add(1)
+			return countedExecutor{closeOnce{&fakeExecutor{tenant: tenant, rec: rec}, &atomic.Bool{}, &double}, c}
+		}})
+	t.Cleanup(d.Close)
+	var msgs []*testsupport.Message
+	for i := 0; i < 10; i++ {
+		for n := 0; n < 10; n++ {
+			m := laneMsg(fmt.Sprintf("TE10000%d", n), i)
+			msgs = append(msgs, m)
+			d.Submit(m)
+		}
+		time.Sleep(15 * time.Millisecond) // let the janitor close idle ones in between
+	}
+	awaitAcks(t, msgs)
+	d.Close()
+
+	for _, m := range msgs {
+		assert.Equal(t, 1, m.Acks())
+	}
+	cur, maxOpen, created := c.get()
+	assert.LessOrEqual(t, maxOpen, 2)
+	assert.Zero(t, cur)
+	assert.Greater(t, created, 10)
+	assert.Zero(t, double.Load(), "no executor closed twice")
+	assert.Empty(t, rec.snapshot().misuse)
 }
