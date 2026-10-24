@@ -241,9 +241,16 @@ func (d *TopicDispatcher) Close() {
 		}
 	}
 	d.mu.Unlock()
+	// In parallel: closing a store takes a few hundred ms, and up to all tenants' stores may be open.
+	var wg sync.WaitGroup
+	wg.Add(len(executors))
 	for _, e := range executors {
-		e.Close()
+		go func() {
+			defer wg.Done()
+			e.Close()
+		}()
 	}
+	wg.Wait()
 }
 
 func (d *TopicDispatcher) lane() {
