@@ -305,9 +305,9 @@ func (d *TopicDispatcher) janitor(ctx context.Context) {
 }
 
 // closeIdle closes the executors idle for idleTimeout, and the idle ones beyond the newest parallel after
-// minIdleClose, each in its
-// own goroutine (closing a store takes a few hundred ms; the lanes go on meanwhile). The tenant is busy while
-// its executor closes, so no lane runs it meanwhile.
+// minIdleClose: at most parallel per call, oldest first, so a tick does not flush the memtables of dozens of
+// stores at once. Each closes in its own goroutine (a few hundred ms); the tenant is busy meanwhile, so no
+// lane runs it.
 func (d *TopicDispatcher) closeIdle(now time.Time) {
 	d.mu.Lock()
 	var idle []*tenantQueue
@@ -318,7 +318,8 @@ func (d *TopicDispatcher) closeIdle(now time.Time) {
 	}
 	sort.Slice(idle, func(i, j int) bool { return idle[i].lastUsed.After(idle[j].lastUsed) })
 	var closing []*tenantQueue
-	for i, tq := range idle {
+	for i := len(idle) - 1; i >= 0 && len(closing) < d.cfg.parallel; i-- { // oldest first
+		tq := idle[i]
 		idleFor := now.Sub(tq.lastUsed)
 		if (i >= d.cfg.parallel && idleFor >= minIdleClose) || idleFor >= d.cfg.idleTimeout {
 			tq.busy = true

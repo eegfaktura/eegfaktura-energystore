@@ -134,3 +134,18 @@ func TestExecuteBatchStopsBetweenSteps(t *testing.T) {
 	}
 	assert.Positive(t, partial, "some stops fall between the messages' days")
 }
+
+// One janitor pass closes at most parallel idle executors.
+func TestCloseIdleAtMostParallelPerPass(t *testing.T) {
+	rec := &laneRecorder{}
+	d := newLaneDispatcher(t, 2, 50, time.Hour, rec)
+	for n := 0; n < 8; n++ {
+		m := laneMsg(fmt.Sprintf("TE10000%d", n), 0)
+		d.Submit(m)
+		awaitAcks(t, []*testsupport.Message{m})
+	}
+	d.closeIdle(time.Now().Add(2 * time.Hour)) // all idle for longer than idleTimeout
+	require.Eventually(t, func() bool { return rec.snapshot().closed >= 2 }, 5*time.Second, time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
+	assert.Equal(t, 2, rec.snapshot().closed)
+}
