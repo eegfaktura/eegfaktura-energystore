@@ -66,6 +66,12 @@ func EnergyReportV2(tenant, ecid string, participants []model.ParticipantReport,
 
 	var meta *model.RawSourceMeta
 	if meta, err = db.GetMeta(fmt.Sprintf("cpmeta/%d", 0)); err != nil {
+		// No meta record: no energy data was ever imported for the community. That is an empty
+		// report, not an error (web#191 mapped the 500 "Record doesn't exist" to one).
+		if errors.Is(err, ebow.ErrNotFound) {
+			response.Meta = []*model.CounterPointMeta{}
+			return response, nil
+		}
 		return nil, err
 	} else {
 		for _, m := range meta.CounterPoints {

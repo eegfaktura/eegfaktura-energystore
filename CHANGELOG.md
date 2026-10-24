@@ -32,6 +32,11 @@ this changelog highlights the changes relevant for overview and operations.
   non-positive value falls back to 512 MB with a warning (a limit of 0 would drop every message).
 
 ### Fixed
+- **Report of a community without any energy data: empty report instead of 500** (`POST /eeg/v2/{ecid}/report`).
+  Without any imported data the meta record `cpmeta/0` does not exist and the report answered
+  500 `{"error":"Record doesn't exist"}`. It now answers 200 with the same shape as a report without values: the
+  requested participants with zero sums, `"meta": []`, totals 0. Other errors still answer 500. eegfaktura-web
+  (web#191) handles both answers. Summary and billing-check already answered 200 without data.
 - **Raw data export without a meter list: no empty query targets** (`POST /query/rawdata` without `cps`). The target
   list of the community's metering points started with one empty entry per metering point. No effect on the
   answer: the duplicates were collapsed to one empty entry and no metering point has an empty name, so it was
