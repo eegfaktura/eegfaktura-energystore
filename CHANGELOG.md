@@ -60,6 +60,59 @@ this changelog highlights the changes relevant for overview and operations.
   Badger's directory lock until the restart. Without unreadable rows nothing changes.
 
 ### Changed
+- **CR_MSG import: batched per community, fair lanes for all tenants** (concept „Energiedaten gebündelt
+  importieren“). A large request (e.g. a month for 2,400 metering points) kept energystore busy for hours, because
+  every metering point and day read and wrote the rows of all metering points; meanwhile the messages of every
+  other tenant were stuck behind it (one dispatch loop for all tenants), and the burst afterwards opened hundreds
+  of stores (OOM kills). Now:
+  - the messages already queued for a tenant are imported together: per community and day the rows and the meta
+    record `cpmeta/0` are read and written once for the whole batch, no format change. Tests compare the stored
+    rows (as stored, including the length of the quality arrays) and the whole record `cpmeta/0` (ID, SourceIdx,
+    direction, periods) with the import message by message: they are equal. A batch is unpacked and imported
+    in parts of at most about `mqtt.maxDecompressedMB` of unpacked data each, so the limit per message still
+    bounds a batch: about twice the limit of unpacked JSON per lane (the decoded data on the heap is several
+    times that). Two differences that change bytes, not
+    values: when a day batch fails and its blocks are stored one by one, rows created then may be sized with
+    the counts of the whole batch (more trailing zeros); and a day block that spans two days after the DST change
+    rewrites the rows of both days, the other day's unchanged (the single import does the same);
+  - `import.parallel` lanes (env `ENERGYSTORE_IMPORT_PARALLEL`, default 4) import at the same time, each one batch
+    of at most `import.batchMax` messages of one tenant (env `ENERGYSTORE_IMPORT_BATCHMAX`, default 50); a tenant
+    with more work queues up again behind the others (round robin), so a large request no longer delays the daily
+    data of the other communities by more than one batch per lane. Receiving a message never waits for another
+    tenant;
+  - a store is closed 15 s after its tenant's last batch as before, or already 2 s after it when more than
+    `import.parallel` stores are idle (in the background, the lanes go on); a tenant waiting for its turn keeps
+    its store open, except at the limit below when no idle store is left: then the store of the tenant waiting
+    last is closed and opened again on its turn;
+  - **limit on open importers:** `import.maxOpen` (env `ENERGYSTORE_IMPORT_MAXOPEN`, default 32; a value below
+    `import.parallel` is raised to it with a warning) bounds the number of tenants with an open importer (one
+    being closed still counts). Memory is about 90–112 MB per such tenant, more for a tenant with several
+    communities (one store each) or while reports and exports hold the same stores open; it is not a hard
+    memory limit. At the limit a lane
+    closes the longest unused idle store first (about 0.3 s) or waits until one becomes idle: when many
+    communities deliver at once, their data takes longer instead of filling the memory. Local run (100
+    communities delivering every 6 s plus a month request of a large community, window 1000): at most 32 open
+    importers, peak heap about 4.5 GB, small messages wait up to about 15–20 s (p95), instead of 100 open stores
+    and about 10 GB without the limit;
+  - per message as before: the `cr_msg_history` reply only when all its days are stored, the same ERROR log line
+    otherwise, ack after processing (#19). A day that fails in a batch is stored again message by message, so only
+    the messages with that day are affected; a meta record error falls back to the message-by-message import.
+    After a panic in a batch its messages run one by one, so only the message that panics again is lost (acked,
+    no reply).
+  - The three values are read once at start; a missing, non-numeric or non-positive value falls back to the default
+    with a warning.
+  - **Release prerequisites (together with #19, manual ack), in prod and pilot, after reading out the current
+    values:**
+    - raise mosquitto's `max_inflight_messages` (proposal 1,000; default 20). With 20 unacknowledged messages at a
+      time the batches stay at one or two messages and the throughput depends on the window, not on the import.
+      The setting is global and applies to every client (it cannot be set for the energystore client only); for
+      the clients that acknowledge right away raising it changes nothing in practice;
+    - raise `max_queued_messages` (default 1000 per client) or set it to `0` (no limit): with the manual ack a
+      burst queues at the broker, and mosquitto drops messages beyond that limit silently.
+- **Fixed with it:** `Close` of the dispatcher could return before a worker had started and closed its store
+  (known-errors #41); it now returns after every store is closed. A running batch stops at its next step
+  (message, run of messages, day) instead of finishing (50 large messages could take longer than the pod's
+  grace period); its unfinished messages stay unacknowledged and mosquitto delivers them again.
 - Dependencies: `github.com/klauspost/compress` 1.18.0 → 1.18.7 (platform#181; Trivy CVE-2026-63209, HIGH),
   an indirect dependency of `badger/v4` (`badger/v4/table` uses its `s2`/`snappy` and `zstd` packages for block
   compression; same storage format within 1.18.x). Replaces Dependabot #76.
