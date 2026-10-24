@@ -197,14 +197,13 @@ func newTopicDispatcher(ctx context.Context, cfg dispatcherConfig) *TopicDispatc
 	return d
 }
 
-// readMaxOpen reads import.maxOpen; below parallel (every lane must be able to open its store) it falls back
-// to the default, or to parallel if that is larger.
+// readMaxOpen reads import.maxOpen; a value below parallel is raised to parallel (every lane must be able to
+// open its store).
 func readMaxOpen(v *viper.Viper, parallel int) int {
 	maxOpen := readPositiveInt(v, maxOpenKey, defaultMaxOpen)
 	if maxOpen < parallel {
-		fallback := max(defaultMaxOpen, parallel)
-		glog.Warningf("%s=%d is below %s=%d, using %d", maxOpenKey, maxOpen, parallelKey, parallel, fallback)
-		maxOpen = fallback
+		glog.Warningf("%s=%d is below %s=%d, using %d", maxOpenKey, maxOpen, parallelKey, parallel, parallel)
+		maxOpen = parallel
 	}
 	return maxOpen
 }

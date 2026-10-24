@@ -182,7 +182,7 @@ func TestReadMaxOpen(t *testing.T) {
 		set      any
 		parallel int
 		want     int
-	}{{nil, 4, 32}, {"10", 4, 10}, {"4", 4, 4}, {"3", 4, 32}, {"x", 4, 32}, {"0", 4, 32}, {"8", 40, 40}} {
+	}{{nil, 4, 32}, {"10", 4, 10}, {"4", 4, 4}, {"3", 4, 4}, {"x", 4, 32}, {"0", 4, 32}, {"8", 40, 40}, {nil, 40, 40}} {
 		v := viper.New()
 		if tc.set != nil {
 			v.Set(maxOpenKey, tc.set)

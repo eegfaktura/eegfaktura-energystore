@@ -82,8 +82,8 @@ this changelog highlights the changes relevant for overview and operations.
   - a store is closed 15 s after its tenant's last batch as before, or already 2 s after it when more than
     `import.parallel` stores are idle (in the background, the lanes go on); a tenant waiting for its turn keeps
     its store open;
-  - **hard limit on open stores:** `import.maxOpen` (env `ENERGYSTORE_IMPORT_MAXOPEN`, default 32, at least
-    `import.parallel`; a store being closed still counts). An open store holds about 90–112 MB, so the default
+  - **hard limit on open stores:** `import.maxOpen` (env `ENERGYSTORE_IMPORT_MAXOPEN`, default 32; a value below
+    `import.parallel` is raised to it with a warning; a store being closed still counts). An open store holds about 90–112 MB, so the default
     bounds the stores to about 3–3.5 GB, plus the working memory of the running imports. At the limit a lane
     closes the longest unused idle store first (about 0.3 s) or waits until one becomes idle: when many
     communities deliver at once, their data takes longer instead of filling the memory. Local run (100
