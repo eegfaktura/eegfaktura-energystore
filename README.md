@@ -78,9 +78,10 @@ there is not in git).
 Import settings: `import.parallel` (env `ENERGYSTORE_IMPORT_PARALLEL`, default 4) tenants are imported at the same
 time, each in batches of at most `import.batchMax` messages (env `ENERGYSTORE_IMPORT_BATCHMAX`, default 50); a
 tenant with more messages queues up again behind the other waiting tenants. `import.maxOpen` (env
-`ENERGYSTORE_IMPORT_MAXOPEN`, default 32; a value below `import.parallel` is raised to it) is a hard limit on the tenants whose stores
-are open for the import (a store being closed still counts): an open store holds about 90–112 MB, so the default
-bounds them to about 3–3.5 GB, plus the working memory of the running imports. At the limit a lane first closes
+`ENERGYSTORE_IMPORT_MAXOPEN`, default 32; a value below `import.parallel` is raised to it) bounds the number of tenants with an open importer
+(one being closed still counts). Memory is about 90–112 MB per such tenant, more for a tenant with several
+communities (one store each) or while reports and exports hold the same stores open; it is not a hard memory
+limit. At the limit a lane first closes
 the longest unused idle store (about 0.3 s) or waits until a store becomes idle, so many communities delivering
 at once are imported more slowly instead of filling the memory. All three are read once at start.
 
