@@ -328,7 +328,7 @@ func (d *TopicDispatcher) closeIdle(now time.Time) {
 	}
 	d.mu.Unlock()
 
-	// The callers (lanes, janitor) still hold their own count, so Close's Wait cannot have returned.
+	// The caller (the janitor) still holds its own count, so Close's Wait cannot have returned.
 	d.wg.Add(len(closing))
 	for _, tq := range closing {
 		go d.closeExecutor(tq, now.Sub(tq.lastUsed))
