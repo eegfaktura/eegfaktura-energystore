@@ -9,6 +9,20 @@ this changelog highlights the changes relevant for overview and operations.
 ## [Unreleased]
 
 ### Security
+- **Bearer tokens: RS256 only** (platform#191, as backend#99). Both go-oidc verifiers took the allowed signing
+  algorithms from the Keycloak discovery (HS* and `none` were already dropped); they now accept RS256 only, as
+  required.
+  - App verifier (`GQLProtect` and the bearer-protected REST routes): a client-supplied bearer token signed with
+    RS384/RS512/PS*/ES*/EdDSA under a realm key was accepted; it is now rejected (401).
+  - API verifier (`ProtectApi`): it only checks the ID token the service fetches itself via password grant, so a
+    client cannot choose its algorithm. Effect: if the ID-token signature algorithm of the api client in Keycloak
+    were ever set to something other than RS256, every `ProtectApi` call would fail with 403.
+  - Logins are not affected. As of 2026-10-23 the public JWKS of Prod/Pilot (login.eegfaktura.at) and Dev hold
+    exactly one signing key (RS256), and the realm sets no different ID-token algorithm. If a realm ever got an
+    active non-RS256 signing key (e.g. on key rotation), logins would fail with 401/403.
+  - Tests also cover HS256 signed with the realm's public key (PEM and DER) and `alg=none`: rejected.
+  - The `middleware` package now has tests (fake OIDC provider, no live Keycloak) and runs in the unit-test list
+    of `pr-checks.yml` and `docker-image.yml`.
 - **CR_MSG: unpacking is limited** (platform#181). An energy data message from MQTT was unpacked completely into
   memory; a small but highly compressed payload could have filled the memory of the pod. It is now unpacked up to
   `mqtt.maxDecompressedMB` (env `ENERGYSTORE_MQTT_MAXDECOMPRESSEDMB`, default 512 MB); a larger one is logged as
