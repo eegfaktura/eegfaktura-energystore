@@ -66,7 +66,7 @@ func corruptMeta(t *testing.T, dir, tenant, ecId string) {
 
 // executeOne runs one message through the dispatcher's batch execution (execute, recover, ack).
 func executeOne(executor Executor, msg mqtt.Message) {
-	executeBatch(ackTenant, executor, []mqtt.Message{msg})
+	executeBatch(context.Background(), ackTenant, executor, []mqtt.Message{msg})
 }
 
 func TestStreamerDisablesAutoAck(t *testing.T) {
@@ -152,9 +152,12 @@ func TestWorkerAcksStoreErrorWithoutReply(t *testing.T) {
 
 type panicExecutor struct{ executed bool }
 
-func (p *panicExecutor) Execute(mqtt.Message)        { p.executed = true; panic("boom") }
-func (p *panicExecutor) ExecuteBatch([]mqtt.Message) { p.executed = true; panic("boom") }
-func (p *panicExecutor) Close()                      {}
+func (p *panicExecutor) Execute(mqtt.Message) { p.executed = true; panic("boom") }
+func (p *panicExecutor) ExecuteBatch(context.Context, []mqtt.Message) []bool {
+	p.executed = true
+	panic("boom")
+}
+func (p *panicExecutor) Close() {}
 
 // A panic is recovered and the message acked afterwards, so it does not crash the service again
 // after every restart.
@@ -217,13 +220,13 @@ type panicOn struct {
 	poison []byte
 }
 
-func (p panicOn) ExecuteBatch(msgs []mqtt.Message) {
+func (p panicOn) ExecuteBatch(ctx context.Context, msgs []mqtt.Message) []bool {
 	for _, m := range msgs {
 		if string(m.Payload()) == string(p.poison) {
 			panic("boom")
 		}
 	}
-	p.Executor.ExecuteBatch(msgs)
+	return p.Executor.ExecuteBatch(ctx, msgs)
 }
 
 // A panic in a batch costs only the message that panics: after it, the batch runs message by message; the
@@ -240,7 +243,7 @@ func TestBatchPanicLosesOnlyThatMessage(t *testing.T) {
 		m := testsupport.CrMsgMessage(ackTenant, ackCrMsg(ackEcId, fmt.Sprintf("AT00300000000000000000000000000%02d", i)).Payload(t))
 		batch, msgs = append(batch, m), append(msgs, m)
 	}
-	executeBatch(ackTenant, panicOn{Executor: imp, poison: msgs[2].Body}, batch)
+	executeBatch(context.Background(), ackTenant, panicOn{Executor: imp, poison: msgs[2].Body}, batch)
 
 	assert.Len(t, client.PublishedMessages(), 4)
 	for i, m := range msgs {

@@ -1,6 +1,7 @@
 package mqttclient
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sort"
@@ -13,23 +14,38 @@ import (
 	"github.com/golang/glog"
 )
 
+// errStopped: the import of the message was stopped because the dispatcher closes; it stays unacked and
+// mosquitto delivers it again (the import is idempotent).
+var errStopped = errors.New("import stopped, energystore shuts down")
+
 // ExecuteBatch decodes, stores and confirms a batch of CR_MSG of this tenant. The day blocks of all messages
 // of an ecId are stored together, one store.StoreDayBatch per day. Outcome, log line and cr_msg_history reply
-// are per message as in Execute; the caller acks every message after ExecuteBatch returns (#19).
-func (tmw *TenantEnergyImporter) ExecuteBatch(msgs []mqtt.Message) {
+// are per message as in Execute. It returns which messages were processed; the caller acks those (#19).
+// When ctx ends it stops between messages, runs and days; the messages not finished by then are not.
+func (tmw *TenantEnergyImporter) ExecuteBatch(ctx context.Context, msgs []mqtt.Message) []bool {
 	monitor := time.Now()
+	finished := make([]bool, len(msgs))
 	data := make([]*model.MqttEnergyMessage, 0, len(msgs))
-	for _, msg := range msgs {
+	origin := make([]int, 0, len(msgs))
+	for i, msg := range msgs {
 		d := decodeMessage(msg.Payload())
 		if d == nil {
 			glog.Errorf("Data without content. tenant=%s", tmw.Tenant)
+			finished[i] = true
 			continue
 		}
 		data = append(data, d)
+		origin = append(origin, i)
 	}
 
-	errs := tmw.ImportBatch(data)
+	errs := tmw.ImportBatch(ctx, data)
 	for i, d := range data {
+		if errs[i] == errStopped {
+			glog.Infof("%v, message not acked: tenant=%s ecId=%s meteringPoint=%s conversationId=%s",
+				errs[i], tmw.Tenant, d.EcId, d.Meter.MeteringPoint, d.ConversationId)
+			continue
+		}
+		finished[origin[i]] = true
 		if errs[i] != nil {
 			glog.Errorf("energy data not stored, no cr_msg_history reply: %v tenant=%s ecId=%s meteringPoint=%s conversationId=%s",
 				errs[i], tmw.Tenant, d.EcId, d.Meter.MeteringPoint, d.ConversationId)
@@ -38,6 +54,7 @@ func (tmw *TenantEnergyImporter) ExecuteBatch(msgs []mqtt.Message) {
 		tmw.streamer.SendMessage(tmw.Tenant, d)
 	}
 	glog.V(3).Infof("Execution of %d messages finished in %d ms (%v)", len(msgs), time.Since(monitor).Milliseconds(), tmw.Tenant)
+	return finished
 }
 
 // ImportBatch stores the messages and returns the error of each one (nil: stored), with the same errors as
@@ -46,7 +63,8 @@ func (tmw *TenantEnergyImporter) ExecuteBatch(msgs []mqtt.Message) {
 //     error only reaches the messages that have it.
 //   - A meta record error (store.ErrMetaRecord) hands the unfinished messages of that ecId to Import, which
 //     reports it per message as before.
-func (tmw *TenantEnergyImporter) ImportBatch(msgs []*model.MqttEnergyMessage) []error {
+//   - When ctx ends, the messages not finished by then get errStopped.
+func (tmw *TenantEnergyImporter) ImportBatch(ctx context.Context, msgs []*model.MqttEnergyMessage) []error {
 	errs := make([]error, len(msgs))
 	var ecIds []string
 	byEcId := map[string][]int{}
@@ -57,12 +75,26 @@ func (tmw *TenantEnergyImporter) ImportBatch(msgs []*model.MqttEnergyMessage) []
 		byEcId[m.EcId] = append(byEcId[m.EcId], i)
 	}
 	for _, ecId := range ecIds {
-		tmw.importEcId(ecId, msgs, byEcId[ecId], errs)
+		tmw.importEcId(ctx, ecId, msgs, byEcId[ecId], errs)
 	}
 	return errs
 }
 
-func (tmw *TenantEnergyImporter) importEcId(ecId string, msgs []*model.MqttEnergyMessage, idx []int, errs []error) {
+// importOne is Import, or errStopped once ctx has ended.
+func (tmw *TenantEnergyImporter) importOne(ctx context.Context, msg *model.MqttEnergyMessage) error {
+	if ctx.Err() != nil {
+		return errStopped
+	}
+	return tmw.Import(msg)
+}
+
+func (tmw *TenantEnergyImporter) importEcId(ctx context.Context, ecId string, msgs []*model.MqttEnergyMessage, idx []int, errs []error) {
+	if ctx.Err() != nil {
+		for _, i := range idx {
+			errs[i] = errStopped
+		}
+		return
+	}
 	st, err := tmw.ensureDb(ecId)
 	if err != nil {
 		for _, i := range idx {
@@ -72,19 +104,21 @@ func (tmw *TenantEnergyImporter) importEcId(ecId string, msgs []*model.MqttEnerg
 	}
 	runs := splitRuns(msgs, idx)
 	for r, run := range runs {
-		if run.single {
-			errs[run.idx[0]] = tmw.Import(msgs[run.idx[0]])
-			continue
-		}
-		if tmw.importRun(st, msgs, run.idx, errs) {
-			continue
-		}
-		for _, rest := range runs[r+1:] {
-			for _, i := range rest.idx {
-				errs[i] = tmw.Import(msgs[i])
+		switch {
+		case ctx.Err() != nil:
+			for _, i := range run.idx {
+				errs[i] = errStopped
 			}
+		case run.single:
+			errs[run.idx[0]] = tmw.Import(msgs[run.idx[0]])
+		case !tmw.importRun(ctx, st, msgs, run.idx, errs):
+			for _, rest := range runs[r+1:] {
+				for _, i := range rest.idx {
+					errs[i] = tmw.importOne(ctx, msgs[i])
+				}
+			}
+			return
 		}
-		return
 	}
 }
 
@@ -152,8 +186,9 @@ func overlapsAny(energy []model.MqttEnergy, periods [][2]int64) bool {
 }
 
 // importRun stores the messages of one run, day by day in ascending order. It returns false after a meta
-// record error; the unfinished messages of the run have then been imported one by one.
-func (tmw *TenantEnergyImporter) importRun(st *ebow.BowStorage, msgs []*model.MqttEnergyMessage, run []int, errs []error) bool {
+// record error; the unfinished messages of the run have then been imported one by one. When ctx ends it
+// stops before the next day; the unfinished messages get errStopped.
+func (tmw *TenantEnergyImporter) importRun(ctx context.Context, st *ebow.BowStorage, msgs []*model.MqttEnergyMessage, run []int, errs []error) bool {
 	type day struct {
 		blocks []store.DayBlock
 		owners []int // message index per block
@@ -207,8 +242,9 @@ func (tmw *TenantEnergyImporter) importRun(st *ebow.BowStorage, msgs []*model.Mq
 	}
 	sort.Slice(keys, func(a, b int) bool { return keys[a] < keys[b] })
 
+	stopped := false
 	for _, k := range keys {
-		if !metaOk {
+		if stopped = ctx.Err() != nil; stopped || !metaOk {
 			break
 		}
 		if metaOk = tmw.storeDay(st, days[k].blocks, days[k].owners, pending, msgErrs); !metaOk {
@@ -216,11 +252,14 @@ func (tmw *TenantEnergyImporter) importRun(st *ebow.BowStorage, msgs []*model.Mq
 		}
 	}
 	for _, i := range run {
-		if !metaOk && pending[i] > 0 {
-			errs[i] = tmw.Import(msgs[i])
-			continue
+		switch {
+		case pending[i] > 0 && stopped:
+			errs[i] = errStopped
+		case pending[i] > 0 && !metaOk:
+			errs[i] = tmw.importOne(ctx, msgs[i])
+		default:
+			errs[i] = msgErrs[i].err()
 		}
-		errs[i] = msgErrs[i].err()
 	}
 	return metaOk
 }

@@ -1,6 +1,7 @@
 package mqttclient
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -54,7 +55,7 @@ func TestExecuteBatchRepliesPerStoredMessage(t *testing.T) {
 	batch := batchOf(t, ackTenant, ackCrMsg(ackEcId, meters[0]), ackCrMsg(ackEcId, meters[1]))
 	batch = append(batch, testsupport.CrMsgMessage(ackTenant, []byte("not base64 %%%")))
 	batch = append(batch, batchOf(t, ackTenant, ackCrMsg(ackEcId, meters[2]))...)
-	imp.ExecuteBatch(batch)
+	imp.ExecuteBatch(context.Background(), batch)
 
 	pub := client.PublishedMessages()
 	require.Len(t, pub, 3)
@@ -87,7 +88,7 @@ func TestExecuteBatchDayErrorOnlyAffectsThatDay(t *testing.T) {
 		periodMsg(day2, model.CONSUMER_DIRECTION, ackDay.AddDate(0, 0, 1), ackDay.AddDate(0, 0, 2), one).Message(),
 		periodMsg(both, model.CONSUMER_DIRECTION, ackDay, ackDay.AddDate(0, 0, 3), one).Message(),
 	}
-	errs := imp.ImportBatch(msgs)
+	errs := imp.ImportBatch(context.Background(), msgs)
 	assert.NoError(t, errs[0])
 	for _, i := range []int{1, 2} {
 		require.Error(t, errs[i], "message %d", i)
@@ -98,7 +99,7 @@ func TestExecuteBatchDayErrorOnlyAffectsThatDay(t *testing.T) {
 	assert.Len(t, ackStored(t, ackTenant, ackEcId, day1), 96)
 	assert.Len(t, ackStored(t, ackTenant, ackEcId, both), 96, "day 1 of the three-day message is stored")
 
-	imp.ExecuteBatch(batchOf(t, ackTenant,
+	imp.ExecuteBatch(context.Background(), batchOf(t, ackTenant,
 		periodMsg(day1, model.CONSUMER_DIRECTION, ackDay, ackDay.AddDate(0, 0, 1), one),
 		periodMsg(day2, model.CONSUMER_DIRECTION, ackDay.AddDate(0, 0, 1), ackDay.AddDate(0, 0, 2), one)))
 	pub := client.PublishedMessages()
@@ -118,13 +119,13 @@ func TestImportBatchMetaErrorPerMessage(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		msgs = append(msgs, ackCrMsg(ackEcId, fmt.Sprintf("AT00300000000000000000000000000%02d", i)).Message())
 	}
-	for i, err := range imp.ImportBatch(msgs) {
+	for i, err := range imp.ImportBatch(context.Background(), msgs) {
 		require.Error(t, err, "message %d", i)
 		assert.True(t, errors.Is(err, store.ErrMetaRecord), "message %d: %v", i, err)
 		var ie *importErrors
 		require.True(t, errors.As(err, &ie))
 		assert.Len(t, ie.errs, 1, "as Import: one error, no further day tried")
 	}
-	imp.ExecuteBatch(batchOf(t, ackTenant, ackCrMsg(ackEcId, "AT0030000000000000000000000000001")))
+	imp.ExecuteBatch(context.Background(), batchOf(t, ackTenant, ackCrMsg(ackEcId, "AT0030000000000000000000000000001")))
 	assert.Empty(t, client.PublishedMessages())
 }

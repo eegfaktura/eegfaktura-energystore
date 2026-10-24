@@ -50,9 +50,11 @@ type fakeExecutor struct {
 	n       int // batches, only touched by the lane running this executor
 }
 
-func (f *fakeExecutor) Execute(msg mqtt.Message) { f.ExecuteBatch([]mqtt.Message{msg}) }
+func (f *fakeExecutor) Execute(msg mqtt.Message) {
+	f.ExecuteBatch(context.Background(), []mqtt.Message{msg})
+}
 
-func (f *fakeExecutor) ExecuteBatch(msgs []mqtt.Message) {
+func (f *fakeExecutor) ExecuteBatch(_ context.Context, msgs []mqtt.Message) []bool {
 	r := f.rec
 	r.mu.Lock()
 	if f.running.Add(1) > 1 {
@@ -78,6 +80,15 @@ func (f *fakeExecutor) ExecuteBatch(msgs []mqtt.Message) {
 	if r.panicEvery > 0 && f.n%r.panicEvery == 0 {
 		panic("boom")
 	}
+	return allTrue(len(msgs))
+}
+
+func allTrue(n int) []bool {
+	r := make([]bool, n)
+	for i := range r {
+		r[i] = true
+	}
+	return r
 }
 
 func (f *fakeExecutor) Close() {

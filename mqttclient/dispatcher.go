@@ -18,8 +18,9 @@ type TagValue struct {
 
 type Executor interface {
 	Execute(msg mqtt.Message)
-	// ExecuteBatch processes messages of one tenant in their order (TopicDispatcher).
-	ExecuteBatch(msgs []mqtt.Message)
+	// ExecuteBatch processes messages of one tenant in their order (TopicDispatcher) and returns which of
+	// them it finished; after ctx ends it may leave the rest unfinished (not acked, redelivered).
+	ExecuteBatch(ctx context.Context, msgs []mqtt.Message) []bool
 	Close()
 }
 
@@ -120,6 +121,7 @@ type TopicDispatcher struct {
 	ready   []*tenantQueue
 	closed  bool
 
+	ctx  context.Context // ends with Close; a running batch stops at its next step
 	stop context.CancelFunc
 	wg   sync.WaitGroup
 }
@@ -157,7 +159,7 @@ func NewTopicDispatcher(ctx context.Context, topic string, streamer *MQTTStreame
 
 func newTopicDispatcher(ctx context.Context, cfg dispatcherConfig) *TopicDispatcher {
 	ctx, cancel := context.WithCancel(ctx)
-	d := &TopicDispatcher{cfg: cfg, tenants: map[string]*tenantQueue{}, stop: cancel}
+	d := &TopicDispatcher{cfg: cfg, tenants: map[string]*tenantQueue{}, ctx: ctx, stop: cancel}
 	d.work = sync.NewCond(&d.mu)
 	glog.Infof("Start TopicDispatcher with %d lanes, batches of at most %d messages", cfg.parallel, cfg.batchMax)
 
@@ -220,8 +222,8 @@ func (d *TopicDispatcher) markReady(tq *tenantQueue) {
 	d.work.Signal()
 }
 
-// Close stops taking messages, lets the lanes finish their current batch and closes every executor. It
-// returns when all of that is done. Queued messages are not processed and stay unacked.
+// Close stops taking messages, stops the running batches at their next step (message, run or day) and closes
+// every executor. It returns when all of that is done. Unfinished and queued messages stay unacked.
 func (d *TopicDispatcher) Close() {
 	d.stop()
 	d.wg.Wait()
@@ -266,7 +268,7 @@ func (d *TopicDispatcher) lane() {
 		executor := tq.executor
 		d.mu.Unlock()
 
-		executeBatch(tq.tenant, executor, batch)
+		executeBatch(d.ctx, tq.tenant, executor, batch)
 
 		d.mu.Lock()
 		tq.busy = false
@@ -344,30 +346,38 @@ func (d *TopicDispatcher) closeExecutor(tq *tenantQueue, idle time.Duration) {
 //
 // Ack (#19): jede Nachricht des Buendels genau einmal, erst wenn sie verarbeitet ist, bei Erfolg wie bei
 // Fehler und auch nach einer Panic (sonst stellte der Broker die Nachricht nach jedem Neustart wieder zu).
-// Nicht geackt bleibt nur, was bei Absturz, OOM oder Shutdown noch nicht fertig war; das stellt mosquitto
-// beim naechsten Verbinden erneut zu.
-func executeBatch(tenant string, executor Executor, batch []mqtt.Message) {
-	defer func() {
-		for _, msg := range batch {
+// Nicht geackt bleibt nur, was bei Absturz, OOM oder Shutdown noch nicht fertig war (beim Shutdown bricht
+// ExecuteBatch zwischen Nachrichten, Laeufen und Tagen ab); das stellt mosquitto beim naechsten Verbinden
+// erneut zu.
+func executeBatch(ctx context.Context, tenant string, executor Executor, batch []mqtt.Message) {
+	finished, ok := runRecovered(ctx, tenant, executor, batch)
+	switch {
+	case !ok && len(batch) == 1:
+		finished = []bool{true} // the message that panics is acked
+	case !ok:
+		finished = make([]bool, len(batch))
+		for i := range batch {
+			if ctx.Err() != nil {
+				break
+			}
+			f, ok := runRecovered(ctx, tenant, executor, batch[i:i+1])
+			finished[i] = !ok || f[0]
+		}
+	}
+	for i, msg := range batch {
+		if finished[i] {
 			msg.Ack()
 		}
-	}()
-	if runRecovered(tenant, executor, batch) || len(batch) == 1 {
-		return
-	}
-	for i := range batch {
-		runRecovered(tenant, executor, batch[i:i+1])
 	}
 }
 
 // runRecovered runs ExecuteBatch and reports false after a recovered panic.
-func runRecovered(tenant string, executor Executor, batch []mqtt.Message) (ok bool) {
+func runRecovered(ctx context.Context, tenant string, executor Executor, batch []mqtt.Message) (finished []bool, ok bool) {
 	defer func() {
 		if r := recover(); r != nil {
 			glog.Errorf("panic while executing message for tenant=%s: %v (%d messages)", tenant, r, len(batch))
 			ok = false
 		}
 	}()
-	executor.ExecuteBatch(batch)
-	return true
+	return executor.ExecuteBatch(ctx, batch), true
 }

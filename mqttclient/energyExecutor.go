@@ -3,6 +3,7 @@ package mqttclient
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -86,7 +87,7 @@ func (tmw *TenantEnergyImporter) ensureDb(ecId string) (*ebow.BowStorage, error)
 //
 // Only a message whose processing did not finish (crash, OOM, shutdown) stays unacked and is redelivered.
 func (tmw *TenantEnergyImporter) Execute(msg mqtt.Message) {
-	tmw.ExecuteBatch([]mqtt.Message{msg})
+	tmw.ExecuteBatch(context.Background(), []mqtt.Message{msg})
 }
 
 const daySeconds = int64(24 * 60 * 60 * 1000)

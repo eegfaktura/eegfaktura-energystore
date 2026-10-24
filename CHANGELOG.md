@@ -89,7 +89,9 @@ this changelog highlights the changes relevant for overview and operations.
     20 unacknowledged messages at a time the batches stay at one or two messages and the throughput depends on the
     window, not on the import.
 - **Fixed with it:** `Close` of the dispatcher could return before a worker had started and closed its store
-  (known-errors #41); it now returns after every lane finished its batch and every store is closed.
+  (known-errors #41); it now returns after every store is closed. A running batch stops at its next step
+  (message, run of messages, day) instead of finishing (50 large messages could take longer than the pod's
+  grace period); its unfinished messages stay unacknowledged and mosquitto delivers them again.
 - Dependencies: `github.com/klauspost/compress` 1.18.0 → 1.18.7 (platform#181; Trivy CVE-2026-63209, HIGH),
   an indirect dependency of `badger/v4` (`badger/v4/table` uses its `s2`/`snappy` and `zstd` packages for block
   compression; same storage format within 1.18.x). Replaces Dependabot #76.

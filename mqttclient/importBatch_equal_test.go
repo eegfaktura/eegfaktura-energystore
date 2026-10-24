@@ -1,6 +1,7 @@
 package mqttclient
 
 import (
+	"context"
 	"encoding/json"
 	"sort"
 	"strings"
@@ -93,7 +94,7 @@ func TestImportBatchMatchesImport(t *testing.T) {
 			testsupport.UseTempPersistence(t)
 			batched := NewTenantEnergyImporter("TE100001", &MQTTStreamer{client: testsupport.NewFakeClient()})
 			single := NewTenantEnergyImporter("TE100002", &MQTTStreamer{client: testsupport.NewFakeClient()})
-			for i, err := range batched.ImportBatch(tc.msgs()) {
+			for i, err := range batched.ImportBatch(context.Background(), tc.msgs()) {
 				require.NoError(t, err, "message %d", i)
 			}
 			for i, m := range tc.msgs() {
