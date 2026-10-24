@@ -73,8 +73,8 @@ func (tmw *TenantEnergyImporter) ensureDb(ecId string) (*ebow.BowStorage, error)
 	return st, nil
 }
 
-// Execute decodes, stores and confirms one CR_MSG. The dispatcher runs ExecuteBatch, with the same outcome
-// per message, and acks the message after it returns (executeBatch), whatever the outcome (#19):
+// Execute decodes, stores and confirms one CR_MSG: ExecuteBatch with this one message, the path the
+// dispatcher takes. It acks the message after ExecuteBatch returns (executeBatch), whatever the outcome (#19):
 //   - stored: the cr_msg_history reply goes to the backend ("Energiedaten empfangen").
 //   - store error (open store, meta record, a corrupt row, Badger write; could succeed later): ERROR log,
 //     no reply. The data is not in the store, the gap shows in the check before billing (#148) and the
@@ -84,24 +84,9 @@ func (tmw *TenantEnergyImporter) ensureDb(ecId string) (*ebow.BowStorage, error)
 //   - undecodable payload (Base64, gzip, larger than mqtt.maxDecompressedMB, JSON): permanent, ERROR log,
 //     no reply.
 //
-// Only a message whose Execute did not finish (crash, OOM, shutdown) stays unacked and is redelivered.
+// Only a message whose processing did not finish (crash, OOM, shutdown) stays unacked and is redelivered.
 func (tmw *TenantEnergyImporter) Execute(msg mqtt.Message) {
-	data := decodeMessage(msg.Payload())
-	if data == nil {
-		glog.Errorf("Data without content. tenant=%s", tmw.Tenant)
-		return
-	}
-
-	monitor := time.Now()
-	glog.V(3).Infof("Execute Energy Data Message for Topic (%v)", tmw.Tenant)
-	err := tmw.Import(data)
-	if err != nil {
-		glog.Errorf("energy data not stored, no cr_msg_history reply: %v tenant=%s ecId=%s meteringPoint=%s conversationId=%s",
-			err, tmw.Tenant, data.EcId, data.Meter.MeteringPoint, data.ConversationId)
-		return
-	}
-	tmw.streamer.SendMessage(tmw.Tenant, data)
-	glog.V(3).Infof("Execution finished in %d ms (%v)", time.Since(monitor).Milliseconds(), tmw.Tenant)
+	tmw.ExecuteBatch([]mqtt.Message{msg})
 }
 
 const daySeconds = int64(24 * 60 * 60 * 1000)
