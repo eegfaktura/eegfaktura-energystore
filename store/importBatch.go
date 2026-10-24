@@ -15,6 +15,9 @@ import (
 type DayBlock struct {
 	MeteringPoint string
 	Energy        *model.MqttEnergy
+	// Counts, if set, are the consumer/producer counts StoreEnergyV2 would see for this block (from
+	// RegisterMeteringPoints over the messages in their order); nil: taken from the order of the batch.
+	Counts *model.CounterPointMetaInfo
 }
 
 // StoreDayBatch stores the day blocks of one store and one day with one read and one write of the rows and
@@ -61,8 +64,12 @@ func StoreDayBatch(db *ebow.BowStorage, blocks []DayBlock) error {
 		evenCreatedRows(created, b.Energy)
 		n := len(*resources)
 		// Rows a block creates are sized by the counts StoreEnergyV2 would see at this block.
+		c := counts[i]
+		if b.Counts != nil {
+			c = *b.Counts
+		}
 		resources, err = importEnergyValuesV2(db.GetTenant(), metaMeter, b.Energy, meta[b.MeteringPoint],
-			counts[i].ConsumerCount, counts[i].ProducerCount, resources, false)
+			c.ConsumerCount, c.ProducerCount, resources, false)
 		if err != nil {
 			return err
 		}
@@ -123,6 +130,18 @@ func resizeInts(s []int, n int) []int {
 	r := make([]int, n)
 	copy(r, s)
 	return r
+}
+
+// RegisterMeteringPoints registers the metering points of the blocks that cpmeta/0 does not know yet, in the
+// order of the blocks and with one write, and returns per block the counts after its metering point. With
+// the first block of every message in message order this assigns ID and SourceIdx as single imports of the
+// messages in that order would. Errors are wrapped as ErrMetaRecord.
+func RegisterMeteringPoints(db *ebow.BowStorage, blocks []DayBlock) ([]model.CounterPointMetaInfo, error) {
+	_, counts, err := registerBlocks(db, blocks)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrMetaRecord, err)
+	}
+	return counts, nil
 }
 
 // registerBlocks reads cpmeta/0 once and registers the metering points it does not know yet in one write,

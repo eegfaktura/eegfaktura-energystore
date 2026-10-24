@@ -128,22 +128,47 @@ func (tmw *TenantEnergyImporter) importRun(st *ebow.BowStorage, msgs []*model.Mq
 		blocks []store.DayBlock
 		owners []int // message index per block
 	}
-	days := map[int64]*day{}
-	pending := map[int]int{} // blocks per message not yet stored or failed
+	msgBlocks := make([][]store.DayBlock, len(run))
+	var firsts []store.DayBlock
 	msgErrs := map[int]*importErrors{}
-	for _, i := range run {
+	for r, i := range run {
 		msgErrs[i] = &importErrors{}
 		for e := range msgs[i].Energy {
 			blocks := SplitEnergyByDay(msgs[i].Energy[e])
 			for n := range blocks {
-				key := dayStart(blocks[n].Start)
-				if days[key] == nil {
-					days[key] = &day{}
-				}
-				days[key].blocks = append(days[key].blocks, store.DayBlock{MeteringPoint: msgs[i].Meter.MeteringPoint, Energy: &blocks[n]})
-				days[key].owners = append(days[key].owners, i)
-				pending[i]++
+				msgBlocks[r] = append(msgBlocks[r], store.DayBlock{MeteringPoint: msgs[i].Meter.MeteringPoint, Energy: &blocks[n]})
 			}
+		}
+		if len(msgBlocks[r]) > 0 {
+			firsts = append(firsts, msgBlocks[r][0])
+		}
+	}
+	// New metering points get ID and SourceIdx in message order, as Import message by message would give
+	// them, and every block sizes new rows with the counts of its message (not in day order).
+	counts, err := store.RegisterMeteringPoints(st, firsts)
+	metaOk := err == nil
+	if !metaOk {
+		glog.Errorf("Error storing Energy: %v (%d messages) tenant=%s", err, len(run), tmw.Tenant)
+	}
+
+	days := map[int64]*day{}
+	pending := map[int]int{} // blocks per message not yet stored or failed
+	f := 0
+	for r, i := range run {
+		var c *model.CounterPointMetaInfo
+		if metaOk && len(msgBlocks[r]) > 0 {
+			c = &counts[f]
+			f++
+		}
+		for _, b := range msgBlocks[r] {
+			b.Counts = c
+			key := dayStart(b.Energy.Start)
+			if days[key] == nil {
+				days[key] = &day{}
+			}
+			days[key].blocks = append(days[key].blocks, b)
+			days[key].owners = append(days[key].owners, i)
+			pending[i]++
 		}
 	}
 	keys := make([]int64, 0, len(days))
@@ -152,8 +177,10 @@ func (tmw *TenantEnergyImporter) importRun(st *ebow.BowStorage, msgs []*model.Mq
 	}
 	sort.Slice(keys, func(a, b int) bool { return keys[a] < keys[b] })
 
-	metaOk := true
 	for _, k := range keys {
+		if !metaOk {
+			break
+		}
 		if metaOk = tmw.storeDay(st, days[k].blocks, days[k].owners, pending, msgErrs); !metaOk {
 			break
 		}

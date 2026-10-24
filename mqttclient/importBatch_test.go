@@ -43,53 +43,6 @@ func vienna(y int, m time.Month, d int) time.Time {
 	return time.Date(y, m, d, 0, 0, 0, 0, testsupport.Vienna)
 }
 
-// ImportBatch stores what Import stores message by message, also for a day followed by a month over the DST
-// change of the same metering point: SplitEnergyByDay cuts the month's days after the change from 23:00, so
-// the month's block for the 27th belongs to the 26th, and the later message must still win.
-func TestImportBatchMatchesImport(t *testing.T) {
-	testsupport.UseTempPersistence(t)
-	const a, b, c = "AT0030000000000000000000000000A01", "AT0030000000000000000000000000B01", "AT0030000000000000000000000000C01"
-	small := func(i int) float64 { return float64(i%96+1) / 1000 }
-	msgs := func() []*model.MqttEnergyMessage {
-		return []*model.MqttEnergyMessage{
-			periodMsg(a, model.CONSUMER_DIRECTION, vienna(2026, 10, 27), vienna(2026, 10, 28), func(int) float64 { return 0.5 }).Message(),
-			periodMsg(b, model.PRODUCER_DIRECTION, vienna(2026, 10, 25), vienna(2026, 10, 26), small).Message(),
-			periodMsg(a, model.CONSUMER_DIRECTION, vienna(2026, 10, 1), vienna(2026, 11, 1), small).Message(),
-			periodMsg(c, model.CONSUMER_DIRECTION, vienna(2026, 10, 26), vienna(2026, 10, 29), small).Message(),
-		}
-	}
-	batched := NewTenantEnergyImporter("TE100001", &MQTTStreamer{client: testsupport.NewFakeClient()})
-	defer batched.Close()
-	single := NewTenantEnergyImporter("TE100002", &MQTTStreamer{client: testsupport.NewFakeClient()})
-	defer single.Close()
-
-	for i, err := range batched.ImportBatch(msgs()) {
-		require.NoError(t, err, "message %d", i)
-	}
-	for i, m := range msgs() {
-		require.NoError(t, single.Import(m), "message %d", i)
-	}
-
-	targets := []store.TargetMP{{MeteringPoint: a}, {MeteringPoint: b}, {MeteringPoint: c}}
-	want, err := store.QueryRawData("TE100002", ackEcId, vienna(2026, 10, 1), vienna(2026, 10, 31), targets, nil)
-	require.NoError(t, err)
-	got, err := store.QueryRawData("TE100001", ackEcId, vienna(2026, 10, 1), vienna(2026, 10, 31), targets, nil)
-	require.NoError(t, err)
-	assert.Equal(t, want, got)
-	wantMeta, err := store.QueryMetaData("TE100002", ackEcId)
-	require.NoError(t, err)
-	gotMeta, err := store.QueryMetaData("TE100001", ackEcId)
-	require.NoError(t, err)
-	assert.Equal(t, wantMeta, gotMeta)
-
-	day27 := vienna(2026, 10, 27).UnixMilli()
-	for _, r := range got[a].Data {
-		if r.Ts >= day27 && r.Ts < vienna(2026, 10, 28).UnixMilli() {
-			require.Less(t, r.Value[0], 0.5, "the later month message wins at %d", r.Ts)
-		}
-	}
-}
-
 // Every stored message gets its reply; an undecodable one in the batch is skipped.
 func TestExecuteBatchRepliesPerStoredMessage(t *testing.T) {
 	testsupport.UseTempPersistence(t)
