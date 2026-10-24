@@ -40,7 +40,7 @@ func (s *stoppingExecutor) ExecuteBatch(ctx context.Context, msgs []mqtt.Message
 // Close during a batch returns promptly; the batch's unfinished messages and the queued ones stay unacked.
 func TestDispatcherCloseStopsRunningBatch(t *testing.T) {
 	exec := &stoppingExecutor{release: make(chan struct{}), entered: make(chan int, 10)}
-	d := newTopicDispatcher(context.Background(), dispatcherConfig{parallel: 1, batchMax: 3, idleTimeout: time.Hour,
+	d := newTopicDispatcher(context.Background(), dispatcherConfig{parallel: 1, batchMax: 3, maxOpen: 32, idleTimeout: time.Hour,
 		newExecutor: func(string) Executor { return exec }})
 	var msgs []*testsupport.Message
 	for i := 0; i < 6; i++ {

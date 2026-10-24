@@ -81,14 +81,21 @@ this changelog highlights the changes relevant for overview and operations.
     tenant;
   - a store is closed 15 s after its tenant's last batch as before, or already 2 s after it when more than
     `import.parallel` stores are idle (in the background, the lanes go on); a tenant waiting for its turn keeps
-    its store open. The number of open stores therefore still grows with the number of tenants that deliver
-    within a few seconds (local run with 100 communities delivering every 6 s: up to 100 open stores);
+    its store open;
+  - **hard limit on open stores:** `import.maxOpen` (env `ENERGYSTORE_IMPORT_MAXOPEN`, default 32, at least
+    `import.parallel`; a store being closed still counts). An open store holds about 90–112 MB, so the default
+    bounds the stores to about 3–3.5 GB, plus the working memory of the running imports. At the limit a lane
+    closes the longest unused idle store first (about 0.3 s) or waits until one becomes idle: when many
+    communities deliver at once, their data takes longer instead of filling the memory. Local run (100
+    communities delivering every 6 s plus a month request of a large community, window 1000): at most 32 open
+    stores, peak heap about 4.5 GB, small messages wait up to about 15–20 s (p95), instead of 100 open stores
+    and about 10 GB without the limit;
   - per message as before: the `cr_msg_history` reply only when all its days are stored, the same ERROR log line
     otherwise, ack after processing (#19). A day that fails in a batch is stored again message by message, so only
     the messages with that day are affected; a meta record error falls back to the message-by-message import.
     After a panic in a batch its messages run one by one, so only the message that panics again is lost (acked,
     no reply).
-  - Both values are read once at start; a missing, non-numeric or non-positive value falls back to the default
+  - The three values are read once at start; a missing, non-numeric or non-positive value falls back to the default
     with a warning.
   - **Release prerequisites (together with #19, manual ack), in prod and pilot, after reading out the current
     values:**

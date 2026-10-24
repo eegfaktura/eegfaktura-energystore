@@ -2,7 +2,6 @@ package mqttclient
 
 import (
 	"context"
-	"sort"
 	"sync"
 	"time"
 
@@ -85,12 +84,15 @@ type TenantSubscriber struct {
 
 // Settings of the TopicDispatcher: import.parallel lanes import at the same time (env
 // ENERGYSTORE_IMPORT_PARALLEL), each one batch of at most import.batchMax messages of one tenant (env
-// ENERGYSTORE_IMPORT_BATCHMAX). Read once when the dispatcher starts.
+// ENERGYSTORE_IMPORT_BATCHMAX); at most import.maxOpen tenants have their stores open (env
+// ENERGYSTORE_IMPORT_MAXOPEN), at least parallel. Read once when the dispatcher starts.
 const (
 	parallelKey        = "import.parallel"
 	batchMaxKey        = "import.batchMax"
+	maxOpenKey         = "import.maxOpen"
 	defaultParallel    = 4
 	defaultBatchMax    = 50
+	defaultMaxOpen     = 32
 	idleDBCloseTimeout = 15 * time.Second
 	// minIdleClose: an idle executor beyond the newest parallel ones is closed only after this time, so a
 	// tenant that delivers every few seconds does not reopen its store (~0.3 s to close, then open) each time.
@@ -100,6 +102,7 @@ const (
 type dispatcherConfig struct {
 	parallel    int
 	batchMax    int
+	maxOpen     int
 	idleTimeout time.Duration
 	newExecutor func(tenant string) Executor
 }
@@ -115,12 +118,16 @@ type dispatcherConfig struct {
 //
 // Executors are created on demand and closed (with their stores) by the janitor after idleTimeout without
 // work, or after minIdleClose when more than parallel of them are idle. A tenant waiting in ready keeps its
-// store open.
+// store open. Hard cap: at most maxOpen executors exist (open or still closing: they hold their memory until
+// Close returns). A lane that needs a new one at the cap first closes the longest unused idle one (else the
+// one of the tenant last in ready) and waits for that close; if every open one is running, it waits.
 type TopicDispatcher struct {
 	cfg dispatcherConfig
 
 	mu      sync.Mutex
 	work    *sync.Cond // a tenant became ready, or the dispatcher stops
+	capFree *sync.Cond // an executor became idle or closed, or the dispatcher stops
+	open    int        // executors that exist (open or closing), at most cfg.maxOpen
 	tenants map[string]*tenantQueue
 	ready   []*tenantQueue
 	closed  bool
@@ -142,9 +149,12 @@ type tenantQueue struct {
 
 func NewTopicDispatcher(ctx context.Context, topic string, streamer *MQTTStreamer) *TopicDispatcher {
 	v := viper.GetViper()
+	parallel := readPositiveInt(v, parallelKey, defaultParallel)
+	maxOpen := readMaxOpen(v, parallel)
 	dispatcher := newTopicDispatcher(ctx, dispatcherConfig{
-		parallel:    readPositiveInt(v, parallelKey, defaultParallel),
+		parallel:    parallel,
 		batchMax:    readPositiveInt(v, batchMaxKey, defaultBatchMax),
+		maxOpen:     maxOpen,
 		idleTimeout: idleDBCloseTimeout,
 		newExecutor: func(tenant string) Executor { return NewTenantEnergyImporter(tenant, streamer) },
 	})
@@ -165,7 +175,9 @@ func newTopicDispatcher(ctx context.Context, cfg dispatcherConfig) *TopicDispatc
 	ctx, cancel := context.WithCancel(ctx)
 	d := &TopicDispatcher{cfg: cfg, tenants: map[string]*tenantQueue{}, ctx: ctx, stop: cancel}
 	d.work = sync.NewCond(&d.mu)
-	glog.Infof("Start TopicDispatcher with %d lanes, batches of at most %d messages", cfg.parallel, cfg.batchMax)
+	d.capFree = sync.NewCond(&d.mu)
+	glog.Infof("Start TopicDispatcher with %d lanes, batches of at most %d messages, at most %d open stores",
+		cfg.parallel, cfg.batchMax, cfg.maxOpen)
 
 	// wg.Add before the goroutines start, so Close cannot return before they ran (known-errors #41).
 	d.wg.Add(cfg.parallel + 2)
@@ -180,8 +192,21 @@ func newTopicDispatcher(ctx context.Context, cfg dispatcherConfig) *TopicDispatc
 		d.closed = true
 		d.mu.Unlock()
 		d.work.Broadcast()
+		d.capFree.Broadcast()
 	}()
 	return d
+}
+
+// readMaxOpen reads import.maxOpen; below parallel (every lane must be able to open its store) it falls back
+// to the default, or to parallel if that is larger.
+func readMaxOpen(v *viper.Viper, parallel int) int {
+	maxOpen := readPositiveInt(v, maxOpenKey, defaultMaxOpen)
+	if maxOpen < parallel {
+		fallback := max(defaultMaxOpen, parallel)
+		glog.Warningf("%s=%d is below %s=%d, using %d", maxOpenKey, maxOpen, parallelKey, parallel, fallback)
+		maxOpen = fallback
+	}
+	return maxOpen
 }
 
 // readPositiveInt falls back to def for a missing, non-numeric or non-positive value.
@@ -240,6 +265,7 @@ func (d *TopicDispatcher) Close() {
 			tq.executor = nil
 		}
 	}
+	d.open = 0
 	d.mu.Unlock()
 	// In parallel: closing a store takes a few hundred ms, and up to all tenants' stores may be open.
 	var wg sync.WaitGroup
@@ -257,22 +283,25 @@ func (d *TopicDispatcher) lane() {
 	defer d.wg.Done()
 	for {
 		d.mu.Lock()
-		for len(d.ready) == 0 && !d.closed {
+		tq := d.nextReady()
+		for tq == nil && !d.closed {
 			d.work.Wait()
+			tq = d.nextReady()
 		}
 		if d.closed {
 			d.mu.Unlock()
 			return
 		}
-		tq := d.ready[0]
-		d.ready[0] = nil
-		d.ready = d.ready[1:]
-		tq.isReady = false
+		tq.busy = true
+		if tq.executor == nil && !d.reserveOpen() {
+			tq.busy = false // closed while waiting at the cap; the messages stay unacked
+			d.mu.Unlock()
+			return
+		}
 		n := min(len(tq.queue), d.cfg.batchMax)
 		batch := append([]mqtt.Message(nil), tq.queue[:n]...)
 		clear(tq.queue[:n])
 		tq.queue = tq.queue[n:]
-		tq.busy = true
 		if tq.executor == nil {
 			tq.executor = d.cfg.newExecutor(tq.tenant)
 		}
@@ -286,69 +315,22 @@ func (d *TopicDispatcher) lane() {
 		tq.lastUsed = time.Now()
 		d.markReady(tq)
 		d.mu.Unlock()
+		d.capFree.Broadcast()
 	}
 }
 
-// janitor closes executors that became idle.
-func (d *TopicDispatcher) janitor(ctx context.Context) {
-	defer d.wg.Done()
-	ticker := time.NewTicker(min(time.Second, d.cfg.idleTimeout/2))
-	defer ticker.Stop()
-	for {
-		select {
-		case now := <-ticker.C:
-			d.closeIdle(now)
-		case <-ctx.Done():
-			return
+// nextReady takes the first ready tenant out of ready, skipping those whose executor is being closed (they
+// keep their place). Caller holds mu.
+func (d *TopicDispatcher) nextReady() *tenantQueue {
+	for i, tq := range d.ready {
+		if tq.busy {
+			continue
 		}
+		d.ready = append(d.ready[:i], d.ready[i+1:]...)
+		tq.isReady = false
+		return tq
 	}
-}
-
-// closeIdle closes the executors idle for idleTimeout, and the idle ones beyond the newest parallel after
-// minIdleClose: at most parallel per call, oldest first, so a tick does not flush the memtables of dozens of
-// stores at once. Each closes in its own goroutine (a few hundred ms); the tenant is busy meanwhile, so no
-// lane runs it.
-func (d *TopicDispatcher) closeIdle(now time.Time) {
-	d.mu.Lock()
-	var idle []*tenantQueue
-	for _, tq := range d.tenants {
-		if tq.executor != nil && !tq.busy && !tq.isReady {
-			idle = append(idle, tq)
-		}
-	}
-	sort.Slice(idle, func(i, j int) bool { return idle[i].lastUsed.After(idle[j].lastUsed) })
-	var closing []*tenantQueue
-	for i := len(idle) - 1; i >= 0 && len(closing) < d.cfg.parallel; i-- { // oldest first
-		tq := idle[i]
-		idleFor := now.Sub(tq.lastUsed)
-		if (i >= d.cfg.parallel && idleFor >= minIdleClose) || idleFor >= d.cfg.idleTimeout {
-			tq.busy = true
-			closing = append(closing, tq)
-		}
-	}
-	d.mu.Unlock()
-
-	// The caller (the janitor) still holds its own count, so Close's Wait cannot have returned.
-	d.wg.Add(len(closing))
-	for _, tq := range closing {
-		go d.closeExecutor(tq, now.Sub(tq.lastUsed))
-	}
-}
-
-func (d *TopicDispatcher) closeExecutor(tq *tenantQueue, idle time.Duration) {
-	defer d.wg.Done()
-	glog.Infof("No message received for %s. Close DB tenant=%s.", idle.Round(time.Second), tq.tenant)
-	tq.executor.Close()
-
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	tq.executor = nil
-	tq.busy = false
-	if len(tq.queue) == 0 {
-		delete(d.tenants, tq.tenant)
-	} else {
-		d.markReady(tq)
-	}
+	return nil
 }
 
 // executeBatch fuehrt ein Buendel von Nachrichten eines Mandanten aus. Eine Panic wird protokolliert

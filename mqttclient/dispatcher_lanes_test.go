@@ -103,7 +103,7 @@ func (f *fakeExecutor) Close() {
 func newLaneDispatcher(t *testing.T, parallel, batchMax int, idle time.Duration, rec *laneRecorder) *TopicDispatcher {
 	t.Helper()
 	rec.batches = map[string][][]byte{}
-	d := newTopicDispatcher(context.Background(), dispatcherConfig{parallel: parallel, batchMax: batchMax, idleTimeout: idle,
+	d := newTopicDispatcher(context.Background(), dispatcherConfig{parallel: parallel, batchMax: batchMax, maxOpen: 1000, idleTimeout: idle,
 		newExecutor: func(tenant string) Executor {
 			rec.mu.Lock()
 			rec.created++
