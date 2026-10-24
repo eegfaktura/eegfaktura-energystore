@@ -63,9 +63,9 @@ func corruptMeta(t *testing.T, dir, tenant, ecId string) {
 	require.NoError(t, db.Close())
 }
 
-func newAckWorker(executor Executor) *TenantWorker {
-	return &TenantWorker{tenant: ackTenant, JobChannel: make(chan mqtt.Message, 10), executor: executor,
-		ctx: context.Background(), wg: &sync.WaitGroup{}}
+// executeOne runs one message through the dispatcher's batch execution (execute, recover, ack).
+func executeOne(executor Executor, msg mqtt.Message) {
+	executeBatch(ackTenant, executor, []mqtt.Message{msg})
 }
 
 func TestStreamerDisablesAutoAck(t *testing.T) {
@@ -112,7 +112,7 @@ func TestWorkerAcksAfterStore(t *testing.T) {
 	var repliesAtAck int
 	msg.OnAck = func() { repliesAtAck = len(client.PublishedMessages()) }
 
-	newAckWorker(imp).execute(msg)
+	executeOne(imp, msg)
 
 	assert.Equal(t, 1, msg.Acks())
 	assert.Equal(t, 1, repliesAtAck, "reply (sent after the store) was already published at ack time")
@@ -127,7 +127,7 @@ func TestWorkerAcksPermanentFailure(t *testing.T) {
 	defer imp.Close()
 
 	msg := testsupport.CrMsgMessage(ackTenant, []byte("not base64 %%%"))
-	newAckWorker(imp).execute(msg)
+	executeOne(imp, msg)
 
 	assert.Equal(t, 1, msg.Acks())
 	assert.Empty(t, client.PublishedMessages())
@@ -143,7 +143,7 @@ func TestWorkerAcksStoreErrorWithoutReply(t *testing.T) {
 	defer imp.Close()
 
 	msg := testsupport.CrMsgMessage(ackTenant, ackCrMsg(ackEcId, ackMeter).Payload(t))
-	newAckWorker(imp).execute(msg)
+	executeOne(imp, msg)
 
 	assert.Equal(t, 1, msg.Acks())
 	assert.Empty(t, client.PublishedMessages())
@@ -151,8 +151,9 @@ func TestWorkerAcksStoreErrorWithoutReply(t *testing.T) {
 
 type panicExecutor struct{ executed bool }
 
-func (p *panicExecutor) Execute(mqtt.Message) { p.executed = true; panic("boom") }
-func (p *panicExecutor) Close()               {}
+func (p *panicExecutor) Execute(mqtt.Message)        { p.executed = true; panic("boom") }
+func (p *panicExecutor) ExecuteBatch([]mqtt.Message) { p.executed = true; panic("boom") }
+func (p *panicExecutor) Close()                      {}
 
 // A panic is recovered and the message acked afterwards, so it does not crash the service again
 // after every restart.
@@ -162,7 +163,7 @@ func TestWorkerAcksAfterPanic(t *testing.T) {
 	var executedAtAck bool
 	msg.OnAck = func() { executedAtAck = exec.executed }
 
-	assert.NotPanics(t, func() { newAckWorker(exec).execute(msg) })
+	assert.NotPanics(t, func() { executeOne(exec, msg) })
 	assert.Equal(t, 1, msg.Acks())
 	assert.True(t, executedAtAck)
 }

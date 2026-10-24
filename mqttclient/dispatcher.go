@@ -2,11 +2,13 @@ package mqttclient
 
 import (
 	"context"
+	"sort"
 	"sync"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/golang/glog"
+	"github.com/spf13/viper"
 )
 
 type TagValue struct {
@@ -16,6 +18,8 @@ type TagValue struct {
 
 type Executor interface {
 	Execute(msg mqtt.Message)
+	// ExecuteBatch processes messages of one tenant in their order (TopicDispatcher).
+	ExecuteBatch(msgs []mqtt.Message)
 	Close()
 }
 
@@ -74,48 +78,71 @@ type TopicValue struct {
 	Value []byte `json:"value"`
 }
 
-type TenantWorker struct {
-	tenant     string
-	JobChannel chan mqtt.Message
-	executor   Executor
-	ctx        context.Context
-	wg         *sync.WaitGroup
-}
-
 type TenantSubscriber struct {
 	receiver mqtt.MessageHandler
 }
 
+// Settings of the TopicDispatcher: import.parallel lanes import at the same time (env
+// ENERGYSTORE_IMPORT_PARALLEL), each one batch of at most import.batchMax messages of one tenant (env
+// ENERGYSTORE_IMPORT_BATCHMAX). Read once when the dispatcher starts.
+const (
+	parallelKey        = "import.parallel"
+	batchMaxKey        = "import.batchMax"
+	defaultParallel    = 4
+	defaultBatchMax    = 50
+	idleDBCloseTimeout = 15 * time.Second
+)
+
+type dispatcherConfig struct {
+	parallel    int
+	batchMax    int
+	idleTimeout time.Duration
+	newExecutor func(tenant string) Executor
+}
+
+// TopicDispatcher distributes the messages of all tenants fairly over a fixed number of lanes:
+//   - Submit (the MQTT callback) appends a message to its tenant's queue and returns; it never waits for
+//     another tenant.
+//   - A tenant with queued messages that is not running stands once in the FIFO list ready.
+//   - A lane takes the first ready tenant and runs one batch of its queue (at most batchMax messages, no
+//     waiting for more). If the tenant has more, it goes to the back of ready (round robin): a large
+//     request occupies one lane for one batch at a time, and every other waiting tenant comes in between.
+//   - A tenant never runs in two lanes at once: its order is kept and cpmeta/0 has one writer.
+//
+// Executors are created on demand and closed (with their stores) after idleTimeout without work, or earlier
+// when more than parallel of them are idle, so the open stores depend on the lanes, not on the number of
+// tenants that delivered.
 type TopicDispatcher struct {
-	Inbound  chan mqtt.Message
-	Finished chan bool
-	//workers  map[string]*TenantWorker
-	streamer   *MQTTStreamer
-	workers    sync.Map
-	ctx        context.Context
-	quit       chan struct{}
-	stopWorker chan string
-	wg         sync.WaitGroup
-	stop       context.CancelFunc
-	mu         *sync.RWMutex
+	cfg dispatcherConfig
+
+	mu      sync.Mutex
+	work    *sync.Cond // a tenant became ready, or the dispatcher stops
+	tenants map[string]*tenantQueue
+	ready   []*tenantQueue
+	closed  bool
+
+	stop context.CancelFunc
+	wg   sync.WaitGroup
+}
+
+// tenantQueue is guarded by TopicDispatcher.mu.
+type tenantQueue struct {
+	tenant   string
+	queue    []mqtt.Message
+	executor Executor // nil while closed
+	busy     bool     // a lane runs a batch, or the executor is being closed
+	isReady  bool     // stands in TopicDispatcher.ready
+	lastUsed time.Time
 }
 
 func NewTopicDispatcher(ctx context.Context, topic string, streamer *MQTTStreamer) *TopicDispatcher {
-	ctx, cancel := context.WithCancel(ctx)
-
-	dispatcher := &TopicDispatcher{
-		Inbound:  make(chan mqtt.Message),
-		Finished: make(chan bool),
-		//workers:  make(map[string]*TenantWorker),
-		workers:    sync.Map{},
-		ctx:        ctx,
-		quit:       make(chan struct{}),
-		stopWorker: make(chan string),
-		//wg:       sync.WaitGroup,
-		stop:     cancel,
-		mu:       &sync.RWMutex{},
-		streamer: streamer,
-	}
+	v := viper.GetViper()
+	dispatcher := newTopicDispatcher(ctx, dispatcherConfig{
+		parallel:    readPositiveInt(v, parallelKey, defaultParallel),
+		batchMax:    readPositiveInt(v, batchMaxKey, defaultBatchMax),
+		idleTimeout: idleDBCloseTimeout,
+		newExecutor: func(tenant string) Executor { return NewTenantEnergyImporter(tenant, streamer) },
+	})
 
 	sub := &TenantSubscriber{}
 	sub.receiver = func(client mqtt.Client, msg mqtt.Message) {
@@ -126,110 +153,203 @@ func NewTopicDispatcher(ctx context.Context, topic string, streamer *MQTTStreame
 		topic:    topic,
 		callback: sub.receiver,
 	})
-
-	go dispatcher.process()
 	return dispatcher
 }
 
-func (d *TopicDispatcher) process() {
-	for {
-		select {
-		case job := <-d.Inbound: // listen to a submitted job on WorkChannel
-			tenant := TopicType(job.Topic()).Tenant()
-			jobChan := d.getWorker(tenant) // pull out an available jobchannel from queue
-			jobChan <- job                 // submit the job on the available jobchannel
-		case <-d.quit:
-			return
-		case workerId := <-d.stopWorker:
-			d.putWorker(workerId)
-		}
+func newTopicDispatcher(ctx context.Context, cfg dispatcherConfig) *TopicDispatcher {
+	ctx, cancel := context.WithCancel(ctx)
+	d := &TopicDispatcher{cfg: cfg, tenants: map[string]*tenantQueue{}, stop: cancel}
+	d.work = sync.NewCond(&d.mu)
+	glog.Infof("Start TopicDispatcher with %d lanes, batches of at most %d messages", cfg.parallel, cfg.batchMax)
+
+	// wg.Add before the goroutines start, so Close cannot return before they ran (known-errors #41).
+	d.wg.Add(cfg.parallel + 2)
+	for i := 0; i < cfg.parallel; i++ {
+		go d.lane()
 	}
+	go d.janitor(ctx)
+	go func() {
+		defer d.wg.Done()
+		<-ctx.Done()
+		d.mu.Lock()
+		d.closed = true
+		d.mu.Unlock()
+		d.work.Broadcast()
+	}()
+	return d
 }
 
+// readPositiveInt falls back to def for a missing, non-numeric or non-positive value.
+func readPositiveInt(v *viper.Viper, key string, def int) int {
+	if !v.IsSet(key) {
+		return def
+	}
+	n := v.GetInt(key)
+	if n <= 0 {
+		glog.Warningf("%s=%q is not a positive number, using %d", key, v.GetString(key), def)
+		return def
+	}
+	return n
+}
+
+// Submit queues the message for its tenant. After Close it is dropped unacked: mosquitto delivers it again
+// when energystore reconnects.
 func (d *TopicDispatcher) Submit(job mqtt.Message) {
-	d.Inbound <- job
+	tenant := TopicType(job.Topic()).Tenant()
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.closed {
+		glog.Warningf("dispatcher closed, message not processed tenant=%s", tenant)
+		return
+	}
+	tq := d.tenants[tenant]
+	if tq == nil {
+		tq = &tenantQueue{tenant: tenant}
+		d.tenants[tenant] = tq
+	}
+	tq.queue = append(tq.queue, job)
+	d.markReady(tq)
 }
 
+// markReady puts a tenant with work at the back of ready, unless it is busy or stands there. Caller holds mu.
+func (d *TopicDispatcher) markReady(tq *tenantQueue) {
+	if tq.busy || tq.isReady || len(tq.queue) == 0 || d.closed {
+		return
+	}
+	tq.isReady = true
+	d.ready = append(d.ready, tq)
+	d.work.Signal()
+}
+
+// Close stops taking messages, lets the lanes finish their current batch and closes every executor. It
+// returns when all of that is done. Queued messages are not processed and stay unacked.
 func (d *TopicDispatcher) Close() {
-	close(d.quit)
 	d.stop()
 	d.wg.Wait()
-}
 
-func (d *TopicDispatcher) getWorker(tenant string) chan mqtt.Message {
-	//d.mu.RLock()
-	//defer d.mu.RUnlock()
-
-	//worker, ok := d.workers[tenant]
-	worker, ok := d.workers.Load(tenant)
-	if !ok {
-		worker = &TenantWorker{
-			tenant:     tenant,
-			JobChannel: make(chan mqtt.Message, 10),
-			executor:   NewTenantEnergyImporter(tenant, d.streamer),
-			ctx:        d.ctx,
-			wg:         &d.wg,
+	d.mu.Lock()
+	var executors []Executor
+	for _, tq := range d.tenants {
+		if tq.executor != nil {
+			executors = append(executors, tq.executor)
+			tq.executor = nil
 		}
-		go worker.(*TenantWorker).Run()
-		//d.workers[tenant] = worker
-		d.workers.Store(tenant, worker)
 	}
-	return worker.(*TenantWorker).JobChannel
-}
-
-func (d *TopicDispatcher) putWorker(workerId string) {
-	//d.mu.Lock()
-	//defer d.mu.Unlock()
-
-	//if w, ok := d.workers[workerId]; ok {
-	if w, ok := d.workers.Load(workerId); ok {
-		w.(*TenantWorker).executor.Close()
-		//delete(d.workers, workerId)
-		d.workers.Delete(workerId)
-		glog.Infof("Release worker %s.", workerId)
+	d.mu.Unlock()
+	for _, e := range executors {
+		e.Close()
 	}
 }
 
-func (worker *TenantWorker) Run() {
-	worker.wg.Add(1)
-	defer worker.wg.Done()
+func (d *TopicDispatcher) lane() {
+	defer d.wg.Done()
+	for {
+		d.mu.Lock()
+		for len(d.ready) == 0 && !d.closed {
+			d.work.Wait()
+		}
+		if d.closed {
+			d.mu.Unlock()
+			return
+		}
+		tq := d.ready[0]
+		d.ready[0] = nil
+		d.ready = d.ready[1:]
+		tq.isReady = false
+		n := min(len(tq.queue), d.cfg.batchMax)
+		batch := append([]mqtt.Message(nil), tq.queue[:n]...)
+		clear(tq.queue[:n])
+		tq.queue = tq.queue[n:]
+		tq.busy = true
+		if tq.executor == nil {
+			tq.executor = d.cfg.newExecutor(tq.tenant)
+		}
+		executor := tq.executor
+		d.mu.Unlock()
 
-	const idleDBCloseTimeout = 15 * time.Second
-	timer := time.NewTimer(idleDBCloseTimeout)
-	defer timer.Stop()
+		executeBatch(tq.tenant, executor, batch)
 
+		d.mu.Lock()
+		tq.busy = false
+		tq.lastUsed = time.Now()
+		d.markReady(tq)
+		d.mu.Unlock()
+		d.closeIdle(time.Now())
+	}
+}
+
+// janitor closes executors that became idle.
+func (d *TopicDispatcher) janitor(ctx context.Context) {
+	defer d.wg.Done()
+	ticker := time.NewTicker(min(time.Second, d.cfg.idleTimeout/2))
+	defer ticker.Stop()
 	for {
 		select {
-		case job := <-worker.JobChannel:
-			worker.execute(job)
-			timer.Reset(idleDBCloseTimeout)
-		case <-timer.C:
-			glog.Infof("No message received for %s. Close DB tenant=%s.", idleDBCloseTimeout, worker.tenant)
-			worker.executor.Close()
-			glog.V(4).Infof("DB closed after %s. tenant=%s.", idleDBCloseTimeout, worker.tenant)
-		case <-worker.ctx.Done():
-			glog.Infof("Stop Worker tenant=%s", worker.tenant)
-			worker.executor.Close()
-			glog.Infof("Stopped Worker tenant=%s", worker.tenant)
+		case now := <-ticker.C:
+			d.closeIdle(now)
+		case <-ctx.Done():
 			return
 		}
 	}
 }
 
-// execute fuehrt eine Nachricht aus. Eine Panic in einer einzelnen Nachricht wird protokolliert
-// und beendet nicht den ganzen Dienst: der Worker laeuft ohne recover in einer eigenen Goroutine,
-// und eine weiterhin zugestellte Nachricht fuehrte nach dem Neustart wieder zum Absturz.
+// closeIdle closes the executors idle for idleTimeout, and the oldest idle ones beyond parallel. The tenant
+// is busy while its executor closes, so no lane runs it meanwhile.
+func (d *TopicDispatcher) closeIdle(now time.Time) {
+	d.mu.Lock()
+	var idle []*tenantQueue
+	for _, tq := range d.tenants {
+		if tq.executor != nil && !tq.busy && !tq.isReady {
+			idle = append(idle, tq)
+		}
+	}
+	sort.Slice(idle, func(i, j int) bool { return idle[i].lastUsed.After(idle[j].lastUsed) })
+	var closing []*tenantQueue
+	for i, tq := range idle {
+		if i >= d.cfg.parallel || now.Sub(tq.lastUsed) >= d.cfg.idleTimeout {
+			tq.busy = true
+			closing = append(closing, tq)
+		}
+	}
+	d.mu.Unlock()
+
+	for _, tq := range closing {
+		glog.Infof("No message received for %s. Close DB tenant=%s.", now.Sub(tq.lastUsed).Round(time.Second), tq.tenant)
+		tq.executor.Close()
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for _, tq := range closing {
+		tq.executor = nil
+		tq.busy = false
+		if len(tq.queue) == 0 {
+			delete(d.tenants, tq.tenant)
+		} else {
+			d.markReady(tq)
+		}
+	}
+}
+
+// executeBatch fuehrt ein Buendel von Nachrichten eines Mandanten aus. Eine Panic wird protokolliert
+// und beendet nicht den ganzen Dienst: die Spur laeuft ohne recover in einer eigenen Goroutine, und eine
+// weiterhin zugestellte Nachricht fuehrte nach dem Neustart wieder zum Absturz.
 //
-// Ack (#19): erst wenn Execute fertig ist, bei Erfolg wie bei Fehler und auch nach einer Panic (sonst
-// stellte der Broker die Nachricht nach jedem Neustart wieder zu). Die Defers laufen in umgekehrter
-// Reihenfolge: erst recover, dann Ack. Nicht geackt bleibt nur, was bei Absturz, OOM oder Shutdown
-// noch nicht fertig war; das stellt mosquitto beim naechsten Verbinden erneut zu (Import ist idempotent).
-func (worker *TenantWorker) execute(job mqtt.Message) {
-	defer job.Ack()
+// Ack (#19): jede Nachricht des Buendels genau einmal, erst wenn ExecuteBatch fertig ist, bei Erfolg wie
+// bei Fehler und auch nach einer Panic (sonst stellte der Broker die Nachricht nach jedem Neustart wieder
+// zu). Die Defers laufen in umgekehrter Reihenfolge: erst recover, dann Ack. Nicht geackt bleibt nur, was
+// bei Absturz, OOM oder Shutdown noch nicht fertig war; das stellt mosquitto beim naechsten Verbinden
+// erneut zu (Import ist idempotent).
+func executeBatch(tenant string, executor Executor, batch []mqtt.Message) {
 	defer func() {
-		if r := recover(); r != nil {
-			glog.Errorf("panic while executing message for tenant=%s: %v", worker.tenant, r)
+		for _, msg := range batch {
+			msg.Ack()
 		}
 	}()
-	worker.executor.Execute(job)
+	defer func() {
+		if r := recover(); r != nil {
+			glog.Errorf("panic while executing message for tenant=%s: %v (%d messages)", tenant, r, len(batch))
+		}
+	}()
+	executor.ExecuteBatch(batch)
 }
