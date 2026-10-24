@@ -73,8 +73,8 @@ func (tmw *TenantEnergyImporter) ensureDb(ecId string) (*ebow.BowStorage, error)
 	return st, nil
 }
 
-// Execute decodes, stores and confirms one CR_MSG. The caller (TenantWorker.execute) acks the message
-// after Execute returns, whatever the outcome (#19):
+// Execute decodes, stores and confirms one CR_MSG. The dispatcher runs ExecuteBatch, with the same outcome
+// per message, and acks the message after it returns (executeBatch), whatever the outcome (#19):
 //   - stored: the cr_msg_history reply goes to the backend ("Energiedaten empfangen").
 //   - store error (open store, meta record, a corrupt row, Badger write; could succeed later): ERROR log,
 //     no reply. The data is not in the store, the gap shows in the check before billing (#148) and the
@@ -190,6 +190,30 @@ func (e *importErrors) Error() string {
 
 func (e *importErrors) Unwrap() []error { return e.errs }
 
+func (e *importErrors) add(err error) {
+	// A meta record error ends the import and is always kept, also beyond the cap.
+	if len(e.errs) < maxImportErrors || errors.Is(err, store.ErrMetaRecord) {
+		e.errs = append(e.errs, err)
+	} else {
+		e.omitted++
+	}
+}
+
+// err returns nil when no block failed.
+func (e *importErrors) err() error {
+	if len(e.errs) == 0 {
+		return nil
+	}
+	return e
+}
+
+// blockError names the period of the failed day block.
+func blockError(block *model.MqttEnergy, err error) error {
+	return fmt.Errorf("store %s - %s: %w",
+		time.UnixMilli(block.Start).Format(time.RFC3339),
+		time.UnixMilli(block.End).Format(time.RFC3339), err)
+}
+
 // Import stores every day block of the message. A block that fails does not stop the others; the
 // errors of the failed blocks are returned together (#19), so the message is not confirmed as stored.
 // An error of the store as a whole (the meta record) ends the import at once: every further block
@@ -201,14 +225,6 @@ func (tmw *TenantEnergyImporter) Import(data *model.MqttEnergyMessage) error {
 	}
 
 	errs := &importErrors{}
-	add := func(err error) {
-		// A meta record error ends the import and is always kept, also beyond the cap.
-		if len(errs.errs) < maxImportErrors || errors.Is(err, store.ErrMetaRecord) {
-			errs.errs = append(errs.errs, err)
-		} else {
-			errs.omitted++
-		}
-	}
 	for i := range data.Energy {
 
 		groupedEnergy := SplitEnergyByDay(data.Energy[i])
@@ -217,19 +233,14 @@ func (tmw *TenantEnergyImporter) Import(data *model.MqttEnergyMessage) error {
 		for n := range groupedEnergy {
 			if err := store.StoreEnergyV2(st, data.Meter.MeteringPoint, &groupedEnergy[n]); err != nil {
 				glog.Errorf("Error storing Energy: %v (Metering-Point: %s)", err, data.Meter.MeteringPoint)
-				add(fmt.Errorf("store %s - %s: %w",
-					time.UnixMilli(groupedEnergy[n].Start).Format(time.RFC3339),
-					time.UnixMilli(groupedEnergy[n].End).Format(time.RFC3339), err))
+				errs.add(blockError(&groupedEnergy[n], err))
 				if errors.Is(err, store.ErrMetaRecord) {
 					return errs
 				}
 			}
 		}
 	}
-	if len(errs.errs) == 0 {
-		return nil
-	}
-	return errs
+	return errs.err()
 }
 
 func decodeMessage(msg []byte) *model.MqttEnergyMessage {
