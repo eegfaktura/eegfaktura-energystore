@@ -40,6 +40,11 @@ func (tmw *TenantEnergyImporter) executeParts(ctx context.Context, msgs []mqtt.M
 		if ctx.Err() != nil {
 			break
 		}
+		if tmw.replied[msg] { // replied before a panic of the batch (executeBatch runs it again one by one)
+			delete(tmw.replied, msg)
+			finished[i] = true
+			continue
+		}
 		d, n := decodeMessageSize(msg.Payload())
 		if d == nil {
 			glog.Errorf("Data without content. tenant=%s", tmw.Tenant)
@@ -48,19 +53,22 @@ func (tmw *TenantEnergyImporter) executeParts(ctx context.Context, msgs []mqtt.M
 		}
 		data, origin, size = append(data, d), append(origin, i), size+n
 		if size >= budget {
-			tmw.importPart(ctx, data, origin, finished)
+			tmw.importPart(ctx, msgs, data, origin, finished)
 			data, origin, size = nil, nil, 0
 		}
 	}
 	if len(data) > 0 {
-		tmw.importPart(ctx, data, origin, finished)
+		tmw.importPart(ctx, msgs, data, origin, finished)
+	}
+	for _, msg := range msgs { // no panic: nothing is run again
+		delete(tmw.replied, msg)
 	}
 	glog.V(3).Infof("Execution of %d messages finished in %d ms (%v)", len(msgs), time.Since(monitor).Milliseconds(), tmw.Tenant)
 	return finished
 }
 
-// importPart imports decoded messages and replies the stored ones; origin maps them to finished.
-func (tmw *TenantEnergyImporter) importPart(ctx context.Context, data []*model.MqttEnergyMessage, origin []int, finished []bool) {
+// importPart imports decoded messages and replies the stored ones; origin maps them to msgs and finished.
+func (tmw *TenantEnergyImporter) importPart(ctx context.Context, msgs []mqtt.Message, data []*model.MqttEnergyMessage, origin []int, finished []bool) {
 	errs := tmw.ImportBatch(ctx, data)
 	for i, d := range data {
 		if errs[i] == errStopped {
@@ -75,6 +83,7 @@ func (tmw *TenantEnergyImporter) importPart(ctx context.Context, data []*model.M
 			continue
 		}
 		tmw.streamer.SendMessage(tmw.Tenant, d)
+		tmw.replied[msgs[origin[i]]] = true
 	}
 }
 

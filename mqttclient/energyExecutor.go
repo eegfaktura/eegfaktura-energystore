@@ -26,6 +26,9 @@ type TenantEnergyImporter struct {
 	db       map[string]*ebow.BowStorage
 	dbMutx   sync.Mutex
 	streamer *MQTTStreamer
+	// replied: messages of the running batch whose reply went out; kept only when the batch panics, so the
+	// message-by-message rerun does not reply them twice. Keys are the broker's messages (pointers).
+	replied map[mqtt.Message]bool
 }
 
 func NewTenantEnergyImporter(tenant string, streamer *MQTTStreamer) *TenantEnergyImporter {
@@ -33,6 +36,7 @@ func NewTenantEnergyImporter(tenant string, streamer *MQTTStreamer) *TenantEnerg
 		Tenant:   tenant,
 		db:       make(map[string]*ebow.BowStorage),
 		streamer: streamer,
+		replied:  map[mqtt.Message]bool{},
 	}
 }
 
