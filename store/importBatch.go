@@ -28,7 +28,7 @@ func StoreDayBatch(db *ebow.BowStorage, blocks []DayBlock) error {
 	if len(blocks) == 0 {
 		return nil
 	}
-	rec, meta, counts, err := registerBlocks(db, blocks)
+	meta, counts, err := registerBlocks(db, blocks)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrMetaRecord, err)
 	}
@@ -98,7 +98,7 @@ func StoreDayBatch(db *ebow.BowStorage, blocks []DayBlock) error {
 	}
 	glog.V(4).Infof("Writing source for %d blocks takes %v", len(blocks), time.Since(monitorStart).Milliseconds())
 
-	if err := widenMetaPeriods(db, rec, blocks); err != nil {
+	if err := widenMetaPeriods(db, blocks); err != nil {
 		return fmt.Errorf("%w: %w", ErrMetaRecord, err)
 	}
 	return nil
@@ -137,7 +137,7 @@ func resizeInts(s []int, n int) []int {
 // the first block of every message in message order this assigns ID and SourceIdx as single imports of the
 // messages in that order would. Errors are wrapped as ErrMetaRecord.
 func RegisterMeteringPoints(db *ebow.BowStorage, blocks []DayBlock) ([]model.CounterPointMetaInfo, error) {
-	_, _, counts, err := registerBlocks(db, blocks)
+	_, counts, err := registerBlocks(db, blocks)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMetaRecord, err)
 	}
@@ -145,12 +145,12 @@ func RegisterMeteringPoints(db *ebow.BowStorage, blocks []DayBlock) ([]model.Cou
 }
 
 // registerBlocks reads cpmeta/0 once and registers the metering points it does not know yet in one write,
-// in the order of the blocks, as PrepareMetaInfoMap would block by block. It returns the record as it is now
-// on disk, its metering points by name and, per block, the counts after its metering point was registered.
-func registerBlocks(db *ebow.BowStorage, blocks []DayBlock) (*model.RawSourceMeta, map[string]*model.CounterPointMeta, []model.CounterPointMetaInfo, error) {
+// in the order of the blocks, as PrepareMetaInfoMap would block by block. It returns the metering points by
+// name and, per block, the counts after its metering point was registered.
+func registerBlocks(db *ebow.BowStorage, blocks []DayBlock) (map[string]*model.CounterPointMeta, []model.CounterPointMetaInfo, error) {
 	rec, err := db.GetMeta(fmt.Sprintf("cpmeta/%s", "0"))
 	if err != nil && err != ebow.ErrNotFound {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	meta := map[string]*model.CounterPointMeta{} // as function.GetMetaMap
 	for _, m := range rec.CounterPoints {
@@ -166,19 +166,22 @@ func registerBlocks(db *ebow.BowStorage, blocks []DayBlock) (*model.RawSourceMet
 		counts[i] = *info
 	}
 	if modified {
-		rec = rawMetaOf(meta)
-		if err := db.SetMeta(rec); err != nil {
-			return nil, nil, nil, err
+		if err := db.SetMeta(rawMetaOf(meta)); err != nil {
+			return nil, nil, err
 		}
 	}
-	return rec, meta, counts, nil
+	return meta, counts, nil
 }
 
-// widenMetaPeriods widens the periods of the blocks' metering points in the record meta with at most one
-// write, by the rule of updateMetaCP. meta is the record as read (or written) at the start of the day: it is
-// still the record on disk, because during a batch only this tenant's lane writes cpmeta/0, so the widening
-// is re-applied against the stored record as updateMeta does, without reading it again.
-func widenMetaPeriods(db ebow.IBowStorage, meta *model.RawSourceMeta, blocks []DayBlock) error {
+// widenMetaPeriods widens the periods of the blocks' metering points in cpmeta/0 with one read and at most
+// one write, by the rule of updateMetaCP, applied against the record as it is on disk now (see updateMeta):
+// the record read at the start of the day may be outdated, cpmeta/0 is also written outside the import
+// (e.g. by the Excel master data upload on the same store).
+func widenMetaPeriods(db ebow.IBowStorage, blocks []DayBlock) error {
+	meta, err := db.GetMeta(fmt.Sprintf("cpmeta/%s", "0"))
+	if err != nil {
+		return err
+	}
 	byName := make(map[string]*model.CounterPointMeta, len(meta.CounterPoints))
 	for _, m := range meta.CounterPoints {
 		if _, ok := byName[m.Name]; !ok { // updateMeta takes the first match

@@ -221,3 +221,18 @@ func TestStoreDayBatchMetaError(t *testing.T) {
 	err = StoreDayBatch(db, dayBlocks()[0])
 	assert.True(t, errors.Is(err, ErrMetaRecord), "got %v", err)
 }
+
+// The widening is applied to cpmeta/0 as it is on disk when the day is written: a metering point another
+// writer (e.g. the Excel master data upload) added during the day batch is kept.
+func TestWidenMetaPeriodsKeepsRecordWrittenMeanwhile(t *testing.T) {
+	stored := &metaOnlyStorage{meta: testsupport.CpMeta(
+		testsupport.Consumer(knownC0, 0, "24.10.2026 00:00:00", "24.10.2026 00:00:00"),
+		testsupport.Consumer(newC5, 1, "", ""))} // added by the upload while the day ran
+	day := batchDays[1]
+	blocks := []DayBlock{{MeteringPoint: knownC0, Energy: &model.MqttEnergy{Start: day.UnixMilli(), End: day.Add(23 * time.Hour).UnixMilli()}}}
+
+	require.NoError(t, widenMetaPeriods(stored, blocks))
+	require.Len(t, stored.meta.CounterPoints, 2)
+	assert.Equal(t, newC5, stored.meta.CounterPoints[1].Name)
+	assert.Equal(t, "25.10.2026 22:00:00", stored.meta.CounterPoints[0].PeriodEnd) // 23 h after midnight on the DST day
+}
