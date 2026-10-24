@@ -60,14 +60,20 @@ still in process when energystore stopped is delivered again by mosquitto when e
 
 - mosquitto with `persistence true`, otherwise the session and its queued messages are lost when the **broker**
   restarts;
-- mosquitto `max_queued_messages` (default 1000) high enough, or `0` for no limit: while energystore is offline
-  or slow, mosquitto queues QoS 1 messages for its session only up to this number and **drops further ones
-  silently** (no log on the energystore side; the gap shows in the check before billing);
+- mosquitto `max_queued_messages` (default 1000 per client) raised, or `0` for no limit: while energystore is
+  offline or slow, mosquitto queues QoS 1 messages for its session only up to this number and **drops further
+  ones silently** (no log on the energystore side; the gap shows in the check before billing). With the manual
+  ack a large request queues at the broker instead of in energystore, so this has to be raised before that
+  release;
 - a unique `mqtt.id` per running energystore; two instances with the same id disconnect each other;
 - mosquitto sends at most `max_inflight_messages` (default 20) unacknowledged messages at a time, so a large burst
-  is delivered more slowly instead of being buffered in energystore. Raise it for the energystore client (proposal
-  1,000): the messages waiting in energystore are what it batches, and with 20 the batches stay at one or two
-  messages.
+  is delivered more slowly instead of being buffered in energystore. Raise it (proposal 1,000): the messages
+  waiting in energystore are what it batches, and with 20 the batches stay at one or two messages. The setting is
+  global in mosquitto.conf and applies to every client (energystore connects with MQTT 3.1.1, so it cannot set
+  its own limit); for the clients that acknowledge right away raising it changes nothing in practice.
+
+Read the current values of both settings in prod and pilot before changing them (the mosquitto configuration
+there is not in git).
 
 Import settings: `import.parallel` (env `ENERGYSTORE_IMPORT_PARALLEL`, default 4) tenants are imported at the same
 time, each in batches of at most `import.batchMax` messages (env `ENERGYSTORE_IMPORT_BATCHMAX`, default 50); a
