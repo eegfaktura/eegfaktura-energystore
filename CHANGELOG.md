@@ -8,6 +8,8 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+## [1.8.0] – 2026-10-25
+
 ### Security
 - **Bearer tokens: RS256 only** (platform#191, as backend#99). Both go-oidc verifiers took the allowed signing
   algorithms from the Keycloak discovery (HS* and `none` were already dropped); they now accept RS256 only, as
