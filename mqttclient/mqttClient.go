@@ -47,7 +47,7 @@ func clientOptions() *mqtt.ClientOptions {
 	opts.AddBroker(brokerHost)
 	opts.SetClientID(brokerId)
 	opts.SetProtocolVersion(4)
-	// Manual ack (#19): TenantWorker.execute acks a message after it has been processed. With auto-ack, Paho
+	// Manual ack (#19): the dispatcher (executeBatch) acks a message after it has been processed. With auto-ack, Paho
 	// acked as soon as the handler had handed the message to the dispatcher, and a crash before the store
 	// lost it. Unacked QoS 1 messages are redelivered by the broker when this persistent session
 	// (fixed client id, clean session false) reconnects.

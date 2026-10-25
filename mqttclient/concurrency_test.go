@@ -46,10 +46,10 @@ func TestDispatcherCloseAfterTraffic(t *testing.T) {
 	}
 }
 
-// Close right after the first messages: TenantWorker.Run calls wg.Add inside its goroutine, so
-// Close's wg.Wait can return before a worker started and closed its store (known-errors #41, F26).
+// Close right after the first messages: Close returns only after every lane finished its batch and every
+// store is closed. The old TenantWorker.Run called wg.Add inside its goroutine, so Close's wg.Wait could
+// return before a worker started and closed its store (known-errors #41, F26).
 func TestDispatcherCloseRightAfterStart(t *testing.T) {
-	t.Skip("known-errors #41")
 	dir := testsupport.UseTempPersistence(t)
 	client := testsupport.NewFakeClient()
 	d := NewTopicDispatcher(context.Background(), route, &MQTTStreamer{client: client})
