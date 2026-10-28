@@ -2,7 +2,6 @@ package ebow
 
 import (
 	"fmt"
-	"io/ioutil"
 	"math"
 	"math/rand"
 	"os"
@@ -242,7 +241,7 @@ type TestDB struct {
 func OpenTestDB(t *testing.T, options ...Option) *TestDB {
 	tdb := &TestDB{
 		t:    t,
-		dir:  tempfile("bow-"),
+		dir:  t.TempDir(),
 		fail: t.Fatal,
 	}
 	tdb.Open(options...)
@@ -332,19 +331,4 @@ func (t *TestDB) Close() {
 func (t *TestDB) Drop() {
 	defer os.RemoveAll(t.dir)
 	t.Close()
-}
-
-// tempfile returns a temporary file path.
-func tempfile(prefix string) string {
-	f, err := ioutil.TempFile("", prefix)
-	if err != nil {
-		panic(err)
-	}
-	if err := f.Close(); err != nil {
-		panic(err)
-	}
-	if err := os.Remove(f.Name()); err != nil {
-		panic(err)
-	}
-	return f.Name()
 }

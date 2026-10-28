@@ -118,7 +118,7 @@ func init() {
 		glog.Errorf("%v", err)
 		panic(err)
 	}
-	verifier = provider.Verifier(&oidc.Config{ClientID: clientIDApp, SkipClientIDCheck: true})
+	verifier = provider.Verifier(&oidc.Config{ClientID: clientIDApp, SkipClientIDCheck: true, SupportedSigningAlgs: []string{oidc.RS256}})
 }
 
 func readKeycloakConfig() (map[string]*keycloakConfig, error) {

@@ -3,7 +3,9 @@ package rest
 import (
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
+	"at.ourproject/energystore/store/ebow"
 	"encoding/json"
+	"errors"
 	"github.com/golang/glog"
 	"net/http"
 )
@@ -24,6 +26,16 @@ func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 
 func respondWithError(w http.ResponseWriter, code int, message string) {
 	respondWithJSON(w, code, map[string]string{"error": message})
+}
+
+// respondWithQueryError answers an error of a data query. A read error of the store (ebow.ErrReadRecord)
+// may carry local file paths in its cause: it is logged, the client gets a generic text (#31). Other
+// errors are passed through as before.
+func respondWithQueryError(w http.ResponseWriter, code int, tenant string, err error) {
+	if errors.Is(err, ebow.ErrReadRecord) {
+		glog.Errorf("%v tenant=%s", err, tenant)
+	}
+	respondWithError(w, code, ebow.ClientMessage(err))
 }
 
 func respondWithStatus(w http.ResponseWriter, code int) {

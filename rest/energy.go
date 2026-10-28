@@ -13,6 +13,7 @@ import (
 
 	"at.ourproject/energystore/middleware"
 	"at.ourproject/energystore/model"
+	protobuf "at.ourproject/energystore/protoc"
 	"at.ourproject/energystore/services"
 	"at.ourproject/energystore/store"
 	"github.com/golang/glog"
@@ -61,17 +62,14 @@ func queryRawData() middleware.JWTHandlerFunc {
 				return
 			}
 
-			cps = make([]store.TargetMP, len(meters))
-			for _, meter := range meters {
-				cps = append(cps, store.TargetMP{MeteringPoint: meter.MeteringPointId})
-			}
+			cps = targetsOf(meters)
 		} else {
 			cps = request.Cps
 		}
 
 		resp, err := store.QueryRawData(tenant, request.EcId, time.UnixMilli(request.Start), time.UnixMilli(request.End), cps, r.URL.Query())
 		if err != nil {
-			respondWithError(w, http.StatusBadRequest, err.Error())
+			respondWithQueryError(w, http.StatusBadRequest, tenant, err)
 			return
 		}
 
@@ -82,6 +80,15 @@ func queryRawData() middleware.JWTHandlerFunc {
 
 		respondWithJSON(w, http.StatusOK, &resp)
 	}
+}
+
+// targetsOf lists the community's metering points as query targets.
+func targetsOf(meters []*protobuf.MeteringPoint) []store.TargetMP {
+	cps := make([]store.TargetMP, 0, len(meters))
+	for _, meter := range meters {
+		cps = append(cps, store.TargetMP{MeteringPoint: meter.MeteringPointId})
+	}
+	return cps
 }
 
 func queryMetaData() middleware.JWTHandlerFunc {

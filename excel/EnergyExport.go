@@ -167,15 +167,18 @@ func createRunnerContext(db ebow.IBowStorage, start, end time.Time, cps *ExportP
 	var producers []*ParticipantCp
 	var consumers []*ParticipantCp
 	for i, _ := range cps.Cps {
+		_cps = append(_cps, &cps.Cps[i])
+		// A metering point without stored data has no meta entry: no columns for it (the energy
+		// sheet dereferenced the missing meta and panicked); the summary sheet skips it as well.
+		if _, ok := metaMap[cps.Cps[i].MeteringPoint]; !ok {
+			continue
+		}
+		cps.Cps[i].QoV = true
 		if cps.Cps[i].Direction == model.PRODUCER_DIRECTION {
 			producers = append(producers, &cps.Cps[i])
 		} else {
 			consumers = append(consumers, &cps.Cps[i])
 		}
-		if _, ok := metaMap[cps.Cps[i].MeteringPoint]; ok {
-			cps.Cps[i].QoV = true
-		}
-		_cps = append(_cps, &cps.Cps[i])
 	}
 
 	return &RunnerContext{
@@ -263,6 +266,9 @@ func (er *EnergyRunner) run(db ebow.IBowStorage, f *excelize.File, start, end ti
 	g1Ok := iterCP.Next(&_lineG1)
 
 	if !g1Ok {
+		if err := iterCP.Err(); err != nil {
+			return nil, err
+		}
 		return nil, model.ErrNoEntries(errors.New("no Rows found"))
 	}
 
@@ -291,6 +297,10 @@ func (er *EnergyRunner) run(db ebow.IBowStorage, f *excelize.File, start, end ti
 			return nil, err
 		}
 		g1Ok = iterCP.Next(&_lineG1)
+	}
+	// #31: a row that cannot be read ends the loop like the end of the data; no truncated export.
+	if err = iterCP.Err(); err != nil {
+		return nil, err
 	}
 
 	if err = er.closeSheets(rCxt); err != nil {

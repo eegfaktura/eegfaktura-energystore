@@ -31,6 +31,12 @@ type MQTTStreamer struct {
 }
 
 func NewMqttStreamer() (*MQTTStreamer, error) {
+	client := mqtt.NewClient(clientOptions())
+
+	return &MQTTStreamer{client: client}, nil
+}
+
+func clientOptions() *mqtt.ClientOptions {
 	opts := mqtt.NewClientOptions()
 
 	brokerHost := viper.GetString("mqtt.host")
@@ -41,7 +47,11 @@ func NewMqttStreamer() (*MQTTStreamer, error) {
 	opts.AddBroker(brokerHost)
 	opts.SetClientID(brokerId)
 	opts.SetProtocolVersion(4)
-	opts.SetAutoAckDisabled(false)
+	// Manual ack (#19): the dispatcher (executeBatch) acks a message after it has been processed. With auto-ack, Paho
+	// acked as soon as the handler had handed the message to the dispatcher, and a crash before the store
+	// lost it. Unacked QoS 1 messages are redelivered by the broker when this persistent session
+	// (fixed client id, clean session false) reconnects.
+	opts.SetAutoAckDisabled(true)
 	opts.SetCleanSession(false)
 
 	opts.SetOrderMatters(false)            // Allow out of order messages (use this option unless in order delivery is essential)
@@ -65,9 +75,7 @@ func NewMqttStreamer() (*MQTTStreamer, error) {
 		glog.Info("attempting to reconnect")
 	}
 
-	client := mqtt.NewClient(opts)
-
-	return &MQTTStreamer{client: client}, nil
+	return opts
 }
 
 func (m *MQTTStreamer) Connect() error {

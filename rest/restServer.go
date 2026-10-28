@@ -91,7 +91,7 @@ func fetchEnergyReportV2() middleware.JWTHandlerFunc {
 		}
 
 		if energy, err = calculation.EnergyReportV2(tenant, ecid, request.Participants, request.ReportInterval.Year, request.ReportInterval.Segment, request.ReportInterval.Period); err != nil {
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			respondWithQueryError(w, http.StatusInternalServerError, tenant, err)
 			return
 		}
 		glog.V(4).Infof("Time Monitor fetchEnergyReport. %v\n", time.Now().Sub(startMonitor))
@@ -121,7 +121,7 @@ func fetchRawEnergyV2() middleware.JWTHandlerFunc {
 
 		resp, err := store.QueryRawData(tenant, ecId, time.UnixMilli(request.Start), time.UnixMilli(request.End), cps, r.URL.Query())
 		if err != nil {
-			respondWithError(w, http.StatusBadRequest, err.Error())
+			respondWithQueryError(w, http.StatusBadRequest, tenant, err)
 			return
 		}
 
@@ -167,7 +167,7 @@ func deleteRawData() middleware.JWTHandlerFunc {
 
 		affected, sumKwh, err := store.DeleteRawDataForMeteringPoint(tenant, ecid, request.MeteringPoint, from, to, request.DryRun)
 		if err != nil {
-			respondWithError(w, http.StatusBadRequest, err.Error())
+			respondWithQueryError(w, http.StatusBadRequest, tenant, err)
 			return
 		}
 
@@ -221,7 +221,7 @@ func exportMeteringData() middleware.JWTHandlerFunc {
 
 		err = excel.ExportEnergyDataToMail(tenant, ecid, email, year, month, nil)
 		if err != nil {
-			respondWithError(w, http.StatusBadRequest, err.Error())
+			respondWithQueryError(w, http.StatusBadRequest, tenant, err)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
@@ -288,7 +288,7 @@ func fetchIntraDayReportV2() middleware.JWTHandlerFunc {
 		resp, err := store.QueryIntraDayReport(tenant, ecid, time.UnixMilli(request.Start), time.UnixMilli(request.End))
 		glog.V(4).Infof("tenant=%s Time Monitor fetchIntraDayReport. %v Sec.", tenant, time.Now().Sub(startMonitor).Seconds())
 		if err != nil {
-			respondWithError(w, http.StatusBadRequest, err.Error())
+			respondWithQueryError(w, http.StatusBadRequest, tenant, err)
 			return
 		}
 		respondWithJSON(w, http.StatusOK, &resp)
@@ -317,7 +317,7 @@ func fetchLoadCurveReportV2() middleware.JWTHandlerFunc {
 		resp, err := store.QueryLoadCurveReport(tenant, ecid, time.UnixMilli(request.Start), time.UnixMilli(request.End), request.Func)
 		glog.V(4).Infof("Time Monitor fetchLoadCurveReport. %v\n", time.Now().Sub(startMonitor))
 		if err != nil {
-			respondWithError(w, http.StatusBadRequest, err.Error())
+			respondWithQueryError(w, http.StatusBadRequest, tenant, err)
 			return
 		}
 		respondWithJSON(w, http.StatusOK, &resp)
@@ -361,7 +361,7 @@ func getLoadCurveReportV2() middleware.JWTHandlerFunc {
 		resp, err := store.QueryLoadCurveReport(tenant, ecid, time.UnixMilli(request.Start), time.UnixMilli(request.End), request.Func)
 		glog.V(4).Infof("Time Monitor fetchLoadCurveReport. %v\n", time.Now().Sub(startMonitor))
 		if err != nil {
-			respondWithError(w, http.StatusBadRequest, err.Error())
+			respondWithQueryError(w, http.StatusBadRequest, tenant, err)
 			return
 		}
 		respondWithJSON(w, http.StatusOK, &resp)
@@ -390,7 +390,7 @@ func fetchCombinedReportV2() middleware.JWTHandlerFunc {
 		resp, err := store.QueryCombinedReports(tenant, ecid, request.Reports, time.UnixMilli(request.Start), time.UnixMilli(request.End))
 		glog.V(4).Infof("Time Monitor fetchCombinedReport. %v\n", time.Now().Sub(startMonitor))
 		if err != nil {
-			respondWithError(w, http.StatusBadRequest, err.Error())
+			respondWithQueryError(w, http.StatusBadRequest, tenant, err)
 			return
 		}
 		respondWithJSON(w, http.StatusOK, &resp)
@@ -434,7 +434,7 @@ func getCombinedReportV2() middleware.JWTHandlerFunc {
 		resp, err := store.QueryCombinedReports(tenant, ecid, request.Reports, time.UnixMilli(request.Start), time.UnixMilli(request.End))
 		glog.V(4).Infof("Time Monitor fetchCombinedReport. %v\n", time.Now().Sub(startMonitor))
 		if err != nil {
-			respondWithError(w, http.StatusBadRequest, err.Error())
+			respondWithQueryError(w, http.StatusBadRequest, tenant, err)
 			return
 		}
 		respondWithJSON(w, http.StatusOK, &resp)
@@ -460,7 +460,7 @@ func fetchSummaryReportV2() middleware.JWTHandlerFunc {
 		resp, err := calculation.EnergySummary(tenant, ecid, request.Year, request.Segment, request.Period)
 		glog.V(4).Infof("Time Monitor fetchSummaryReport. %v\n", time.Now().Sub(startMonitor))
 		if err != nil {
-			respondWithError(w, http.StatusBadRequest, err.Error())
+			respondWithQueryError(w, http.StatusBadRequest, tenant, err)
 			return
 		}
 

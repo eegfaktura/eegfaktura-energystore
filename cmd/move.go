@@ -69,6 +69,9 @@ func handleMove(cmd *cobra.Command, args []string) error {
 			targetCache = append(targetCache, moveToProducer(_line, sourceIdx, targetIdx))
 		}
 	}
+	if err := iter.Err(); err != nil {
+		return err
+	}
 
 	if err := db.SetLines(targetCache); err != nil {
 		return err

@@ -9,6 +9,35 @@ this changelog highlights the changes relevant for overview and operations.
 ## [Unreleased]
 
 ### Security
+- **Go 1.26.10** (platform#181): the build image (`golang:1.26.10`), `go.mod` (`toolchain go1.26.10`; the
+  `go 1.26.0` directive is unchanged), the PR checks and the image build move from 1.26.9 to 1.26.10 (released
+  2026-10-19). It fixes CVE-2026-111943 / GO-2026-6809 (HIGH, `crypto/x509` trusted untrusted intermediate
+  certificates; reached through the outgoing HTTPS calls). A patch release: language version, GODEBUG defaults and
+  garbage collector are unchanged.
+
+### Fixed
+- **CI: the Snyk Code scan fails visibly when it cannot run.** An invalid `SNYK_TOKEN` ended the weekly and
+  push scan green without any result (`continue-on-error`); now only „issues found“ keeps the run green (the
+  issues go to Code Scanning), an authentication or tool error fails it. The Snyk CLI is pinned to 1.1308.1
+  instead of the latest version.
+
+## [1.8.0] – 2026-10-25
+
+### Security
+- **Bearer tokens: RS256 only** (platform#191, as backend#99). Both go-oidc verifiers took the allowed signing
+  algorithms from the Keycloak discovery (HS* and `none` were already dropped); they now accept RS256 only, as
+  required.
+  - App verifier (`GQLProtect` and the bearer-protected REST routes): a client-supplied bearer token signed with
+    RS384/RS512/PS*/ES*/EdDSA under a realm key was accepted; it is now rejected (401).
+  - API verifier (`ProtectApi`): it only checks the ID token the service fetches itself via password grant, so a
+    client cannot choose its algorithm. Effect: if the ID-token signature algorithm of the api client in Keycloak
+    were ever set to something other than RS256, every `ProtectApi` call would fail with 403.
+  - Logins are not affected. As of 2026-10-23 the public JWKS of Prod/Pilot (login.eegfaktura.at) and Dev hold
+    exactly one signing key (RS256), and the realm sets no different ID-token algorithm. If a realm ever got an
+    active non-RS256 signing key (e.g. on key rotation), logins would fail with 401/403.
+  - Tests also cover HS256 signed with the realm's public key (PEM and DER) and `alg=none`: rejected.
+  - The `middleware` package now has tests (fake OIDC provider, no live Keycloak) and runs in the unit-test list
+    of `pr-checks.yml` and `docker-image.yml`.
 - **CR_MSG: unpacking is limited** (platform#181). An energy data message from MQTT was unpacked completely into
   memory; a small but highly compressed payload could have filled the memory of the pod. It is now unpacked up to
   `mqtt.maxDecompressedMB` (env `ENERGYSTORE_MQTT_MAXDECOMPRESSEDMB`, default 512 MB); a larger one is logged as
@@ -17,15 +46,127 @@ this changelog highlights the changes relevant for overview and operations.
   data of one metering point and stays far below the default. The value is read once; a missing, non-numeric or
   non-positive value falls back to 512 MB with a warning (a limit of 0 would drop every message).
 
+### Fixed
+- **Excel energy report download: no panic for a metering point without stored data**
+  (`POST /eeg/{ecid}/excel/report/download`). A requested metering point without an entry in the meta record
+  `cpmeta/0` (no data ever imported for it, or none for the whole community) made the energy sheet dereference the
+  missing meta and the request ended without an answer. Such a metering point now gets no columns (the summary
+  sheet already skipped it); if no rows exist at all, the answer is the usual 404 `no_entries` („no Rows found“).
+  eegfaktura-web only requests metering points from the community's metadata, so its file is unchanged. The
+  export by mail (known error #53) has a different cause and is not changed.
+- **Report of a community without any energy data: empty report instead of 500** (`POST /eeg/v2/{ecid}/report`).
+  Without any imported data the meta record `cpmeta/0` does not exist and the report answered
+  500 `{"error":"Record doesn't exist"}`. It now answers 200 with the same shape as a report without values: the
+  requested participants with zero sums, `"meta": []`, totals 0. Other errors still answer 500. eegfaktura-web
+  (web#191) handles both answers. Summary and billing-check already answered 200 without data.
+- **Raw data export without a meter list: no empty query targets** (`POST /query/rawdata` without `cps`). The target
+  list of the community's metering points started with one empty entry per metering point. No effect on the
+  answer: the duplicates were collapsed to one empty entry and no metering point has an empty name, so it was
+  skipped on every row; only wasted work.
+- **CR_MSG: acknowledged only after it was processed, store errors no longer reported as stored** (#19). An energy
+  data message was acknowledged to the broker as soon as it was handed to the tenant worker; a crash, OOM kill or
+  restart before the store lost it. A store error was logged, but the message was still confirmed to the backend,
+  which wrote „Energiedaten empfangen“ into the process history although the data was not stored.
+  Now the message is acknowledged after it has been processed (stored, failed, undecodable, or a recovered panic);
+  a message still in process when energystore stops is redelivered by mosquitto when energystore reconnects
+  (persistent session) and imported again (the import is idempotent; the backend may get a second process
+  history entry). If any day block of a message cannot be stored, no `cr_msg_history` reply is sent: EEG admins
+  see no „Energiedaten empfangen“ entry for it, the gap shows in the check before billing, and the data has to be
+  requested again. If only some days of a message fail, the reply is dropped for the whole message; the days that
+  were stored are still in the store (a reply with only the stored days would change the entries in the process
+  history, which list the blocks as sent). An error reading or updating the meta record `cpmeta/0` ends the import
+  of the message at once and is always named in the log line; otherwise the other days are still stored. The log line is „energy data not stored, no cr_msg_history reply“
+  with tenant, ecId, metering point, conversation id and at most five day errors („… N more“).
+- **A stored row that cannot be read is an error, no longer the silent end of the data** (#31). Reports, the
+  billing basis, the raw data and load curve queries and the Excel export stopped at such a row and returned a
+  shortened result as success; they now fail with „stored record cannot be read“ (with the key for a record that
+  cannot be decoded; the cause is in the ERROR log „ebow: cannot decode record …“ or „ebow: cannot read record …“,
+  never in the API response, which could otherwise show local file paths), so a shortened result is no longer
+  passed on as complete. The web app does not present these errors well yet (a report may come back empty or show
+  a raw key such as `E_undefined_undefined`); a clear message there is a follow-up (platform#194). On the import path the store of that day is aborted: before, the rows after the unreadable one were rebuilt with the
+  imported metering point only and the values of the other metering points in those quarter hours were lost; now
+  nothing of the day is written and no „Energiedaten empfangen“ reply is sent (see #19). The CLI tools
+  (`estore data`, `estore move`, `estore reset`) stop with the error as well. Iterators release their read
+  transaction also after such an error, and a store whose meta record cannot be read or written no longer keeps
+  Badger's directory lock until the restart. Without unreadable rows nothing changes.
+
 ### Changed
-- Build: Go 1.26.10 instead of 1.26.9 (platform#181) in `go.mod` (`toolchain go1.26.10`), the Dockerfile
-  (`golang:1.26.10`), the PR checks and the image build. Go 1.26.10 (released 2026-10-19) fixes the last
-  standard-library finding of govulncheck, GO-2026-6809 (`crypto/x509` distrusts compromised intermediate
-  certificates; reached through the outgoing HTTPS calls). A patch release: the `go 1.26.0` directive, GODEBUG defaults
-  and garbage collector are unchanged.
+- **CR_MSG import: batched per community, fair lanes for all tenants** (concept „Energiedaten gebündelt
+  importieren“). A large request (e.g. a month for 2,400 metering points) kept energystore busy for hours, because
+  every metering point and day read and wrote the rows of all metering points; meanwhile the messages of every
+  other tenant were stuck behind it (one dispatch loop for all tenants), and the burst afterwards opened hundreds
+  of stores (OOM kills). Now:
+  - the messages already queued for a tenant are imported together: per community and day the rows and the meta
+    record `cpmeta/0` are read and written once for the whole batch, no format change. Tests compare the stored
+    rows (as stored, including the length of the quality arrays) and the whole record `cpmeta/0` (ID, SourceIdx,
+    direction, periods) with the import message by message: they are equal. A batch is unpacked and imported
+    in parts of at most about `mqtt.maxDecompressedMB` of unpacked data each, so the limit per message still
+    bounds a batch: about twice the limit of unpacked JSON per lane (the decoded data on the heap is several
+    times that). Two differences that change bytes, not
+    values: when a day batch fails and its blocks are stored one by one, rows created then may be sized with
+    the counts of the whole batch (more trailing zeros); and a day block that spans two days after the DST change
+    rewrites the rows of both days, the other day's unchanged (the single import does the same);
+  - `import.parallel` lanes (env `ENERGYSTORE_IMPORT_PARALLEL`, default 4) import at the same time, each one batch
+    of at most `import.batchMax` messages of one tenant (env `ENERGYSTORE_IMPORT_BATCHMAX`, default 50); a tenant
+    with more work queues up again behind the others (round robin), so a large request no longer delays the daily
+    data of the other communities by more than one batch per lane. Receiving a message never waits for another
+    tenant;
+  - a store is closed 15 s after its tenant's last batch as before, or already 2 s after it when more than
+    `import.parallel` stores are idle (in the background, the lanes go on); a tenant waiting for its turn keeps
+    its store open, except at the limit below when no idle store is left: then the store of the tenant waiting
+    last is closed and opened again on its turn;
+  - **limit on open importers:** `import.maxOpen` (env `ENERGYSTORE_IMPORT_MAXOPEN`, default 32; a value below
+    `import.parallel` is raised to it with a warning) bounds the number of tenants with an open importer (one
+    being closed still counts). Memory is about 90–112 MB per such tenant, more for a tenant with several
+    communities (one store each) or while reports and exports hold the same stores open; it is not a hard
+    memory limit. At the limit a lane
+    closes the longest unused idle store first (about 0.3 s) or waits until one becomes idle: when many
+    communities deliver at once, their data takes longer instead of filling the memory. Local run (100
+    communities delivering every 6 s plus a month request of a large community, window 1000): at most 32 open
+    importers, peak heap about 4.5 GB, small messages wait up to about 15–20 s (p95), instead of 100 open stores
+    and about 10 GB without the limit;
+  - per message as before: the `cr_msg_history` reply only when all its days are stored, the same ERROR log line
+    otherwise, ack after processing (#19). A day that fails in a batch is stored again message by message, so only
+    the messages with that day are affected; a meta record error falls back to the message-by-message import.
+    After a panic in a batch its messages run one by one, so only the message that panics again is lost (acked,
+    no reply).
+  - The three values are read once at start; a missing, non-numeric or non-positive value falls back to the default
+    with a warning.
+  - **Release prerequisites (together with #19, manual ack), in prod and pilot, after reading out the current
+    values:**
+    - raise mosquitto's `max_inflight_messages` (proposal 1,000; default 20). With 20 unacknowledged messages at a
+      time the batches stay at one or two messages and the throughput depends on the window, not on the import.
+      The setting is global and applies to every client (it cannot be set for the energystore client only); for
+      the clients that acknowledge right away raising it changes nothing in practice;
+    - raise `max_queued_messages` (default 1000 per client) or set it to `0` (no limit): with the manual ack a
+      burst queues at the broker, and mosquitto drops messages beyond that limit silently.
+- **Fixed with it:** `Close` of the dispatcher could return before a worker had started and closed its store
+  (known-errors #41); it now returns after every store is closed. A running batch stops at its next step
+  (message, run of messages, day) instead of finishing (50 large messages could take longer than the pod's
+  grace period); its unfinished messages stay unacknowledged and mosquitto delivers them again.
 - Dependencies: `github.com/klauspost/compress` 1.18.0 → 1.18.7 (platform#181; Trivy CVE-2026-63209, HIGH),
   an indirect dependency of `badger/v4` (`badger/v4/table` uses its `s2`/`snappy` and `zstd` packages for block
   compression; same storage format within 1.18.x). Replaces Dependabot #76.
+
+### Build and CI
+- **The image job's gate is wider.** Besides the tests it checks that the committed protobuf stubs match a
+  regeneration (`scripts/dev/generate.sh`, pinned protoc 29.3 and plugins), runs `gofmt`/`go vet`
+  (`scripts/dev/static-check.sh`), the whole test suite with the race detector (`scripts/dev/test.sh`,
+  every package except the root, was a fixed package list without `-race`) and per-package coverage floors, uploads the coverage report and runs
+  `govulncheck` (reporting only) — all before the image is built.
+- `protoc/masterdata*.pb.go` are committed; `docker build` works from a fresh checkout. The build paths
+  of `energystore`/`estore` are unchanged (moving the entry points to `cmd/` was not done, `open-points.md` ES-24).
+- Tests write Badger data only into temporary directories and fix the time zone to `Europe/Vienna`;
+  the intermittent hang of the `calculation` tests is gone (`known-errors.md` #3).
+
+### Documentation
+- `EXTERNAL_SOURCES.md` lists every source of the build, the tests and the service. The concept for
+  repairing the test environment and raising the test coverage, the storage-format concepts and the
+  working files of that work are kept outside the repository. No code change.
+
+### CI
+- `docker-image.yml`: no image build on a draft pull request — it runs when the pull request is marked ready for review (`ready_for_review`) and on every later push to it; `pr-checks.yml` still checks drafts. Pushes, tags and the deploy dispatch are unchanged.
+- `pr-checks.yml` on the test environment: the unit job runs every tested package (`scripts/dev/packages.sh`, no race detector), the full job the static check, `scripts/dev/test.sh` (race detector, coverage) and the coverage floors, in `TZ=UTC`; the report-only "Known errors" job and the protobuf generation (the stubs are committed) are gone. The results stay artifacts for the CI report collector.
 
 ## [1.7.0] – 2026-10-21
 

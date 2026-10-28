@@ -1,15 +1,11 @@
-# Tests on every pull request: the unit tests (the packages listed as in docker-image.yml; quick:
-# no race detector, after gofmt and go vet) and the full suite (every package except the root,
-# with the race detector).
-# The root package (three func main) does not compile as one package and is left out.
-#
-# Only protoc/excel.pb.go is committed, so every job generates the protobuf stubs first.
-# Versions fixed, each release older than 7 days (checked 2026-10-09, Go 2026-10-23): Go 1.26.10 (2026-10-19;
-# 7 days old on 2026-10-26, not merged before),
-# protoc 29.3 (2025-01-08), protoc-gen-go v1.36.11 (go.mod), protoc-gen-go-grpc v1.6.2.
+# Tests on every pull request: the unit tests (every tested package, quick: no race detector, no
+# coverage) and the full suite (scripts/dev: gofmt/vet, the race
+# detector, coverage floors). The root package (three func main) is left out, known-errors #1.
+# The protobuf stubs are committed; docker-image.yml checks that they match the .proto files.
+# Versions fixed, each release older than 7 days (checked 2026-10-09, Go 2026-10-28): Go 1.26.10 (2026-10-19).
 # Actions pinned by commit SHA.
-# Every job keeps its output as an artifact for 30 days (test-results-<job>),
-# for the CI report collector (vfeeg-development/eegfaktura-dev).
+# Every job keeps its output as an artifact for 30 days (test-results-<job>), for the CI report
+# collector (vfeeg-development/eegfaktura-dev).
 
 name: PR Checks
 
@@ -26,9 +22,7 @@ concurrency:
 
 env:
   GO_VERSION: '1.26.10'
-  PROTOC_VERSION: '29.3'
-  PROTOC_SHA256: '3e866620c5be27664f3d2fa2d656b5f3e09b5152b42f1bedbf427b333e90021a'
-  PROTOC_GEN_GO_GRPC_VERSION: 'v1.6.2'
+  TZ: UTC  # the tests fix Europe/Vienna themselves (TestMain); UTC proves it
   # go test -json is kept as the result file; the console shows the test output read back from it
   # (as with go test -v). Exit codes are go test's (pipefail).
   GO_TEST_OUTPUT: '(fromjson? // {Action: "output", Output: (. + "\n")}) | select(.Action == "output" or .Action == "build-output") | .Output'
@@ -49,42 +43,13 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Generate code
-        run: |
-          set -euo pipefail
-          curl -fsSLo "$RUNNER_TEMP/protoc.zip" \
-            "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip"
-          echo "${PROTOC_SHA256}  $RUNNER_TEMP/protoc.zip" | sha256sum -c -
-          unzip -q "$RUNNER_TEMP/protoc.zip" -d "$RUNNER_TEMP/protoc"
-          gopath="$(go env GOPATH)"
-          export PATH="$RUNNER_TEMP/protoc/bin:$gopath/bin:$PATH"
-          # protoc-gen-go inside the module: the version comes from go.mod
-          go install google.golang.org/protobuf/cmd/protoc-gen-go
-          go install "google.golang.org/grpc/cmd/protoc-gen-go-grpc@${PROTOC_GEN_GO_GRPC_VERSION}"
-          protoc --experimental_allow_proto3_optional=true --proto_path=. \
-            --go_out=. --go_opt=paths=source_relative \
-            --go-grpc_out=. --go-grpc_opt=paths=source_relative ./protoc/*.proto
-
-      - name: gofmt
-        run: |
-          set -euo pipefail
-          unformatted="$(git ls-files -z '*.go' | xargs -0 gofmt -l)"
-          if [ -n "$unformatted" ]; then echo "gofmt -w needed:"; echo "$unformatted"; exit 1; fi
-
-      - name: go vet
-        run: |
-          set -euo pipefail
-          module="$(go list -m)"
-          # every package except the root, as in the full suite
-          mapfile -t pkgs < <(go list ./... | grep -vxF "$module")
-          go vet "${pkgs[@]}"
-
       - name: Unit tests
         run: |
-          set -o pipefail
+          set -euo pipefail
+          mapfile -t pkgs < <(bash scripts/dev/packages.sh)
+          [ "${#pkgs[@]}" -gt 0 ]
           mkdir -p "$RUNNER_TEMP/results"
-          go test -json -count=1 -timeout 400s ./utils/ ./store/ ./store/ebow/ ./store/function/ ./excel/ ./tenantctx/ \
-            ./graph/ ./calculation/ ./model/ ./mqttclient/ \
+          go test -json -count=1 -timeout 400s "${pkgs[@]}" \
             | tee "$RUNNER_TEMP/results/unit.json" | jq -Rrj --unbuffered "$GO_TEST_OUTPUT"
 
       - name: Keep the test results
@@ -111,34 +76,23 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Generate code
-        run: |
-          set -euo pipefail
-          curl -fsSLo "$RUNNER_TEMP/protoc.zip" \
-            "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip"
-          echo "${PROTOC_SHA256}  $RUNNER_TEMP/protoc.zip" | sha256sum -c -
-          unzip -q "$RUNNER_TEMP/protoc.zip" -d "$RUNNER_TEMP/protoc"
-          gopath="$(go env GOPATH)"
-          export PATH="$RUNNER_TEMP/protoc/bin:$gopath/bin:$PATH"
-          # protoc-gen-go inside the module: the version comes from go.mod
-          go install google.golang.org/protobuf/cmd/protoc-gen-go
-          go install "google.golang.org/grpc/cmd/protoc-gen-go-grpc@${PROTOC_GEN_GO_GRPC_VERSION}"
-          protoc --experimental_allow_proto3_optional=true --proto_path=. \
-            --go_out=. --go_opt=paths=source_relative \
-            --go-grpc_out=. --go-grpc_opt=paths=source_relative ./protoc/*.proto
+      - name: Format and vet
+        run: bash scripts/dev/static-check.sh
 
-      - name: Tests (race detector)
+      - name: Tests (race detector, coverage)
         run: |
-          set -euo pipefail
-          module="$(go list -m)"
-          # every package except the root; calculation takes 220-270 s under the race detector (CI runs 39567979725, 39577139743)
-          mapfile -t pkgs < <(go list ./... | grep -vxF "$module")
-          printf 'Package: %s\n' "${pkgs[@]}"
+          set -o pipefail
           mkdir -p "$RUNNER_TEMP/results"
-          go test -json -race -count=1 -timeout 600s "${pkgs[@]}" \
-            | tee "$RUNNER_TEMP/results/full.json" | jq -Rrj --unbuffered "$GO_TEST_OUTPUT"
+          bash scripts/dev/test.sh 2>&1 | tee "$RUNNER_TEMP/results/full.log"
+
+      - name: Coverage floors
+        run: bash scripts/dev/coverage-check.sh cover.out
 
       - name: Keep the test results
+        if: always()
+        run: cp cover.out "$RUNNER_TEMP/results/" 2>/dev/null || true
+
+      - name: Upload the test results
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

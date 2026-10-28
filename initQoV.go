@@ -73,6 +73,9 @@ func main() {
 
 		resources = append(resources, &lineG1)
 	}
+	if err := iterCP.Err(); err != nil {
+		panic(err)
+	}
 
 	err = db.SetLines(resources)
 	if err != nil {
