@@ -8,6 +8,8 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+## [1.8.1] – 2026-10-28
+
 ### Security
 - **Go 1.26.10** (platform#181): the build image (`golang:1.26.10`), `go.mod` (`toolchain go1.26.10`; the
   `go 1.26.0` directive is unchanged), the PR checks and the image build move from 1.26.9 to 1.26.10 (released
