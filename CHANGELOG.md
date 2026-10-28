@@ -14,6 +14,14 @@ this changelog highlights the changes relevant for overview and operations.
   2026-10-19). It fixes CVE-2026-111943 / GO-2026-6809 (HIGH, `crypto/x509` trusted untrusted intermediate
   certificates; reached through the outgoing HTTPS calls). A patch release: language version, GODEBUG defaults and
   garbage collector are unchanged.
+- **Slim runtime image** (prod image scan 2026-10-28): the image was the full `golang` image (Go toolchain, git,
+  ssh, curl, gnupg, compilers, the sources until `rm`); it is now a two-stage build with the runtime on
+  `debian:trixie-20261020-slim` (the Debian release of the build image) with only `ca-certificates` and `tzdata`.
+  The image keeps `/usr/local/bin/energystore` and `/usr/local/bin/estore`, `/etc/energystore/config.yaml`,
+  `TZ=Europe/Berlin`, user `app` (1000:1000), `/opt/rawdata` (volume) and `/opt/energy` owned by it, the working
+  directory and the command. **Not in the image any more:** `curl`, `git`, `ssh`, `go`. eegfaktura-docker-compose
+  wraps the command in `url-poller.sh`, which calls `curl` inside this container: it must be adapted before it moves
+  to an image with this change (the Kubernetes manifests do not use it).
 
 ### Fixed
 - **CI: the Snyk Code scan fails visibly when it cannot run.** An invalid `SNYK_TOKEN` ended the weekly and
