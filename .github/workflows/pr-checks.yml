@@ -2,8 +2,7 @@
 # coverage) and the full suite (scripts/dev: gofmt/vet, the race
 # detector, coverage floors). The root package (three func main) is left out, known-errors #1.
 # The protobuf stubs are committed; docker-image.yml checks that they match the .proto files.
-# Versions fixed, each release older than 7 days (checked 2026-10-09, Go 2026-10-21): Go 1.26.9 (2026-10-08;
-# 1.26.10 of 2026-10-19 was too new).
+# Versions fixed, each release older than 7 days (checked 2026-10-09, Go 2026-10-28): Go 1.26.10 (2026-10-19).
 # Actions pinned by commit SHA.
 # Every job keeps its output as an artifact for 30 days (test-results-<job>), for the CI report
 # collector (vfeeg-development/eegfaktura-dev).
@@ -22,7 +21,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GO_VERSION: '1.26.9'
+  GO_VERSION: '1.26.10'
   TZ: UTC  # the tests fix Europe/Vienna themselves (TestMain); UTC proves it
   # go test -json is kept as the result file; the console shows the test output read back from it
   # (as with go test -v). Exit codes are go test's (pipefail).

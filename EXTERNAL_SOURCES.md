@@ -10,8 +10,9 @@ module's own `LICENSE` file in the local module cache on 2026-10-02.
 | Source | Used for | Version / licence | Trust / pinning |
 |---|---|---|---|
 | Go module proxy (`proxy.golang.org`) and checksum database (`sum.golang.org`) | all modules | — | official; `go.sum` pins every module hash |
-| Go toolchain | build and tests | `go 1.26.0` and `toolchain go1.26.9` (2026-10-08) in `go.mod`; BSD-3-Clause | the `toolchain` line pins the patch release |
-| Docker Hub `golang:1.26.9` | build **and runtime** image (single stage) | BSD-3-Clause (Go), Debian | exact version tag, not by digest |
+| Go toolchain | build and tests | `go 1.26.0` and `toolchain go1.26.10` (2026-10-19) in `go.mod`; BSD-3-Clause | the `toolchain` line pins the patch release |
+| Docker Hub `golang:1.26.10` | build image (first stage) | BSD-3-Clause (Go), Debian | exact version tag, not by digest |
+| Docker Hub `debian:trixie-20261020-slim` | runtime image (second stage; with `ca-certificates`, `tzdata` from Debian) | Debian (DFSG licences) | dated tag (published 2026-10-21), not by digest |
 | `protoc` (protobuf-compiler) | generating `protoc/*.pb.go` | 29.3 (released 2025-01-08); BSD-3-Clause | pinned in `scripts/dev/generate.sh`; CI downloads the release zip `protoc-29.3-linux-x86_64.zip` from GitHub |
 | `google.golang.org/protobuf/cmd/protoc-gen-go`, `google.golang.org/grpc/cmd/protoc-gen-go-grpc` | protobuf/gRPC code generation | v1.36.11 (2025-12-12), v1.6.2 (2026-05-07); BSD-3-Clause / Apache-2.0 | `go install …@vX.Y.Z` in CI, checked by `generate.sh` |
 | `golang.org/x/vuln/cmd/govulncheck` | CI vulnerability report (reporting only) | v1.8.0 (2026-09-08); BSD-3-Clause (read from its `LICENSE`) | `go install …@v1.8.0` in CI |
@@ -24,10 +25,10 @@ module's own `LICENSE` file in the local module cache on 2026-10-02.
 | `actions/checkout` v4.2.2 (2024-10-23), `actions/setup-java` v6.0.1 (2026-09-09) in `pr-checks.yml` and `security-scan.yml` | checkout; the JDK of the pom-resolve job | MIT | by SHA `11bd719…`, `de7274f…` |
 | Apache Maven (release binary) and `org.apache.maven.plugins:maven-dependency-plugin` in `security-scan.yml` | resolves the poms before the dependency scan, so Trivy does not ask Maven Central | 3.9.11 (2025-07-12), 3.8.1 (2024-10-24); Apache-2.0 | Maven checked by SHA-512 in the workflow; the plugin by exact version |
 | `actions/cache` v4.2.3 (2025-03-19), `sbt/setup-sbt` v1.5.11 (2026-09-24) in `security-scan.yml` | cache of the resolved poms; sbt for the pom export (unused here: no `build.sbt`) | MIT | by SHA `5a3ec84…`, `6158cb0…` |
-| `actions/setup-go` in `pr-checks.yml` | Go toolchain for the PR test jobs | v7.0.0 (2026-07-16); MIT — Go 1.26.9 (2026-10-08), BSD-3-Clause | by SHA `b7ad1dad31e06c5925ef5d2fc7ad053ef454303e`; exact Go version |
+| `actions/setup-go` in `pr-checks.yml` | Go toolchain for the PR test jobs | v7.0.0 (2026-07-16); MIT — Go 1.26.10 (2026-10-19), BSD-3-Clause | by SHA `b7ad1dad31e06c5925ef5d2fc7ad053ef454303e`; exact Go version |
 | `github.com/99designs/gqlgen` (generator) | `graph/generated/` | MIT | same version as the runtime module |
 | GitHub Actions in `docker-image.yml`: `actions/checkout@v4`, `actions/setup-go@v5`, `docker/metadata-action@v5`, `docker/login-action@v3`, `docker/build-push-action@v6`, `actions/attest-build-provenance@v1` | CI | MIT / Apache-2.0 | **by major tag** (#10) |
-| GitHub Actions in `snyk.yml`: `actions/checkout` v4.2.2, `actions/setup-node` v4.1.0, `github/codeql-action/upload-sarif` v3.27.9; Snyk CLI from npm | SAST | MIT; Snyk CLI Apache-2.0 | by SHA; the Snyk CLI is installed unpinned |
+| GitHub Actions in `snyk.yml`: `actions/checkout` v4.2.2, `actions/setup-node` v4.1.0, `github/codeql-action/upload-sarif` v3.27.9; Snyk CLI from npm | SAST | MIT; Snyk CLI Apache-2.0 | by SHA; the Snyk CLI `snyk@1.1308.1` (2026-10-14) |
 | GitHub Container Registry `ghcr.io/vfeeg-development/eegfaktura-energystore` | where CI publishes the image | AGPL-3.0 | tags per branch, `sha-…`, `latest` |
 
 ## Go modules (direct requirements in `go.mod`)
