@@ -8,6 +8,10 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Fixed
+- **Tests: the export test for a metering point without stored data runs again** (energystore #24): the defect
+  was fixed in 1.8.0; the stale skip of `TestS08_ExportForAMeterWithoutData` is removed.
+
 ## [1.8.1] – 2026-10-28
 
 ### Security
