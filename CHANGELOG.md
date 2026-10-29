@@ -50,6 +50,11 @@ this changelog highlights the changes relevant for overview and operations.
   The imports of one store now take turns (a lock per tenant/ecId inside the service); an Excel upload holds it
   for the whole file, so MQTT imports of that community wait until it is done. A failed write of the record
   is now reported instead of being ignored.
+- **Deleting raw data no longer loses values an MQTT import writes at the same time** (energystore #34). The
+  delete (`/eeg/v2/{ecid}/rawdata/delete`) reads the rows of the range and writes them back with the metering
+  point's slots zeroed; an import of the same community in between was overwritten (values of other metering
+  points in that range lost). A real delete now takes the same per-community lock as the imports (#33); a dry run
+  only reads and does not wait.
 - **`POST /eeg/{ecid}/excel/export/{year}/{month}` answers 400 instead of crashing** (energystore #53). The route
   passes no participant list to the export, so every call panicked and the client saw a dropped connection; no
   mail was ever sent. It now answers `400 {"error":"no metering points given for the export"}` and still sends no

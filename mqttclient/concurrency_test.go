@@ -100,7 +100,6 @@ func TestConcurrentNewMeteringPoints(t *testing.T) {
 // the same day at the same time: A outside the range and every value of B survive. Today the delete
 // writes back the lines it read before the import: B's new values in the range are lost.
 func TestDeleteDuringImport(t *testing.T) {
-	t.Skip("known-errors #34")
 	testsupport.UseTempPersistence(t)
 	a, b := "AT0030000000000000000000000000021", "AT0030000000000000000000000000022"
 	imp := NewTenantEnergyImporter(m5Tenant, &MQTTStreamer{client: testsupport.NewFakeClient()})
