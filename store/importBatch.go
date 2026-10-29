@@ -28,6 +28,7 @@ func StoreDayBatch(db *ebow.BowStorage, blocks []DayBlock) error {
 	if len(blocks) == 0 {
 		return nil
 	}
+	defer db.LockWrites()() // see StoreEnergyV2 (#33)
 	meta, counts, err := registerBlocks(db, blocks)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrMetaRecord, err)
@@ -137,6 +138,7 @@ func resizeInts(s []int, n int) []int {
 // the first block of every message in message order this assigns ID and SourceIdx as single imports of the
 // messages in that order would. Errors are wrapped as ErrMetaRecord.
 func RegisterMeteringPoints(db *ebow.BowStorage, blocks []DayBlock) ([]model.CounterPointMetaInfo, error) {
+	defer db.LockWrites()() // see StoreEnergyV2 (#33)
 	_, counts, err := registerBlocks(db, blocks)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMetaRecord, err)

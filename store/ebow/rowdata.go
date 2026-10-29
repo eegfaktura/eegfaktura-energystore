@@ -141,6 +141,12 @@ func (b *BowStorage) GetTenant() string {
 	return b.tenant
 }
 
+// LockWrites serialises the read-modify-write imports of one store (cpmeta/0 and the rows): the MQTT
+// import and the Excel upload of the same ecId (known-errors #33). It returns the unlock function.
+func (b *BowStorage) LockWrites() func() {
+	return turns.lock(poolKey(b.tenant, b.ecId))
+}
+
 func (b *BowStorage) SetLines(line []*model.RawSourceLine) error {
 	return b.SetLinesRaw("rawdata", line)
 }

@@ -34,6 +34,8 @@ func ImportEEG(db *ebow.BowStorage, r io.Reader, filename, sheet, tenant string)
 			return errors.New("Invalid Text File")
 		}
 		defer closeFile()
+		unlock := db.LockWrites() // the MQTT import writes cpmeta/0 and the rows of the same store (#33)
+		defer unlock()
 		if err = ImportExcelEnergyFileNew(f, sheet, db); err != nil {
 			glog.Infof("Import Execl Error: %v\n", err)
 			return err

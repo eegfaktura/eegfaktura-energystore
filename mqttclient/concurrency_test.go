@@ -66,7 +66,6 @@ func TestDispatcherCloseRightAfterStart(t *testing.T) {
 // the same time must give them different SourceIdx and keep both. Today one meter is lost from
 // cpmeta/0 in most runs (read-modify-write without a lock).
 func TestConcurrentNewMeteringPoints(t *testing.T) {
-	t.Skip("known-errors #33")
 	testsupport.UseTempPersistence(t)
 	meters := []string{"AT0030000000000000000000000000011", "AT0030000000000000000000000000012"}
 	var wg sync.WaitGroup

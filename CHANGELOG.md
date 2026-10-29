@@ -21,6 +21,12 @@ this changelog highlights the changes relevant for overview and operations.
   refused with an error instead of reporting success; before, an empty sheet also rewrote the stored metering-point
   meta without any metering point. Not changed: the quality row is still not read and every imported slot keeps
   quality 1; negative values are still accepted.
+- **No lost metering points when the MQTT import and an Excel upload write the same community at once**
+  (energystore #33). Both read the metering-point record (`cpmeta/0`) and the rows, change them and write them
+  back; run at the same time, one import's new metering point (or values) could be overwritten by the other.
+  The imports of one store now take turns (a lock per tenant/ecId inside the service); an Excel upload holds it
+  for the whole file, so MQTT imports of that community wait until it is done. A failed write of the record
+  is now reported instead of being ignored.
 
 ## [1.8.1] – 2026-10-28
 
