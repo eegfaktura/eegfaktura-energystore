@@ -233,10 +233,9 @@ func keys(m map[string]*store.RawDataResult) []string {
 	return k
 }
 
-// Basic credentials are decoded with URLEncoding and split at every ':' (known-errors #39, F24):
-// standard base64 with '+' or '/' and a password containing ':' are refused today.
+// Basic credentials were decoded with URLEncoding and split at every ':' (known-errors #39, F24):
+// standard base64 with '+' or '/' and a password containing ':' must be accepted.
 func TestBasicCredentialsStandardEncoding(t *testing.T) {
-	t.Skip("known-errors #39")
 	seed(t)
 	h := apitest.Router()
 	for _, pass := range []string{"a~~?", "pa??w0rd", "sec:ret?>"} {
@@ -247,6 +246,19 @@ func TestBasicCredentialsStandardEncoding(t *testing.T) {
 			Header: map[string]string{"Authorization": auth, "X-Tenant": tenant}})
 		assert.Equal(t, 200, rec.Code, "password %q", pass)
 	}
+}
+
+// Basic credentials that are not valid standard base64 are refused without a password grant (#39).
+func TestBasicCredentialsInvalidBase64(t *testing.T) {
+	seed(t)
+	h := apitest.Router()
+	before := fakeoidc.Grants()
+	for _, enc := range []string{"!!!", "dXNlcjpwYXNz_-", "dXNlcjpwYXNz"[:5]} {
+		rec := apitest.Do(h, apitest.Request{Method: "POST", Path: "/query/" + ecId + "/metadata",
+			Header: map[string]string{"Authorization": "Basic " + enc, "X-Tenant": tenant}})
+		assert.Equal(t, 403, rec.Code, "%q", enc)
+	}
+	assert.Equal(t, before, fakeoidc.Grants())
 }
 
 // Every /query request makes a password grant at Keycloak, also for repeated credentials
