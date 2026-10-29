@@ -313,6 +313,9 @@ func (er *EnergyRunner) run(db ebow.IBowStorage, f *excelize.File, start, end ti
 }
 
 func ExportEnergyToExcel(tenant, ecid string, start, end time.Time, cps *ExportParticipantEnergy) (*bytes.Buffer, error) {
+	if cps == nil { // the export lists only the given metering points (#53)
+		return nil, errors.New("no metering points given for the export")
+	}
 	db, err := ebow.OpenStorage(tenant, ecid)
 	if err != nil {
 		return nil, err

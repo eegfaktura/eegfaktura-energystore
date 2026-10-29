@@ -166,16 +166,15 @@ func TestLastRecordDate(t *testing.T) {
 	assert.JSONEq(t, `{"periodEnd":"01.06.2026 23:45:00"}`, rec.Body.String())
 }
 
-// The monthly export by mail always hands nil participants to the export and panics
-// (known-errors #53); expected: one mail with the workbook to the token's address.
+// The monthly export by mail hands nil participants to the export and panicked (known-errors #53).
+// The route has no participant list to export, so it answers 400 and sends no mail; sending the
+// whole store by mail instead would be a new mail behaviour (no caller uses the route today).
 func TestExcelExportByMail(t *testing.T) {
-	t.Skip("known-errors #53")
 	fakes := seed(t)
 	rec := apitest.Do(apitest.Router(), apitest.Request{Method: "POST", Path: "/eeg/" + ecId + "/excel/export/2026/6", Header: appHeader()})
-	require.Equal(t, 200, rec.Code, rec.Body.String())
-	require.Equal(t, 1, fakes.MailCount())
-	assert.Equal(t, "member@example.org", fakes.Mails[0].Recipient)
-	assert.NotEmpty(t, fakes.Mails[0].Content)
+	require.Equal(t, 400, rec.Code, rec.Body.String())
+	assert.Contains(t, rec.Body.String(), "no metering points given")
+	assert.Equal(t, 0, fakes.MailCount())
 }
 
 func TestExcelReportDownload(t *testing.T) {

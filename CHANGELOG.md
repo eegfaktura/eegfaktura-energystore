@@ -30,6 +30,10 @@ this changelog highlights the changes relevant for overview and operations.
   The imports of one store now take turns (a lock per tenant/ecId inside the service); an Excel upload holds it
   for the whole file, so MQTT imports of that community wait until it is done. A failed write of the record
   is now reported instead of being ignored.
+- **`POST /eeg/{ecid}/excel/export/{year}/{month}` answers 400 instead of crashing** (energystore #53). The route
+  passes no participant list to the export, so every call panicked and the client saw a dropped connection; no
+  mail was ever sent. It now answers `400 {"error":"no metering points given for the export"}` and still sends no
+  mail. No caller is known (web and v3 do not use it); the Excel download (`/excel/report/download`) is unchanged.
 
 ## [1.8.1] – 2026-10-28
 

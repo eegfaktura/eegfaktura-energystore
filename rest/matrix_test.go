@@ -58,9 +58,8 @@ type route struct {
 	guard                  guard
 	body                   string
 	contentType            string
-	ok                     int    // status of the success case
-	ownStatus              int    // status for the own tenant without a role, if not ok
-	defect                 string // known-errors row that makes the success case fail today
+	ok                     int // status of the success case
+	ownStatus              int // status for the own tenant without a role, if not ok
 }
 
 func ms(t time.Time) int64 { return t.UnixMilli() }
@@ -90,7 +89,7 @@ func routes() []route {
 			body: fmt.Sprintf(`{"start":%d,"end":%d,"cps":[{"meteringPoint":"%s","direction":"CONSUMPTION","activeSince":%d,"inactiveSince":%d}]}`,
 				start, end, meter, start, end), ok: 200},
 		{method: "GET", template: "/eeg/{ecid}/lastRecordDate", path: "/eeg/" + ecId + "/lastRecordDate", ok: 200},
-		{method: "POST", template: "/eeg/{ecid}/excel/export/{year}/{month}", path: "/eeg/" + ecId + "/excel/export/2026/6", ok: 200, defect: "#53"},
+		{method: "POST", template: "/eeg/{ecid}/excel/export/{year}/{month}", path: "/eeg/" + ecId + "/excel/export/2026/6", ok: 400}, // no participant list to export (#53)
 		{method: "POST", template: "/eeg/{ecid}/excel/report/download", path: "/eeg/" + ecId + "/excel/report/download",
 			body: fmt.Sprintf(`{"start":%d,"end":%d,"communityId":"%s","cps":[{"meteringPoint":"%s","direction":"CONSUMPTION","activeSince":%d,"inactiveSince":%d}]}`,
 				start, end, ecId, meter, start, end), ok: 200},
@@ -188,11 +187,6 @@ func TestAuthMatrix(t *testing.T) {
 					continue // case does not apply to this guard
 				}
 				rec := call(t, h, rt, tc.auth, tc.tenant)
-				if rt.defect != "" && want == rt.ok {
-					// the guard let the request through; the handler's answer is the defect test of rt.defect
-					assert.NotContains(t, []int{400, 401, 403}, rec.Code, "%s (known-errors %s): body %s", tc.name, rt.defect, truncate(rec.Body.String()))
-					continue
-				}
 				assert.Equal(t, want, rec.Code, "%s: body %s", tc.name, truncate(rec.Body.String()))
 			}
 		})
