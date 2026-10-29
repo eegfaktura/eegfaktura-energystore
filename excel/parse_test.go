@@ -35,6 +35,21 @@ func TestCheckMeterValuesRefusesText(t *testing.T) {
 	}
 }
 
+// Surrounding whitespace (also a non-breaking space) is ignored; NaN and infinities are refused (#28).
+func TestParseExcelFloat(t *testing.T) {
+	for in, want := range map[string]float64{" 1,5": 1.5, "1,5 ": 1.5, "1.5 ": 1.5, " 1.5 ": 1.5,
+		"\t2\n": 2, " ": 0, " ": 0, "1,234": 1.234, "-0.5": -0.5, "1e-3": 0.001} {
+		got, err := parseExcelFloat(in)
+		require.NoError(t, err, "%q", in)
+		assert.Equal(t, want, got, "%q", in)
+	}
+	for _, bad := range []string{"NaN", "nan", "Inf", "+Inf", "-Inf", "infinity", "-", "n/a", "#DIV/0!", "#N/A",
+		"#VALUE!", "1.234,5", "1,234.5", "1 234", "1'234", "1,2,3"} {
+		_, err := parseExcelFloat(bad)
+		assert.Error(t, err, "%q", bad)
+	}
+}
+
 func TestReturnMeterValue(t *testing.T) {
 	cols := []string{"01.06.2026 00:00:00", "1.25", "2.5"}
 	assert.Equal(t, 1.25, returnMeterValue(cols, 0), "the value is one column right of the meter index")

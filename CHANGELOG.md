@@ -33,9 +33,14 @@ this changelog highlights the changes relevant for overview and operations.
   (energystore #27) naming the metering point, instead of a nil-pointer panic that the upload showed as an opaque
   error. Nothing is stored for such a file.
 - **Excel import: decimal comma and unreadable values** (energystore #28). A value with a decimal comma (`1,5`)
-  is read as 1.5; before, it was stored as 0. A value cell that is not a number (e.g. `n/a`, `1.234,5`) now
-  refuses the upload with an error naming the row and metering point; before, it was stored as 0 without notice.
-  A sheet without energy rows (e.g. an empty workbook) or without the `MeteringpointID`/`Metercode` header is
+  is read as 1.5; before, it was stored as 0. Spaces around a value (also a non-breaking space) are ignored
+  (` 1,5`, `1.5 `). Note: `1,234` is read as 1.234 (decimal comma), not as one thousand two hundred thirty-four.
+  An empty or blank cell is still 0. **These cell contents now refuse the upload** with an error naming the row
+  (its timestamp) and the metering point — before, they were stored as 0 without notice: text (`n/a`, `-`, `x`),
+  Excel error values (`#N/A`, `#DIV/0!`, `#VALUE!`), numbers with thousands separators (`1.234,5`, `1,234.5`,
+  `1 234`, `1'234`) or more than one comma (`1,2,3`), and `NaN`/`Inf`/`Infinity` (any sign; these were stored
+  as such before, not as 0). Only the value
+  cells of the recognised metering points are checked. A sheet without energy rows (e.g. an empty workbook) or without the `MeteringpointID`/`Metercode` header is
   refused with an error instead of reporting success; before, an empty sheet also rewrote the stored metering-point
   meta without any metering point. Not changed: the quality row is still not read and every imported slot keeps
   quality 1; negative values are still accepted.

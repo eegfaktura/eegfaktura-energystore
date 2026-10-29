@@ -10,6 +10,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/xuri/excelize/v2"
 	"io"
+	"math"
 	"os"
 	"regexp"
 	"sort"
@@ -518,15 +519,24 @@ func returnInt(c string) int {
 	return i
 }
 
-// parseExcelFloat reads a value cell: empty is 0, a decimal comma ("1,5") is accepted.
+// parseExcelFloat reads a value cell: surrounding whitespace (also a non-breaking space) is ignored, empty
+// is 0, a decimal comma ("1,5") is accepted. NaN and infinities are refused.
 func parseExcelFloat(c string) (float64, error) {
+	c = strings.TrimSpace(c) // unicode.IsSpace: includes U+00A0
 	if len(c) == 0 {
 		return 0, nil
 	}
 	if strings.Contains(c, ",") && !strings.Contains(c, ".") {
 		c = strings.Replace(c, ",", ".", 1)
 	}
-	return strconv.ParseFloat(c, 64)
+	f, err := strconv.ParseFloat(c, 64)
+	if err != nil {
+		return 0, err
+	}
+	if math.IsNaN(f) || math.IsInf(f, 0) {
+		return 0, fmt.Errorf("not a finite number: %q", c)
+	}
+	return f, nil
 }
 
 func returnFloat(c string) float64 {
