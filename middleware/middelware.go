@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"crypto/rsa"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -23,6 +24,62 @@ type PlatformClaims struct {
 	// StandardClaims models `aud` as a plain string and fails to unmarshal an
 	// array, which 401'd every multi-audience token. exp is still validated.
 	jwt.RegisteredClaims
+}
+
+// UnmarshalJSON reads the `tenant` claim with tenantClaim; every other claim as before.
+func (c *PlatformClaims) UnmarshalJSON(b []byte) error {
+	type plain PlatformClaims // without this method
+	aux := struct {
+		*plain
+		Tenants tenantClaim `json:"tenant"`
+	}{plain: (*plain)(c)}
+	if err := json.Unmarshal(b, &aux); err != nil {
+		return err
+	}
+	c.Tenants = aux.Tenants
+	return nil
+}
+
+// tenantClaim reads the `tenant` claim in the shapes the Keycloak mappers produce (known-errors #14):
+// a string (single-valued mapper), an array of strings, or an array of such arrays (multivalued JSON
+// mapper over an attribute value that holds a JSON array). Empty values are dropped; any other shape
+// is an error, so the token is refused.
+type tenantClaim []string
+
+func (tc *tenantClaim) UnmarshalJSON(b []byte) error {
+	var one string
+	if err := json.Unmarshal(b, &one); err == nil {
+		*tc = appendTenant(nil, one)
+		return nil
+	}
+	var items []json.RawMessage
+	if err := json.Unmarshal(b, &items); err != nil {
+		return fmt.Errorf("tenant claim: %w", err)
+	}
+	var out []string
+	for _, item := range items {
+		var s string
+		if err := json.Unmarshal(item, &s); err == nil {
+			out = appendTenant(out, s)
+			continue
+		}
+		var inner []string
+		if err := json.Unmarshal(item, &inner); err != nil {
+			return fmt.Errorf("tenant claim: %w", err)
+		}
+		for _, s := range inner {
+			out = appendTenant(out, s)
+		}
+	}
+	*tc = out
+	return nil
+}
+
+func appendTenant(tenants []string, t string) []string {
+	if t == "" {
+		return tenants
+	}
+	return append(tenants, t)
 }
 
 type SecHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string, claims *PlatformClaims) error
