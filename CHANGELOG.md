@@ -11,6 +11,7 @@ this changelog highlights the changes relevant for overview and operations.
 ### Security
 - **Basic authentication of the `/query` API** (energystore #39): security relevant — details not published.
 - **Reading of the `tenant` token claim** (energystore #14): security relevant — details not published.
+- **Sample `keycloak.json`** (energystore #15): security relevant — details not published.
 
 ### Fixed
 - **Tests: the export test for a metering point without stored data runs again** (energystore #24): the defect
