@@ -10,6 +10,8 @@ this changelog highlights the changes relevant for overview and operations.
 
 ### Security
 - **Basic authentication of the `/query` API** (energystore #39): security relevant — details not published.
+  Compatibility: clients that send Basic credentials as standard base64 (RFC 7617) are unaffected; a client that
+  encoded them URL-safe (`-`/`_`) to match the old server behaviour now gets 403.
 - **Reading of the `tenant` token claim** (energystore #14): security relevant — details not published.
 - **Sample `keycloak.json`** (energystore #15): security relevant — details not published.
 
@@ -25,8 +27,11 @@ this changelog highlights the changes relevant for overview and operations.
     hours **later** than the gap (winter/summer time), on top of a real quarter hour, and the gap itself had no
     row. It now sits in the missing quarter hour.
   kWh sums are unchanged (the inserted rows are 0 kWh). What changes: the number of rows, their timestamps, the
-  L0 counts and the quality shown for the hour or day such a row falls into. Both gap fills only read; the stored
-  data is not changed by this fix, and the correction applies to already stored data as well.
+  L0 counts and the quality shown for the hour or day such a row falls into. **No data repair is needed:** the
+  fill rows were never stored — both gap fills (reports/raw-data queries and the Excel export) build them in
+  memory while reading — so the correction applies to already stored data as well. One possible exception, not
+  touched by this change: an Excel file from a grid operator portal that contains rows 02:00–02:45 on the
+  summer-time day would have stored real rows for those times when it was uploaded.
 - **Tests: the export test for a metering point without stored data runs again** (energystore #24): the defect
   was fixed in 1.8.0; the stale skip of `TestS08_ExportForAMeterWithoutData` is removed.
 - **Excel import: a new metering point with a missing or unknown "Energy direction" is refused with an error**
@@ -39,17 +44,19 @@ this changelog highlights the changes relevant for overview and operations.
   (its timestamp) and the metering point — before, they were stored as 0 without notice: text (`n/a`, `-`, `x`),
   Excel error values (`#N/A`, `#DIV/0!`, `#VALUE!`), numbers with thousands separators (`1.234,5`, `1,234.5`,
   `1 234`, `1'234`) or more than one comma (`1,2,3`), and `NaN`/`Inf`/`Infinity` (any sign; these were stored
-  as such before, not as 0). Only the value
-  cells of the recognised metering points are checked. A sheet without energy rows (e.g. an empty workbook) or without the `MeteringpointID`/`Metercode` header is
-  refused with an error instead of reporting success; before, an empty sheet also rewrote the stored metering-point
+  as such before, not as 0). Only the value cells of the recognised metering points are checked. A sheet
+  without energy rows (e.g. an empty workbook) or without the `MeteringpointID`/`Metercode` header is refused
+  with an error instead of reporting success; before, an empty sheet also rewrote the stored metering-point
   meta without any metering point. Not changed: the quality row is still not read and every imported slot keeps
   quality 1; negative values are still accepted.
 - **No lost metering points when the MQTT import and an Excel upload write the same community at once**
   (energystore #33). Both read the metering-point record (`cpmeta/0`) and the rows, change them and write them
   back; run at the same time, one import's new metering point (or values) could be overwritten by the other.
   The imports of one store now take turns (a lock per tenant/ecId inside the service); an Excel upload holds it
-  for the whole file, so MQTT imports of that community wait until it is done. A failed write of the record
-  is now reported instead of being ignored.
+  for the whole file, so MQTT imports of that community wait until it is done. During a long upload the
+  community's MQTT messages wait unacknowledged; if the service restarts meanwhile, mosquitto delivers them again
+  and the import is idempotent, so no data is lost. A graceful shutdown waits for a running upload to finish.
+  A failed write of the record is now reported instead of being ignored.
 - **Deleting raw data no longer loses values an MQTT import writes at the same time** (energystore #34). The
   delete (`/eeg/v2/{ecid}/rawdata/delete`) reads the rows of the range and writes them back with the metering
   point's slots zeroed; an import of the same community in between was overwritten (values of other metering
