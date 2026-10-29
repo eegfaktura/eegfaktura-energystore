@@ -452,6 +452,8 @@ func buildMatrixMetaStruct(db ebow.IBowStorage, excelHeader excelHeader) (map[in
 					PeriodStart: kv.begin,
 					PeriodEnd:   kv.end,
 				}
+			default:
+				return nil, nil, fmt.Errorf("'Energy direction' missing or unknown for metering point %s: %q", meterpoint, kv.dir)
 			}
 		}
 		storedMeta := storedCpMeta[kv.key]

@@ -11,6 +11,9 @@ this changelog highlights the changes relevant for overview and operations.
 ### Fixed
 - **Tests: the export test for a metering point without stored data runs again** (energystore #24): the defect
   was fixed in 1.8.0; the stale skip of `TestS08_ExportForAMeterWithoutData` is removed.
+- **Excel import: a new metering point with a missing or unknown "Energy direction" is refused with an error**
+  (energystore #27) naming the metering point, instead of a nil-pointer panic that the upload showed as an opaque
+  error. Nothing is stored for such a file.
 
 ## [1.8.1] – 2026-10-28
 

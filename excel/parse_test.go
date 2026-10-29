@@ -68,7 +68,6 @@ func TestExcelDates(t *testing.T) {
 // A new metering point whose "Energy direction" is missing or unknown is never added to the stored
 // meta and is dereferenced as nil (known-errors #27, F12): the import must refuse it with an error.
 func TestBuildMatrixMetaStructMissingDirection(t *testing.T) {
-	t.Skip("known-errors #27")
 	for _, dir := range []model.MeterDirection{"", "SIDEWAYS"} {
 		t.Run(string(dir), func(t *testing.T) { // one store per subtest: OpenStorageTest locks the tenant
 			db, _ := testsupport.TestDriverStore(t, "te100001", "ecid")

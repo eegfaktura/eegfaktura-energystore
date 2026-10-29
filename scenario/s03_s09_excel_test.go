@@ -57,7 +57,6 @@ func TestS09_ExcelImport(t *testing.T) {
 
 // S9 — an unknown "Energy direction" must be refused with an error, not a panic (known-errors #27).
 func TestS09_ExcelUnknownDirection(t *testing.T) {
-	t.Skip("known-errors #27")
 	community(t)
 	assert.NotPanics(t, func() {
 		assert.Error(t, uploadExcel(t, dayRows(june1), "SIDEWAYS", true))
