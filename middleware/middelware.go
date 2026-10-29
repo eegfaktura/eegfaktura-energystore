@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/golang-jwt/jwt/v4"
 )
@@ -43,13 +44,27 @@ func (c *PlatformClaims) UnmarshalJSON(b []byte) error {
 // tenantClaim reads the `tenant` claim in the shapes the Keycloak mappers produce (known-errors #14):
 // a string (single-valued mapper), an array of strings, or an array of such arrays (multivalued JSON
 // mapper over an attribute value that holds a JSON array). Empty values are dropped; any other shape
-// is an error, so the token is refused.
+// is an error, so the token is refused. A string that starts with "[" is the JSON-array text admin-backend
+// stores in the attribute (String mapper, e.g. the `.api` client): its strings are the tenants; if it is
+// not a JSON array of strings, it yields no tenant.
 type tenantClaim []string
 
 func (tc *tenantClaim) UnmarshalJSON(b []byte) error {
 	var one string
 	if err := json.Unmarshal(b, &one); err == nil {
-		*tc = appendTenant(nil, one)
+		if !strings.HasPrefix(one, "[") {
+			*tc = appendTenant(nil, one)
+			return nil
+		}
+		var inner []string
+		if err := json.Unmarshal([]byte(one), &inner); err != nil {
+			inner = nil // not a JSON array of strings (json may have filled part of it): no tenant
+		}
+		var out []string
+		for _, s := range inner {
+			out = appendTenant(out, s)
+		}
+		*tc = out
 		return nil
 	}
 	var items []json.RawMessage

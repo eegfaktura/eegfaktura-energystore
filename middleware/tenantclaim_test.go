@@ -33,8 +33,14 @@ func TestTenantClaimShapes(t *testing.T) {
 		`["RC1",["RC2"]]`:      {"RC1", "RC2"},
 		`["","RC1",[""],null]`: {"RC1"},
 		`""`:                   nil,
-		`null`:                 nil,
-		`[]`:                   nil,
+		// a string holding a JSON array of strings (String mapper over admin-backend's attribute text)
+		`"[\"RC1\",\"\",\"RC2\"]"`: {"RC1", "RC2"},
+		`"[\"RC1\""`:               nil, // malformed: matches nothing
+		`"[[\"RC1\"]]"`:            nil,
+		`"[1]"`:                    nil,
+		`"[\"RC1\",1]"`:            nil, // partly a string array: nothing
+		`null`:                     nil,
+		`[]`:                       nil,
 	} {
 		var c PlatformClaims
 		require.NoError(t, json.Unmarshal([]byte(`{"tenant":`+in+`}`), &c), in)

@@ -13,7 +13,8 @@ import (
 
 // The `tenant` claim arrives in several shapes depending on the Keycloak mapper (known-errors #14):
 // a flat array, a nested array (multivalued JSON mapper over one JSON-array attribute value) or a
-// plain string (single-valued mapper). Every shape is accepted; the comparison with the tenant header
+// plain string (single-valued mapper), also one holding the JSON-array text admin-backend stores
+// (String mapper of the `.api` client). Every shape is accepted; the comparison with the tenant header
 // stays case-insensitive and a foreign tenant stays refused.
 var tenantClaimShapes = []struct {
 	name  string
@@ -32,6 +33,11 @@ var tenantClaimShapes = []struct {
 	{"empty array", []string{}, false},
 	{"empty string", "", false},
 	{"null", nil, false},
+	{"string with a JSON array", `["` + tenant + `"]`, true},
+	{"string with a JSON array, several tenants, lower case", `["` + foreign + `", "te100001", ""]`, true},
+	{"string with a foreign JSON array", `["` + foreign + `"]`, false},
+	{"string with malformed JSON array text", `["` + tenant + `"`, false},
+	{"string with a JSON array of another type", `[["` + tenant + `"]]`, false},
 }
 
 func TestTenantClaimShapesApp(t *testing.T) {
