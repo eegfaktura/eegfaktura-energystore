@@ -9,6 +9,7 @@ import (
 	"at.ourproject/energystore/internal/testsupport"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
+	"at.ourproject/energystore/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -32,19 +33,51 @@ func TestS07_QualityIsStoredPerSlot(t *testing.T) {
 	}
 }
 
-// A later L2 value replaces a stored L1 value today (known-errors #35, F20). Whether it may is the
-// open business question; this records today's behaviour, it does not say it is right.
-func TestS07_LateMessageOverwrites(t *testing.T) {
+// A late message for a slot that already holds a value (known-errors #35, decision ES-15): the value with
+// the better quality wins (L1 before L2 before L3, 0 = no value); with equal quality the later one wins.
+func TestS07_LateMessageBetterQualityWins(t *testing.T) {
+	for _, c := range []struct {
+		name, stored, late string
+		lateWins           bool
+	}{
+		{"worse quality is ignored", "L1", "L2", false},
+		{"L3 does not replace L2", "L2", "L3", false},
+		{"better quality replaces", "L2", "L1", true},
+		{"L2 replaces L3", "L3", "L2", true},
+		{"equal quality: the later one wins", "L1", "L1", true},
+		{"equal substitute quality: the later one wins", "L2", "L2", true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			community(t)
+			importMQTT(t, consumerMsg(june1, 96, c.stored))
+			late := testsupport.CrMsg(ecId, consumer).Direction(model.CONSUMER_DIRECTION).
+				Energy(june1, c.late, map[model.MeterCodeValue][]float64{model.CODE_CON: {9.99}}).Message()
+			importMQTT(t, late)
+
+			d := raw(t, consumer, june1, june1)
+			if c.lateWins {
+				testsupport.InDelta(t, 9.99, d[0].Value[0], "the late value wins")
+				assert.Equal(t, utils.CastQoVStringToInt(c.late), d[0].Qov[0])
+			} else {
+				testsupport.InDelta(t, cons(0), d[0].Value[0], "the stored value stays")
+				assert.Equal(t, utils.CastQoVStringToInt(c.stored), d[0].Qov[0])
+			}
+			testsupport.InDelta(t, cons(1), d[1].Value[0], "the next slot is untouched")
+		})
+	}
+}
+
+// A slot without a value (quality 0) takes any late value.
+func TestS07_LateMessageFillsAnEmptySlot(t *testing.T) {
 	community(t)
-	importMQTT(t, consumerMsg(june1, 96, "L1"))
+	importMQTT(t, consumerMsg(june1.Add(time.Hour), 4, "L1"))
 	late := testsupport.CrMsg(ecId, consumer).Direction(model.CONSUMER_DIRECTION).
-		Energy(june1, "L2", map[model.MeterCodeValue][]float64{model.CODE_CON: {9.99}}).Message()
+		Energy(june1, "L3", map[model.MeterCodeValue][]float64{model.CODE_CON: {9.99}}).Message()
 	importMQTT(t, late)
 
-	c := raw(t, consumer, june1, june1)
-	testsupport.InDelta(t, 9.99, c[0].Value[0], "open question: today the late L2 value wins")
-	assert.Equal(t, 2, c[0].Qov[0])
-	testsupport.InDelta(t, cons(1), c[1].Value[0], "the next slot is untouched")
+	d := raw(t, consumer, june1, june1)
+	testsupport.InDelta(t, 9.99, d[0].Value[0])
+	assert.Equal(t, 3, d[0].Qov[0])
 }
 
 // The load curve of all-L1 data must report quality 1 (known-errors #30, F15).

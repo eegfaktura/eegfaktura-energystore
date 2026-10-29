@@ -191,18 +191,21 @@ func sumEnergyValueToResource(resource *model.RawSourceLine, metaCP *model.Count
 }
 
 func addEnergyValueToResource(resource *model.RawSourceLine, metaCP *model.CounterPointMeta, meterCode *model.MeterCodeMeta, v model.MqttEnergyValue, isExt bool) {
+	qov := 0
+	switch metaCP.Dir {
+	case model.CONSUMER_DIRECTION:
+		qov = utils.GetInt(resource.QoVConsumers, (metaCP.SourceIdx*3)+meterCode.SourceDelta)
+	case model.PRODUCER_DIRECTION:
+		qov = utils.GetInt(resource.QoVProducers, (metaCP.SourceIdx*2)+meterCode.SourceDelta)
+	}
 	// Exit the function if the extended MeterCode is zero
-	if isExt && v.Value == 0 {
-		qov := 0
-		switch metaCP.Dir {
-		case model.CONSUMER_DIRECTION:
-			qov = utils.GetInt(resource.QoVConsumers, (metaCP.SourceIdx*3)+meterCode.SourceDelta)
-		case model.PRODUCER_DIRECTION:
-			qov = utils.GetInt(resource.QoVProducers, (metaCP.SourceIdx*2)+meterCode.SourceDelta)
-		}
-		if qov > 0 {
-			return
-		}
+	if isExt && v.Value == 0 && qov > 0 {
+		return
+	}
+	// A slot that holds a value keeps it against a value of worse quality (L1 before L2 before L3,
+	// 0 = no value); with equal quality the later value wins (#35, ES-15).
+	if newQov := utils.CastQoVStringToInt(v.Method); qov > 0 && (newQov == 0 || newQov > qov) {
+		return
 	}
 
 	switch metaCP.Dir {

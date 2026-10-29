@@ -66,6 +66,13 @@ this changelog highlights the changes relevant for overview and operations.
   passes no participant list to the export, so every call panicked and the client saw a dropped connection; no
   mail was ever sent. It now answers `400 {"error":"no metering points given for the export"}` and still sends no
   mail. No caller is known (web and v3 do not use it); the Excel download (`/excel/report/download`) is unchanged.
+- **A late energy message no longer replaces a value of better quality** (energystore #35, decision ES-15).
+  **This changes stored values.** Until now every MQTT energy message (EDA `CR_MSG`, also the mass import)
+  overwrote the quarter hours it carried, so a late L2 (substitute) or L3 value replaced a measured L1 value. Now a
+  quarter hour that already holds a value keeps it when the new value has worse quality (L1 before L2 before L3;
+  a value without a known quality counts as worse than any); with equal quality the value that arrives later
+  wins, as before. An empty quarter hour (quality 0, also after a raw-data delete) takes any value. Already stored
+  values are not changed; the Excel import has its own write path and is unchanged.
 
 ## [1.8.1] – 2026-10-28
 
