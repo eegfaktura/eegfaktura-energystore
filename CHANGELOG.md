@@ -14,6 +14,13 @@ this changelog highlights the changes relevant for overview and operations.
 - **Excel import: a new metering point with a missing or unknown "Energy direction" is refused with an error**
   (energystore #27) naming the metering point, instead of a nil-pointer panic that the upload showed as an opaque
   error. Nothing is stored for such a file.
+- **Excel import: decimal comma and unreadable values** (energystore #28). A value with a decimal comma (`1,5`)
+  is read as 1.5; before, it was stored as 0. A value cell that is not a number (e.g. `n/a`, `1.234,5`) now
+  refuses the upload with an error naming the row and metering point; before, it was stored as 0 without notice.
+  A sheet without energy rows (e.g. an empty workbook) or without the `MeteringpointID`/`Metercode` header is
+  refused with an error instead of reporting success; before, an empty sheet also rewrote the stored metering-point
+  meta without any metering point. Not changed: the quality row is still not read and every imported slot keeps
+  quality 1; negative values are still accepted.
 
 ## [1.8.1] – 2026-10-28
 

@@ -518,15 +518,39 @@ func returnInt(c string) int {
 	return i
 }
 
-func returnFloat(c string) float64 {
+// parseExcelFloat reads a value cell: empty is 0, a decimal comma ("1,5") is accepted.
+func parseExcelFloat(c string) (float64, error) {
 	if len(c) == 0 {
-		return 0
+		return 0, nil
 	}
-	f, err := strconv.ParseFloat(c, 64)
+	if strings.Contains(c, ",") && !strings.Contains(c, ".") {
+		c = strings.Replace(c, ",", ".", 1)
+	}
+	return strconv.ParseFloat(c, 64)
+}
+
+func returnFloat(c string) float64 {
+	f, err := parseExcelFloat(c)
 	if err != nil {
 		return 0
 	}
 	return f
+}
+
+// checkMeterValues refuses a data row with a value cell that is not a number; returnMeterValue
+// would read it as 0.
+func checkMeterValues(cols []string, excelCpMeta map[int]*excelCounterPointMeta) error {
+	for _, v := range excelCpMeta {
+		for _, idx := range []int{v.Idx, v.IdxG2, v.IdxG3, v.IdxG1TF, v.IdxG2TF, v.IdxG3TF} {
+			if idx < 0 || len(cols) <= (idx+1) {
+				continue
+			}
+			if _, err := parseExcelFloat(cols[idx+1]); err != nil {
+				return fmt.Errorf("row %s, metering point %s: value %q is not a number", cols[0], v.Name, cols[idx+1])
+			}
+		}
+	}
+	return nil
 }
 
 func returnMeterValue(cols []string, idx int) float64 {

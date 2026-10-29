@@ -22,8 +22,17 @@ func TestReturnFloat(t *testing.T) {
 // A cell the import cannot read becomes 0 without an error (known-errors #28, F13). EDA exports
 // with a decimal comma ("1,5") lose the value silently; the expected value is 1.5.
 func TestReturnFloatDecimalComma(t *testing.T) {
-	t.Skip("known-errors #28")
 	assert.Equal(t, 1.5, returnFloat("1,5"))
+}
+
+// A value cell the import cannot read is an error, not 0 (known-errors #28).
+func TestCheckMeterValuesRefusesText(t *testing.T) {
+	meta := map[int]*excelCounterPointMeta{0: {CounterPointMeta: &model.CounterPointMeta{Name: "AT0030000000000000000000000000001"},
+		Idx: 0, IdxG2: 1, IdxG3: -1, IdxG1TF: -1, IdxG2TF: -1, IdxG3TF: -1}}
+	assert.NoError(t, checkMeterValues([]string{"01.06.2026 00:00:00", "1,5", ""}, meta))
+	for _, bad := range []string{"n/a", "1.234,5", "1,2,3"} {
+		assert.Error(t, checkMeterValues([]string{"01.06.2026 00:00:00", "1", bad}, meta), "%q", bad)
+	}
 }
 
 func TestReturnMeterValue(t *testing.T) {

@@ -65,7 +65,6 @@ func TestS09_ExcelUnknownDirection(t *testing.T) {
 
 // S9 — a decimal comma ("1,5") must not become 0 silently (known-errors #28, F13).
 func TestS09_ExcelDecimalComma(t *testing.T) {
-	t.Skip("known-errors #28")
 	community(t)
 	rows := []excelRow{{ts: "01.06.2026 00:00:00", g1: "1,5", g2: "0", g3: "0"}}
 	err := uploadExcel(t, rows, "CONSUMPTION", true)
@@ -77,9 +76,31 @@ func TestS09_ExcelDecimalComma(t *testing.T) {
 // S9 — a sheet without the Metercode header must be an error, not an import of zero meters
 // (known-errors #28, F13).
 func TestS09_ExcelWithoutMeterCodeHeader(t *testing.T) {
-	t.Skip("known-errors #28")
 	community(t)
 	assert.Error(t, uploadExcel(t, dayRows(june1), "CONSUMPTION", false))
+}
+
+// S9 — a value cell that is not a number is an error, not a stored 0 (known-errors #28, F13).
+func TestS09_ExcelUnreadableValue(t *testing.T) {
+	community(t)
+	rows := []excelRow{{ts: "01.06.2026 00:00:00", g1: "n/a", g2: "0", g3: "0"}}
+	assert.Error(t, uploadExcel(t, rows, "CONSUMPTION", true))
+}
+
+// S9 — a sheet without energy rows is an error and leaves the stored metering points alone
+// (known-errors #28: it rewrote cpmeta/0 without any metering point).
+func TestS09_ExcelWithoutRowsKeepsMeta(t *testing.T) {
+	community(t)
+	importMQTT(t, consumerMsg(june1, 4, "L1"))
+	assert.Error(t, uploadExcel(t, nil, "CONSUMPTION", true))
+
+	db, err := ebow.OpenStorage(tenant, ecId)
+	require.NoError(t, err)
+	defer db.Close()
+	meta, err := db.GetMeta("cpmeta/0")
+	require.NoError(t, err)
+	require.Len(t, meta.CounterPoints, 1)
+	assert.Equal(t, consumer, meta.CounterPoints[0].Name)
 }
 
 // S3 (Excel) — a TF column replaces the base value; it is not added to it.
