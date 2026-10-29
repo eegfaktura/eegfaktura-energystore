@@ -301,7 +301,12 @@ func (e *Engine) Query(tenant, ecid string, start, end time.Time) error {
 			if diff > 0 {
 				for i := int64(0); i < diff; i += 1 {
 					nTime := pt.Add(time.Minute * time.Duration(15*(int(i)+1)))
-					newId, _ := utils.ConvertUnixTimeToRowId("CP/", nTime.Local())
+					// pt and t are row ids read in UTC: the fill id stays in that wall-clock time (no
+					// .Local()), and the hour skipped when summer time starts is no gap (#22).
+					if !utils.WallTimeExists(nTime) {
+						continue
+					}
+					newId, _ := utils.ConvertUnixTimeToRowId("CP/", nTime)
 					fillLine := model.MakeRawSourceLine(newId,
 						ctx.countCons*3, ctx.countProd*2).Copy(ctx.countCons * 3)
 					if err = e.Consumer.HandleLine(ctx, &fillLine); err != nil {

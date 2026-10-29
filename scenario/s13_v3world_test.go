@@ -268,9 +268,16 @@ func TestS13_V3WorldSpringDayKeepsEveryDeliveredSlot(t *testing.T) {
 }
 
 // The spring day has 92 quarter hours: no phantom rows for 02:00–02:45 (known-errors #22, as S2).
+// Every row follows the previous one by exactly one quarter hour, so a phantom row (a duplicate or
+// shifted timestamp) fails. A slot the whole community lacks is a real gap and keeps its fill row
+// (QoV 0, as S4): the v3 world has such gaps, so the count is not compared with the delivered slots;
+// TestS13_V3WorldSpringDayKeepsEveryDeliveredSlot checks those.
 func TestS13_V3WorldSpringDayHasNoPhantomSlots(t *testing.T) {
-	t.Skip("known-errors #22")
 	springDay(t, func(mp string, delivered int, rows []store.RawData) {
-		assert.Len(t, rows, delivered, "%s stored slots", mp)
+		assert.LessOrEqual(t, len(rows), 92, "%s rows on the spring day", mp)
+		for i := 1; i < len(rows); i++ {
+			assert.Equal(t, int64(15*60*1000), rows[i].Ts-rows[i-1].Ts, "%s row %d at %s", mp, i,
+				time.UnixMilli(rows[i].Ts).In(vienna))
+		}
 	})
 }

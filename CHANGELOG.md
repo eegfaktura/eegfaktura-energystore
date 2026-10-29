@@ -14,6 +14,19 @@ this changelog highlights the changes relevant for overview and operations.
 - **Sample `keycloak.json`** (energystore #15): security relevant — details not published.
 
 ### Fixed
+- **Gap filling: no phantom quarter hours on the summer-time day, fill rows in their own slot** (energystore #22).
+  **This changes values in reports, raw-data queries and Excel exports.** Where the store has no row for a
+  quarter hour, the reports insert an empty row (0 kWh, quality L0). Two errors are fixed:
+  - On the day summer time starts (e.g. 29.03.2026) the clock jumps from 01:45 to 03:00. This jump was taken
+    for a missing hour: reports, raw-data queries and the Excel export showed **four extra quarter hours
+    (02:00–02:45) with 0 kWh and quality L0**, and the summary sheet counted them as L0. They are gone: the day
+    has its 92 quarter hours, and the L0 count of that day drops by four per metering point.
+  - In reports and raw-data queries (not the Excel export) the empty row for a real gap was placed one or two
+    hours **later** than the gap (winter/summer time), on top of a real quarter hour, and the gap itself had no
+    row. It now sits in the missing quarter hour.
+  kWh sums are unchanged (the inserted rows are 0 kWh). What changes: the number of rows, their timestamps, the
+  L0 counts and the quality shown for the hour or day such a row falls into. Both gap fills only read; the stored
+  data is not changed by this fix, and the correction applies to already stored data as well.
 - **Tests: the export test for a metering point without stored data runs again** (energystore #24): the defect
   was fixed in 1.8.0; the stale skip of `TestS08_ExportForAMeterWithoutData` is removed.
 - **Excel import: a new metering point with a missing or unknown "Energy direction" is refused with an error**

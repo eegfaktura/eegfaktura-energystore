@@ -281,6 +281,9 @@ func (er *EnergyRunner) run(db ebow.IBowStorage, f *excelize.File, start, end ti
 			if diff > 0 {
 				for i := int64(0); i < diff; i += 1 {
 					nTime := pt.Add(time.Minute * time.Duration(15*(int(i)+1)))
+					if !utils.WallTimeExists(nTime) { // the hour skipped when summer time starts is no gap (#22)
+						continue
+					}
 					newId, _ := utils.ConvertUnixTimeToRowId("CP/", nTime)
 					fillLine := model.MakeRawSourceLine(newId,
 						rCxt.countCons*3, rCxt.countProd*2).Copy(rCxt.countCons * 3)

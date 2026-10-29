@@ -90,7 +90,6 @@ func TestS02_SpringDayStores92Slots(t *testing.T) {
 // The read side must not see the 01:45 → 03:00 jump as a gap: 92 slots, no fill rows, no L0
 // (known-errors #22, F7).
 func TestS02_SpringDayReadsWithoutPhantomSlots(t *testing.T) {
-	t.Skip("known-errors #22")
 	community(t)
 	day := testsupportSpring()
 	importMQTT(t, consumerMsg(day, 92, "L1"))
@@ -131,7 +130,6 @@ func TestS03_AutumnDayKeeps100Slots(t *testing.T) {
 // slots with zero and quality 0 (known-errors #22, F7: today the fill rows land 2 h later and
 // duplicate real slots).
 func TestS04_MissingHourIsFilledInPlace(t *testing.T) {
-	t.Skip("known-errors #22")
 	community(t)
 	day := time.Date(2026, 6, 1, 0, 0, 0, 0, vienna)
 	importMQTT(t, consumerMsg(day, 40, "L1"), consumerMsg(day.Add(11*time.Hour), 52, "L1"))

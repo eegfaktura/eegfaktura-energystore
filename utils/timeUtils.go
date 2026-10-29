@@ -102,6 +102,14 @@ func CheckTime(previousTime, currentTime *time.Time) bool {
 	return false
 }
 
+// WallTimeExists reports whether the wall-clock time of w (a row id read in UTC) exists in time.Local.
+// The hour skipped when summer time starts (02:00–02:45 in Europe/Vienna) does not: it is no gap and
+// gets no fill row (known-errors #22).
+func WallTimeExists(w time.Time) bool {
+	l := time.Date(w.Year(), w.Month(), w.Day(), w.Hour(), w.Minute(), w.Second(), 0, time.Local)
+	return l.Day() == w.Day() && l.Hour() == w.Hour() && l.Minute() == w.Minute()
+}
+
 func ConvertTimeToStringExcel(t time.Time) string {
 	y, m, d := t.Date()
 	hh, mm := t.Hour(), t.Minute()
