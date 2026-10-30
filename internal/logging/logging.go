@@ -79,7 +79,7 @@ func Configure(env []string, out io.Writer) error {
 	overrides := map[string]slog.Level{}
 	for name, value := range vars {
 		pkg, ok := strings.CutPrefix(name, "LOG_LEVEL_")
-		if !ok || pkg == "" {
+		if !ok || pkg == "" || strings.TrimSpace(value) == "" { // empty: no override
 			continue
 		}
 		l, err := parseLevel(value)

@@ -172,3 +172,12 @@ func TestStandardLogGoesThroughTheModule(t *testing.T) {
 	assert.Equal(t, "info", m["log.level"])
 	assert.Equal(t, ServiceName, m["service.name"])
 }
+
+// An empty LOG_LEVEL_<PKG> is no override (it would pin the package to info).
+func TestEmptyPackageOverrideIsIgnored(t *testing.T) {
+	capture(t, "LOG_LEVEL=debug", "LOG_LEVEL_LOGGING= ")
+	assert.False(t, HasOverrides())
+	var pcs [1]uintptr
+	runtime.Callers(1, pcs[:])
+	assert.True(t, Enabled(pcs[0], slog.LevelDebug), "the global level applies")
+}
