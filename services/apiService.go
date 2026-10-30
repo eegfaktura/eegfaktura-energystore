@@ -33,7 +33,7 @@ func RequestActiveMeteringPoints(tenant string, from, to *uint64) ([]*protobuf.M
 	}
 
 	r, err := c.MasterData_MeteringPoint(ctx, request)
-	glog.V(5).Infof("Response from MASTER-DATA Service: %v", r)
+	glog.V(5).Infof("Response from MASTER-DATA Service: %d metering points", len(r.GetMeteringPoints()))
 	if r == nil {
 		if err != nil {
 			glog.Error(fmt.Sprintf("Error Servicecall: %v", err))
