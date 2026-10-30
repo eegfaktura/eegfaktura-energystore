@@ -39,7 +39,9 @@ this changelog highlights the changes relevant for overview and operations.
   admin and owner logins are unchanged.
 - **`/query` API for admins only** (energystore 261025-ca1): security relevant — details not published.
   `/query/rawdata` and `/query/{ecid}/metadata` answer 403 unless the account is in `/EEG_ADMIN` or `/EEG_OWNER`
-  or has the realm role `superuser`. Every account that used the API in production is an admin.
+  (the API client's tokens must carry the `access_groups` group mapper). Every account that used the API in
+  production is an admin. A superuser without one of these groups is refused: the realm role is not in the
+  API's tokens.
 - **Member access needs a verified e-mail address** (energystore 261025-ca1): security relevant — details not
   published. Rollout: a member login whose e-mail address is not confirmed gets 403 on per-meter energy until the
   address is confirmed; community totals, admin and owner logins are unaffected.

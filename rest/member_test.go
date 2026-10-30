@@ -255,7 +255,9 @@ func TestBasicApiAdminOnly(t *testing.T) {
 		"api-member":  {map[string]any{"tenant": []string{tenant}, "access_groups": []string{"/EEG_USER"}}, 403},
 		"api-admin":   {map[string]any{"tenant": []string{tenant}, "access_groups": []string{"/EEG_ADMIN"}}, 200},
 		"api-owner":   {map[string]any{"tenant": []string{tenant}, "access_groups": []string{"/EEG_OWNER"}}, 200},
-		"api-super":   {map[string]any{"tenant": []string{tenant}, "realm_access": map[string]any{"roles": []string{"superuser"}}}, 200},
+		// a superuser without a group: the password grant's ID token carries no realm_access (the realm
+		// roles mapper has no id.token.claim), so the role is invisible here and the account is refused
+		"api-super": {map[string]any{"tenant": []string{tenant}}, 403},
 	} {
 		fakeoidc.SetUser(user, apiPass, c.claims)
 		for _, path := range []string{"/query/rawdata", "/query/" + ecId + "/metadata"} {
@@ -263,6 +265,9 @@ func TestBasicApiAdminOnly(t *testing.T) {
 				Body:   fmt.Sprintf(`{"cps":[{"meteringPoint":"%s"}],"ecId":"%s","start":%d,"end":%d}`, otherMeter, ecId, start, end),
 				Header: map[string]string{"Authorization": apitest.Basic(user, apiPass), "X-Tenant": tenant}})
 			assert.Equal(t, c.want, rec.Code, "%s %s", user, path)
+			if c.want == 200 { // admins see the community's data, also another member's meter
+				assert.Contains(t, rec.Body.String(), otherMeter, "%s %s", user, path)
+			}
 		}
 	}
 	assert.Equal(t, int32(0), b.calls.Load())
