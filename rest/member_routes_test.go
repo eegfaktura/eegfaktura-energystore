@@ -17,7 +17,6 @@ const (
 	perMeterOwn    memberClass = iota + 1 // the member's own metering points only (403 for others, meta filtered)
 	communityTotal                        // whole-community totals without meter ids: unchanged
 	adminOnly                             // writes, imports, exports of every meter: 403 for members
-	basicAPI                              // Basic-auth /query API: not restricted (decided separately)
 )
 
 // memberClasses classifies every entry point of routes() (which TestRouteWalkGuard keeps complete): a new
@@ -39,8 +38,8 @@ var memberClasses = map[string]memberClass{
 	"POST /eeg/v2/{ecid}/rawdata/delete":           adminOnly,
 	"POST /eeg/{ecid}/excel/export/{year}/{month}": adminOnly,
 	"POST /query singleUpload":                     adminOnly,
-	"POST /query/rawdata":                          basicAPI,
-	"POST /query/{ecid}/metadata":                  basicAPI,
+	"POST /query/rawdata":                          adminOnly,
+	"POST /query/{ecid}/metadata":                  adminOnly,
 }
 
 func TestEveryRouteIsClassifiedForMembers(t *testing.T) {
@@ -70,7 +69,11 @@ func TestEveryRouteIsClassifiedForMembers(t *testing.T) {
 			rec := call(t, h, rt, memberAuth, tenant)
 			assert.Equal(t, rt.ok, rec.Code, "%s: %s", rt.name(), truncate(rec.Body.String()))
 		case adminOnly:
-			rec := call(t, h, rt, memberAuth, tenant)
+			auth := memberAuth
+			if rt.guard == api {
+				auth = apitest.Basic("api-member", apiPass)
+			}
+			rec := call(t, h, rt, auth, tenant)
 			if rt.guard == gql {
 				var resp gqlResponse
 				_ = json.Unmarshal(rec.Body.Bytes(), &resp)
@@ -78,9 +81,6 @@ func TestEveryRouteIsClassifiedForMembers(t *testing.T) {
 				continue
 			}
 			assert.Equal(t, 403, rec.Code, "%s: %s", rt.name(), truncate(rec.Body.String()))
-		case basicAPI:
-			rec := call(t, h, rt, apitest.Basic("api-member", apiPass), tenant)
-			assert.Equal(t, rt.ok, rec.Code, "%s: %s", rt.name(), truncate(rec.Body.String()))
 		}
 	}
 	assert.Len(t, memberClasses, len(routes()), "a class for a route that no longer exists")

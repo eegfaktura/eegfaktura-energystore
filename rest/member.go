@@ -122,6 +122,16 @@ func clampDays(w http.ResponseWriter, own ownmeters.Meters, meter string, from, 
 	return true
 }
 
+// noMembers answers 403 to a member before h.
+func noMembers(h middleware.JWTHandlerFunc) middleware.JWTHandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request, claims *middleware.PlatformClaims, tenant string) {
+		if denyMember(w, claims) {
+			return
+		}
+		h(w, r, claims, tenant)
+	}
+}
+
 // denyMember answers 403 to a member (writes, imports, exports of the whole community).
 func denyMember(w http.ResponseWriter, claims *middleware.PlatformClaims) bool {
 	if claims.IsMember() {

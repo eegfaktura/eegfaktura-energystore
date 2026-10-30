@@ -24,8 +24,10 @@ import (
 func InitQueryApiRouter(r *mux.Router) *mux.Router {
 	s := r.PathPrefix("/query").Subrouter()
 
-	s.HandleFunc("/rawdata", middleware.ProtectApi(queryRawData())).Methods("POST")
-	s.HandleFunc("/{ecid}/metadata", middleware.ProtectApi(queryMetaData(false))).Methods("POST")
+	// admin, owner and superuser only (energystore 261025-ca1): there is no bearer token to look up a
+	// member's own metering points with
+	s.HandleFunc("/rawdata", middleware.ProtectApi(noMembers(queryRawData()))).Methods("POST")
+	s.HandleFunc("/{ecid}/metadata", middleware.ProtectApi(noMembers(queryMetaData(false)))).Methods("POST")
 	return r
 }
 

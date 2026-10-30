@@ -241,23 +241,28 @@ func TestMemberWritesAndCommunityExportsAre403(t *testing.T) {
 	assert.Equal(t, int32(0), b.calls.Load())
 }
 
-// The Basic-auth /query API keeps its behaviour for users without a group or with /EEG_USER: it is not
-// restricted and does not ask the backend.
-func TestBasicApiUnrestricted(t *testing.T) {
+// The Basic-auth /query API is admin-only: members and users without a group get 403, without a backend
+// call (there is no bearer token to look up their meters with).
+func TestBasicApiAdminOnly(t *testing.T) {
 	b := startBackend(t)
 	h := memberRouter(t, b.URL)
 	start, end := ms(day), ms(day.Add(23*time.Hour+45*time.Minute))
-	for user, claims := range map[string]map[string]any{
-		"api-nogroup": {"tenant": []string{tenant}},
-		"api-member":  {"tenant": []string{tenant}, "access_groups": []string{"/EEG_USER"}},
+	for user, c := range map[string]struct {
+		claims map[string]any
+		want   int
+	}{
+		"api-nogroup": {map[string]any{"tenant": []string{tenant}}, 403},
+		"api-member":  {map[string]any{"tenant": []string{tenant}, "access_groups": []string{"/EEG_USER"}}, 403},
+		"api-admin":   {map[string]any{"tenant": []string{tenant}, "access_groups": []string{"/EEG_ADMIN"}}, 200},
+		"api-owner":   {map[string]any{"tenant": []string{tenant}, "access_groups": []string{"/EEG_OWNER"}}, 200},
+		"api-super":   {map[string]any{"tenant": []string{tenant}, "realm_access": map[string]any{"roles": []string{"superuser"}}}, 200},
 	} {
-		fakeoidc.SetUser(user, apiPass, claims)
+		fakeoidc.SetUser(user, apiPass, c.claims)
 		for _, path := range []string{"/query/rawdata", "/query/" + ecId + "/metadata"} {
 			rec := apitest.Do(h, apitest.Request{Method: "POST", Path: path,
 				Body:   fmt.Sprintf(`{"cps":[{"meteringPoint":"%s"}],"ecId":"%s","start":%d,"end":%d}`, otherMeter, ecId, start, end),
 				Header: map[string]string{"Authorization": apitest.Basic(user, apiPass), "X-Tenant": tenant}})
-			assert.Equal(t, 200, rec.Code, "%s %s", user, path)
-			assert.Contains(t, rec.Body.String(), otherMeter, "%s %s", user, path)
+			assert.Equal(t, c.want, rec.Code, "%s %s", user, path)
 		}
 	}
 	assert.Equal(t, int32(0), b.calls.Load())

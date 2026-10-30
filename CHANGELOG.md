@@ -37,6 +37,9 @@ this changelog highlights the changes relevant for overview and operations.
 - **Member access by metering point status** (energystore 261025-ca1): security relevant — details not published.
   Member logins get 403 for metering points whose participation has no usable start or end date in the backend;
   admin and owner logins are unchanged.
+- **`/query` API for admins only** (energystore 261025-ca1): security relevant — details not published.
+  `/query/rawdata` and `/query/{ecid}/metadata` answer 403 unless the account is in `/EEG_ADMIN` or `/EEG_OWNER`
+  or has the realm role `superuser`. Every account that used the API in production is an admin.
 
 ### Fixed
 - **Gap filling: no phantom quarter hours on the summer-time day, fill rows in their own slot** (energystore #22).

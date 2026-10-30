@@ -78,7 +78,7 @@ func TestTenantClaimShapesApi(t *testing.T) {
 	seed(t)
 	h := apitest.Router()
 	for _, tc := range tenantClaimShapes {
-		fakeoidc.SetUser(apiUser, apiPass, map[string]any{"tenant": tc.claim})
+		fakeoidc.SetUser(apiUser, apiPass, map[string]any{"tenant": tc.claim, "access_groups": []string{"/EEG_ADMIN"}})
 		rec := apitest.Do(h, apitest.Request{Method: "POST", Path: "/query/" + ecId + "/metadata", Header: apiHeader()})
 		if tc.ok {
 			assert.Equal(t, 200, rec.Code, tc.name)
