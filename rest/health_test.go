@@ -2,6 +2,7 @@ package rest_test
 
 import (
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"at.ourproject/energystore/internal/testsupport"
@@ -41,6 +42,25 @@ func TestReadyzWithStore(t *testing.T) {
 	code, body, _ := probe(t, "/readyz")
 	assert.Equal(t, 200, code)
 	assert.Equal(t, "ok", body)
+}
+
+// Concurrent probes share one check (ebow.Ready); every caller still gets the result.
+func TestReadyzConcurrent(t *testing.T) {
+	testsupport.UseTempPersistence(t)
+	h := apitest.Router()
+	var wg sync.WaitGroup
+	codes := make([]int, 20)
+	for i := range codes {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			codes[i] = apitest.Do(h, apitest.Request{Method: "GET", Path: "/readyz"}).Code
+		}(i)
+	}
+	wg.Wait()
+	for _, c := range codes {
+		assert.Equal(t, 200, c)
+	}
 }
 
 func TestReadyzMissingPersistencePath(t *testing.T) {

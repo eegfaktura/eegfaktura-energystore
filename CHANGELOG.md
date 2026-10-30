@@ -13,7 +13,8 @@ this changelog highlights the changes relevant for overview and operations.
   token (the only unauthenticated endpoints). `/healthz` (liveness) always answers 200 `ok` and checks nothing.
   `/readyz` (readiness) answers 200 `ok` while the Badger store can serve requests — the connection pool is not shut
   down and `persistence.path` is a directory — otherwise 503 `unavailable`; the reason is logged as a warning, never
-  returned. `/readyz` opens no tenant database. Behind the public ingress they are reachable as
+  returned. `/readyz` takes no handle from the connection pool and opens no tenant database; the directory
+  check has a 2 s timeout, and concurrent calls share one running check. Behind the public ingress they are reachable as
   `/energystore/healthz` and `/energystore/readyz`.
 
 ### Security
