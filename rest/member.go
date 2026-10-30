@@ -43,6 +43,11 @@ func ownMeters(w http.ResponseWriter, r *http.Request, claims *middleware.Platfo
 		respondWithError(w, http.StatusServiceUnavailable, "metering points of the member not available")
 		return nil, false
 	}
+	if !claims.EmailVerified {
+		// the backend matches the member by email: only a confirmed address may name its metering points
+		respondWithError(w, http.StatusForbidden, "email address not verified")
+		return nil, false
+	}
 	all, err := memberMeters.Meters(r.Context(), r.Header.Get("Authorization"), claims.Subject, tenant, claims.Tenants)
 	if err == nil {
 		own, err = inCommunity(all, tenant, mux.Vars(r)["ecid"])

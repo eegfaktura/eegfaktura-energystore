@@ -76,7 +76,7 @@ func memberRouter(t *testing.T, url string) http.Handler {
 func groupToken(groups ...string) string {
 	return "Bearer " + fakeoidc.Token(map[string]any{
 		"tenant": []string{tenant}, "access_groups": groups, "sub": "member-1",
-		"email": "member@example.org", "realm_access": map[string]any{"roles": []string{}},
+		"email": "member@example.org", "email_verified": true, "realm_access": map[string]any{"roles": []string{}},
 	})
 }
 

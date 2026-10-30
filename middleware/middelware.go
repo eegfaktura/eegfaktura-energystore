@@ -23,6 +23,9 @@ type PlatformClaims struct {
 	// AccessGroups are the Keycloak groups of the user (full path, e.g. "/EEG_ADMIN"), as in the backend.
 	// They are not per community (api 261025-ca3).
 	AccessGroups []string `json:"access_groups"`
+	// EmailVerified (standard `email` scope): a member is looked up by its email only when it is verified;
+	// missing counts as false (energystore 261025-ca1).
+	EmailVerified bool `json:"email_verified"`
 	// RegisteredClaims (not the deprecated StandardClaims) so `aud` parses as
 	// either a string or an array — RFC 7519 allows both, and Keycloak emits an
 	// array when a token carries more than one audience (e.g. the admin client).
