@@ -8,6 +8,17 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Added
+- **Health endpoints `GET /healthz` and `GET /readyz`** (also `HEAD`) for Kubernetes probes, on the HTTP port
+  (8080), without a token (the only unauthenticated endpoints). `/healthz` (liveness) always answers 200 `ok` and
+  checks nothing. `/readyz` (readiness) answers 200 `ok` while a small file can be written to and removed from
+  `persistence.path` (catches a missing directory, a read-only volume and a full disk), otherwise 503 `unavailable`;
+  the reason is logged as a warning, never returned. The check has a 2 s timeout, concurrent calls share one running
+  check, and a hanging check is not started twice. `/readyz` takes no handle from the connection pool and opens no
+  tenant database. At start energystore now creates `persistence.path` if it is missing (mode 0700, as Badger does;
+  an error is logged), so a fresh volume reports ready. The public ingress blocks `/energystore/healthz` and
+  `/energystore/readyz` (vfeeg-development/eegfaktura-gitops#159); kubelet probes reach the pods directly.
+
 ### Security
 - **Basic authentication of the `/query` API** (energystore #39): security relevant — details not published.
   Compatibility: clients that send Basic credentials as standard base64 (RFC 7617) are unaffected; a client that

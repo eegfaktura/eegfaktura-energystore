@@ -207,6 +207,9 @@ func TestRouteWalkGuard(t *testing.T) {
 	for _, rt := range routes() {
 		listed[rt.method+" "+rt.template] = true
 	}
+	for _, p := range publicRoutes { // unauthenticated by design, tested in health_test.go
+		listed[p] = true
+	}
 	var unlisted []string
 	seen := map[string]bool{}
 	err := apitest.Router().Walk(func(route *mux.Route, _ *mux.Router, _ []*mux.Route) error {
@@ -232,5 +235,5 @@ func TestRouteWalkGuard(t *testing.T) {
 	require.NoError(t, err)
 	sort.Strings(unlisted)
 	assert.Empty(t, unlisted, "routes without the auth matrix")
-	assert.Len(t, seen, 17, "16 REST routes and /query (two GraphQL fields)")
+	assert.Len(t, seen, 21, "16 REST routes, /query (two GraphQL fields) and the two health probes (GET, HEAD)")
 }
