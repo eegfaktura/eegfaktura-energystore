@@ -8,6 +8,14 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Added
+- **Health endpoints `GET /healthz` and `GET /readyz`** for Kubernetes probes, on the HTTP port (8080), without a
+  token (the only unauthenticated endpoints). `/healthz` (liveness) always answers 200 `ok` and checks nothing.
+  `/readyz` (readiness) answers 200 `ok` while the Badger store can serve requests — the connection pool is not shut
+  down and `persistence.path` is a directory — otherwise 503 `unavailable`; the reason is logged as a warning, never
+  returned. `/readyz` opens no tenant database. Behind the public ingress they are reachable as
+  `/energystore/healthz` and `/energystore/readyz`.
+
 ### Security
 - **Basic authentication of the `/query` API** (energystore #39): security relevant — details not published.
   Compatibility: clients that send Basic credentials as standard base64 (RFC 7617) are unaffected; a client that
