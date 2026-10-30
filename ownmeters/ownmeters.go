@@ -69,7 +69,7 @@ func (r *Resolver) Meters(ctx context.Context, authorization, subject, tenant st
 		return nil, ErrNotConfigured
 	}
 	if subject == "" {
-		return r.fetchAll(ctx, authorization, claimTenants)
+		return r.fetchAll(ctx, authorization, tenant, claimTenants)
 	}
 	key := subject + "\x00" + strings.ToUpper(tenant)
 	r.mu.Lock()
@@ -81,7 +81,7 @@ func (r *Resolver) Meters(ctx context.Context, authorization, subject, tenant st
 
 	v, err, _ := r.group.Do(key, func() (any, error) {
 		// shared by every caller of the key: not cancelled with the first caller's request
-		meters, err := r.fetchAll(context.WithoutCancel(ctx), authorization, claimTenants)
+		meters, err := r.fetchAll(context.WithoutCancel(ctx), authorization, tenant, claimTenants)
 		if err == nil {
 			r.store(key, meters)
 		}
@@ -93,12 +93,12 @@ func (r *Resolver) Meters(ctx context.Context, authorization, subject, tenant st
 	return v.(Meters), nil
 }
 
-// fetchAll asks the backend once per distinct tenant (case-insensitive, at most maxTenants) and unites
-// the answers; any failed call fails the lookup.
-func (r *Resolver) fetchAll(ctx context.Context, authorization string, tenants []string) (Meters, error) {
+// fetchAll asks the backend once per distinct tenant (case-insensitive, at most maxTenants; the requested
+// tenant first, so the cap never drops it) and unites the answers; any failed call fails the lookup.
+func (r *Resolver) fetchAll(ctx context.Context, authorization, requested string, tenants []string) (Meters, error) {
 	meters := Meters{}
 	seen := map[string]bool{}
-	for _, t := range tenants {
+	for _, t := range append([]string{requested}, tenants...) {
 		t = strings.ToUpper(t)
 		if t == "" || seen[t] {
 			continue

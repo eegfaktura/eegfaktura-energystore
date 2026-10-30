@@ -230,7 +230,8 @@ func TestEveryTenantOfTheToken(t *testing.T) {
 	for i := range many {
 		many[i] = fmt.Sprintf("T%02d", i)
 	}
-	_, err = New(s.URL).Meters(context.Background(), "Bearer tok", "sub", "T00", many)
+	_, err = New(s.URL).Meters(context.Background(), "Bearer tok", "sub", "T14", many)
 	require.NoError(t, err)
 	assert.Len(t, asked, maxTenants)
+	assert.Equal(t, []string{"T14", "T00", "T01"}, asked[:3], "the requested tenant first, the rest in order")
 }
