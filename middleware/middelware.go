@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/golang-jwt/jwt/v4"
@@ -19,6 +20,9 @@ type PlatformClaims struct {
 	RealmAccess struct {
 		Roles []string `json:"roles"`
 	} `json:"realm_access"`
+	// AccessGroups are the Keycloak groups of the user (full path, e.g. "/EEG_ADMIN"), as in the backend.
+	// They are not per community (api 261025-ca3).
+	AccessGroups []string `json:"access_groups"`
 	// RegisteredClaims (not the deprecated StandardClaims) so `aud` parses as
 	// either a string or an array — RFC 7519 allows both, and Keycloak emits an
 	// array when a token carries more than one audience (e.g. the admin client).
@@ -95,6 +99,15 @@ func appendTenant(tenants []string, t string) []string {
 		return tenants
 	}
 	return append(tenants, t)
+}
+
+// IsMember: every token without the group /EEG_ADMIN or /EEG_OWNER and without the realm role superuser —
+// /EEG_USER and a token without any group alike. A member reads per-meter energy only of its own metering
+// points (energystore 261025-ca1). Applied to bearer tokens only; the Basic-auth /query/* API does not use it.
+func (c *PlatformClaims) IsMember() bool {
+	return !slices.Contains(c.AccessGroups, "/EEG_ADMIN") &&
+		!slices.Contains(c.AccessGroups, "/EEG_OWNER") &&
+		!slices.Contains(c.RealmAccess.Roles, "superuser")
 }
 
 type SecHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string, claims *PlatformClaims) error

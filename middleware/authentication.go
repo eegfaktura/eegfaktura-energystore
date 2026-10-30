@@ -217,7 +217,11 @@ func GQLProtect(next http.Handler) http.Handler {
 
 		// Die Resolver bekommen tenant als Argument; geprueft ist nur der Header. Den geprueften
 		// Mandanten weiterreichen, damit die Resolver das Argument abgleichen (tenantctx.Check).
-		next.ServeHTTP(w, r.WithContext(tenantctx.WithCaller(r.Context(), tenant, superuser)))
+		ctx := tenantctx.WithCaller(r.Context(), tenant, superuser)
+		if claims.IsMember() {
+			ctx = tenantctx.WithMember(ctx)
+		}
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
