@@ -20,7 +20,9 @@ const answer = `[
  {"id":"P1","meters":[
   {"meteringPoint":"at001","registeredSince":"2025-01-01","participantState":{"activeSince":"2026-02-01","inactiveSince":"2026-03-31"}},
   {"meteringPoint":"AT002","registeredSince":"2025-01-01","participantState":{"activeSince":null,"inactiveSince":null}},
-  {"meteringPoint":"AT003","registeredSince":"0000-01-01","participantState":{"activeSince":null,"inactiveSince":null}}]},
+  {"meteringPoint":"AT003","registeredSince":"0000-01-01","participantState":{"activeSince":"0000-01-01","inactiveSince":null}},
+  {"meteringPoint":"AT004","registeredSince":"2025-01-01","processState":"REJECTED","participantState":{"activeSince":"2026-01-01","inactiveSince":null}},
+  {"meteringPoint":"AT005","registeredSince":"2025-01-01"}]},
  {"id":"P2","meters":[
   {"meteringPoint":"AT001","registeredSince":"2025-01-01","participantState":{"activeSince":"2026-06-01","inactiveSince":null}}]}]`
 
@@ -58,11 +60,13 @@ func TestMetersAndWindows(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, Meters{
 		"AT001": {{From: date("2026-02-01"), Until: date("2026-03-31")}, {From: date("2026-06-01"), Until: openEnd}},
-		"AT002": {{From: date("2025-01-01"), Until: openEnd}}, // backend defaults: registeredSince, open end
-		"AT003": nil,                                          // no valid start date: no window
+		"AT002": nil, // never activated (activeSince null): no window, registeredSince does not count
+		"AT003": nil, // no valid start date
+		"AT004": nil, // rejected registration
+		"AT005": nil, // no participantState
 	}, m)
 	assert.True(t, m.Owns("at003"))
-	assert.False(t, m.Owns("AT004"))
+	assert.False(t, m.Owns("AT009"))
 }
 
 func TestBackendErrors(t *testing.T) {

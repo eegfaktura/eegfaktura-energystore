@@ -69,9 +69,9 @@ func dayOf(ms int64) time.Time {
 
 // backendMeter is the part of a metering point in the backend's answer that is used.
 type backendMeter struct {
-	MeteringPoint   string `json:"meteringPoint"`
-	RegisteredSince string `json:"registeredSince"`
-	State           *struct {
+	MeteringPoint string `json:"meteringPoint"`
+	ProcessState  string `json:"processState"`
+	State         *struct {
 		ActiveSince   *string `json:"activeSince"`
 		InactiveSince *string `json:"inactiveSince"`
 	} `json:"participantState"`
@@ -79,19 +79,18 @@ type backendMeter struct {
 
 var openEnd = time.Date(2999, 12, 31, 0, 0, 0, 0, time.Local)
 
-// windows reads the participation's window with the backend's defaults (meteringPointDao): activeSince,
-// else registeredSince; inactiveSince, else open. Without a valid start date there is no window.
+// windows reads the participation's window: from activeSince until inactiveSince, open without an end
+// date. Only an activated participation has a window: none without a valid activeSince (never activated)
+// and none for a rejected registration.
 func (bm backendMeter) windows() []Window {
-	from, ok := day(bm.RegisteredSince)
+	if bm.State == nil || bm.State.ActiveSince == nil || strings.EqualFold(bm.ProcessState, "REJECTED") {
+		return nil
+	}
+	from, ok := day(*bm.State.ActiveSince)
 	until := openEnd
-	if bm.State != nil {
-		if bm.State.ActiveSince != nil {
-			from, ok = day(*bm.State.ActiveSince)
-		}
-		if bm.State.InactiveSince != nil {
-			if d, valid := day(*bm.State.InactiveSince); valid {
-				until = d
-			}
+	if bm.State.InactiveSince != nil {
+		if d, valid := day(*bm.State.InactiveSince); valid {
+			until = d
 		}
 	}
 	if !ok || until.Before(from) {
