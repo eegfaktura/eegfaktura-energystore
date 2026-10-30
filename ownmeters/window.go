@@ -117,35 +117,54 @@ type backendMeter struct {
 
 var openEnd = time.Date(2999, 12, 31, 0, 0, 0, 0, time.Local)
 
-// registeredPlaceholder: a registeredSince before it (e.g. 0001-01-01) is a placeholder, not a date.
-var registeredPlaceholder = time.Date(2000, 1, 1, 0, 0, 0, 0, time.Local)
+var (
+	// placeholderBefore: a backend date before it (e.g. 0001-01-01, 1970-01-01) is a placeholder, not a date.
+	placeholderBefore = time.Date(2000, 1, 1, 0, 0, 0, 0, time.Local)
+	// noEndFrom: an inactiveSince from it on (the backend writes 2999-12-31) means "no end".
+	noEndFrom = time.Date(2999, 1, 1, 0, 0, 0, 0, time.Local)
+)
 
 // windows reads the participation's window (decided 2026-10-30): from activeSince until inactiveSince,
-// open without an end date. Without activeSince only a meter with status ACTIVE or INACTIVE starts at
-// registeredSince (as the backend defaults it in meteringPointDao), and not with a placeholder date before
-// 2000; status INIT, NEW, empty or unknown has no window: such a meter has no energy in the community yet.
+// open without an end. Dates before 2000 count as missing.
+//   - Status INACTIVE without a real end (inactiveSince missing or from 2999 on, as archiveMeteringPoint and
+//     the revoke path leave it) has no window, whatever activeSince says.
+//   - Without activeSince only status ACTIVE or INACTIVE starts at registeredSince (if that is a real date);
+//     INIT, NEW, empty or unknown has no window: such a meter has no energy in the community yet.
+//
+// The backend itself falls back to registeredSince only for rows it creates as ACTIVE (meteringPointDao);
+// here registeredSince is a fallback for ACTIVE and INACTIVE. The backend's own energy requests skip rows
+// without activeSince/inactiveSince altogether: a stated difference, not a wider access.
 func (bm backendMeter) windows() []Window {
-	var from time.Time
-	ok := false
-	if bm.State != nil && bm.State.ActiveSince != nil {
-		from, ok = day(*bm.State.ActiveSince)
-	} else {
-		switch strings.ToUpper(bm.Status) {
-		case "ACTIVE", "INACTIVE":
-			from, ok = day(bm.RegisteredSince)
-			ok = ok && !from.Before(registeredPlaceholder)
-		}
+	var active, inactive *string
+	if bm.State != nil {
+		active, inactive = bm.State.ActiveSince, bm.State.InactiveSince
 	}
+	status := strings.ToUpper(bm.Status)
+
 	until := openEnd
-	if bm.State != nil && bm.State.InactiveSince != nil {
-		if d, valid := day(*bm.State.InactiveSince); valid {
-			until = d
-		}
+	if d, ok := realDay(inactive); ok && d.Before(noEndFrom) {
+		until = d
+	} else if status == "INACTIVE" {
+		return nil
+	}
+
+	from, ok := realDay(active)
+	if !ok && (status == "ACTIVE" || status == "INACTIVE") {
+		from, ok = realDay(&bm.RegisteredSince)
 	}
 	if !ok || until.Before(from) {
 		return nil
 	}
 	return []Window{{From: from, Until: until}}
+}
+
+// realDay parses a backend date that is set and not a placeholder before 2000.
+func realDay(s *string) (time.Time, bool) {
+	if s == nil {
+		return time.Time{}, false
+	}
+	d, ok := day(*s)
+	return d, ok && !d.Before(placeholderBefore)
 }
 
 // day parses a backend date (yyyy-mm-dd) as local midnight; dates before 1900 (zero values) are invalid.
