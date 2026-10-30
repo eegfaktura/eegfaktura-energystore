@@ -2,6 +2,8 @@ package rest_test
 
 import (
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -114,4 +116,35 @@ func TestMemberCommunityWithoutData(t *testing.T) {
 	admin := send(h, groupToken("/EEG_ADMIN"), "POST", rt[0], rt[1])
 	assert.Equal(t, admin.Code, member.Code, "member %s admin %s", member.Body.String(), admin.Body.String())
 	assert.Equal(t, 200, member.Code, member.Body.String())
+}
+
+// Decided 2026-10-30: without activeSince only status ACTIVE/INACTIVE starts at registeredSince (not a
+// placeholder before 2000); INIT, NEW or an empty status has no window.
+func TestMemberMeterWithoutActiveSince(t *testing.T) {
+	// the stored day is 01.06.2026; active/inactive are JSON values
+	for _, c := range []struct {
+		status, registered, active, inactive string
+		want                                 int
+	}{
+		{"ACTIVE", "2025-01-01", "null", "null", 200},
+		{"INACTIVE", "2025-01-01", "null", `"2026-12-31"`, 200},
+		{"INACTIVE", "2025-01-01", "null", "null", 403},                 // INACTIVE without an end
+		{"INACTIVE", "2025-01-01", `"2026-01-01"`, `"2999-12-31"`, 403}, // archived-like
+		{"ACTIVE", "0001-01-01", "null", "null", 403},
+		{"ACTIVE", "1999-12-31", "null", "null", 403},         // registeredSince before 2000: placeholder
+		{"ACTIVE", "2024-03-01", `"1970-01-01"`, "null", 200}, // activeSince placeholder: registeredSince
+		{"ACTIVE", "2026-07-01", `"1970-01-01"`, "null", 403}, // ... which starts after the stored day
+		{"INIT", "2025-01-01", "null", "null", 403},
+		{"NEW", "2025-01-01", "null", "null", 403},
+		{"", "2025-01-01", "null", "null", 403},
+	} {
+		backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = fmt.Fprintf(w, `[{"meters":[{"meteringPoint":"%s","status":"%s","registeredSince":"%s",`+
+				`"participantState":{"activeSince":%s,"inactiveSince":%s}}]}]`, meter, c.status, c.registered, c.active, c.inactive)
+		}))
+		t.Cleanup(backend.Close)
+		h := memberRouter(t, backend.URL)
+		rt := perMeter(meter)["raw"]
+		assert.Equal(t, c.want, send(h, memberAuth, "POST", rt[0], rt[1]).Code, "%+v", c)
+	}
 }

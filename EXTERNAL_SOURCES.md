@@ -67,7 +67,7 @@ Indirect modules are pinned by `go.mod`/`go.sum`; `go list -m all` lists them.
 | Keycloak (realm `EEGFaktura`, clients `at.ourproject.vfeeg.app` / `.api`) | token verification (discovery and keys at start), password grant for `/query/*` | `keycloak.json` / `KEYCLOAK_CONFIG` |
 | MQTT broker (Mosquitto in the platform) | energy ingest (`mqtt.energySubscriptionTopic`), inverter topic, `cr_msg_history` replies | `config.yaml` `mqtt.*` |
 | eegfaktura-backend gRPC (`services.master-server`) | active metering points (`protoc/masterdata.proto`) | `config.yaml` |
-| eegfaktura-backend REST `GET /participant` (`services.backend-api`) | a member's own metering points and their participation windows (the member's token is forwarded; `meters[].meteringPoint`, `registeredSince`, `participantState.activeSince`/`inactiveSince`) | `config.yaml` |
+| eegfaktura-backend REST `GET /participant` (`services.backend-api`) | a member's own metering points and their participation windows (the member's token is forwarded; `meters[].meteringPoint`, `status`, `registeredSince`, `participantState.activeSince`/`inactiveSince`) | `config.yaml` |
 | Mail server gRPC (`services.mail-server`) | sending the Excel export | `config.yaml` |
 | Persistent volume | Badger data (`persistence.path`, about 1.2 TB in production, 2026-09 figure) | deployment |
 

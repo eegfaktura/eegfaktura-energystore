@@ -19,10 +19,23 @@ var tenants = []string{"TE100001"}
 const answer = `[
  {"id":"P1","meters":[
   {"meteringPoint":"at001","registeredSince":"2025-01-01","participantState":{"activeSince":"2026-06-01","inactiveSince":null}},
-  {"meteringPoint":"AT002","registeredSince":"2025-01-01","participantState":{"activeSince":null,"inactiveSince":null}},
+  {"meteringPoint":"AT002","status":"ACTIVE","registeredSince":"2025-01-01","participantState":{"activeSince":null,"inactiveSince":null}},
   {"meteringPoint":"AT003","registeredSince":"0000-01-01","participantState":{"activeSince":"0000-01-01","inactiveSince":null}},
-  {"meteringPoint":"AT004","registeredSince":"2025-01-01","processState":"REJECTED","participantState":{"activeSince":"2026-01-01","inactiveSince":null}},
-  {"meteringPoint":"AT005","registeredSince":"2025-01-01"}]},
+  {"meteringPoint":"AT004","status":"INIT","registeredSince":"2025-01-01","participantState":{"activeSince":"2026-01-01","inactiveSince":null}},
+  {"meteringPoint":"AT005","status":"ACTIVE","registeredSince":"2025-01-01"},
+  {"meteringPoint":"AT006","status":"INACTIVE","registeredSince":"2025-01-01","participantState":{"activeSince":null,"inactiveSince":"2025-12-31"}},
+  {"meteringPoint":"AT007","status":"ACTIVE","registeredSince":"0001-01-01","participantState":{"activeSince":null,"inactiveSince":null}},
+  {"meteringPoint":"AT008","status":"ACTIVE","registeredSince":"1999-12-31","participantState":{"activeSince":null,"inactiveSince":null}},
+  {"meteringPoint":"AT010","status":"INIT","registeredSince":"2026-12-01","participantState":{"activeSince":null,"inactiveSince":null}},
+  {"meteringPoint":"AT011","status":"NEW","registeredSince":"2025-01-01","participantState":{"activeSince":null,"inactiveSince":null}},
+  {"meteringPoint":"AT012","registeredSince":"2025-01-01","participantState":{"activeSince":null,"inactiveSince":null}},
+  {"meteringPoint":"AT013","status":"SOMETHING","registeredSince":"2025-01-01","participantState":{"activeSince":null,"inactiveSince":null}},
+  {"meteringPoint":"AT014","status":"INACTIVE","registeredSince":"2025-01-01","participantState":{"activeSince":"2026-01-01","inactiveSince":"2999-12-31"}},
+  {"meteringPoint":"AT015","status":"INACTIVE","registeredSince":"2025-01-01","participantState":{"activeSince":"2026-01-01","inactiveSince":null}},
+  {"meteringPoint":"AT016","status":"ACTIVE","registeredSince":"2024-03-01","participantState":{"activeSince":"1970-01-01","inactiveSince":null}},
+  {"meteringPoint":"AT017","status":"INIT","registeredSince":"2024-03-01","participantState":{"activeSince":"1970-01-01","inactiveSince":null}},
+  {"meteringPoint":"AT018","status":"INACTIVE","registeredSince":"2024-03-01","participantState":{"activeSince":"2025-01-01","inactiveSince":"1970-01-01"}},
+  {"meteringPoint":"AT019","status":"ACTIVE","registeredSince":"2024-03-01","participantState":{"activeSince":"2025-01-01","inactiveSince":"2999-12-31"}}]},
  {"id":"P2","meters":[
   {"meteringPoint":"AT001","registeredSince":"2025-01-01","participantState":{"activeSince":"2026-02-01","inactiveSince":"2026-03-31"}}]}]`
 
@@ -60,10 +73,23 @@ func TestMetersAndWindows(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, Meters{
 		"AT001": {{From: date("2026-02-01"), Until: date("2026-03-31")}, {From: date("2026-06-01"), Until: openEnd}}, // sorted by start
-		"AT002": {{From: date("2025-01-01"), Until: openEnd}},                                                        // activeSince null: registeredSince, open end (open point)
+		"AT002": {{From: date("2025-01-01"), Until: openEnd}},                                                        // ACTIVE without activeSince: registeredSince, open end
 		"AT003": nil,                                                                                                 // no valid start date
-		"AT004": {{From: date("2026-01-01"), Until: openEnd}},                                                        // rejected: not excluded yet (open point)
-		"AT005": {{From: date("2025-01-01"), Until: openEnd}},                                                        // no participantState: registeredSince
+		"AT004": {{From: date("2026-01-01"), Until: openEnd}},                                                        // activeSince set: its window, whatever the status
+		"AT005": {{From: date("2025-01-01"), Until: openEnd}},                                                        // ACTIVE without participantState: registeredSince
+		"AT006": {{From: date("2025-01-01"), Until: date("2025-12-31")}},                                             // INACTIVE without activeSince: registeredSince
+		"AT007": nil,                                                                                                 // placeholder registeredSince 0001-01-01
+		"AT008": nil,                                                                                                 // registeredSince before 2000: placeholder
+		"AT010": nil,                                                                                                 // INIT without activeSince
+		"AT011": nil,                                                                                                 // NEW without activeSince
+		"AT012": nil,                                                                                                 // empty status without activeSince
+		"AT013": nil,
+		"AT014": nil,                                          // archived-like: INACTIVE, inactiveSince 2999-12-31 is no real end
+		"AT015": nil,                                          // INACTIVE without an end date
+		"AT016": {{From: date("2024-03-01"), Until: openEnd}}, // activeSince 1970 is a placeholder: registeredSince
+		"AT017": nil,                                          // INIT with a placeholder activeSince
+		"AT018": nil,                                          // INACTIVE with a placeholder inactiveSince: no real end
+		"AT019": {{From: date("2025-01-01"), Until: openEnd}}, // ACTIVE, 2999-12-31: open end                                                                                                 // unknown status without activeSince
 	}, m)
 	assert.True(t, m.Owns("at003"))
 	assert.False(t, m.Owns("AT009"))
