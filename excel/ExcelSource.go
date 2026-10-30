@@ -262,8 +262,9 @@ func ImportExcelEnergyFile(f *excelize.File, sheet string, db *ebow.BowStorage) 
 					//
 					rIdx += 1
 				} else {
-					s, e := f.GetCellStyle(sheet, cols[0])
-					if err != nil {
+					cell, _ := excelize.CoordinatesToCellName(1, totalRowCols)
+					s, e := f.GetCellStyle(sheet, cell)
+					if e != nil {
 						glog.Errorf("Error get cell format %+v", e)
 					}
 					glog.Warningf("Could not handle row format (%d), row skipped: %d columns <%v>", s, len(cols), cols[0])
