@@ -12,4 +12,5 @@ mqtt:
 services:
   mail-server: "localhost:9090"
   master-server: "localhost:9092"
-  backend-api: "http://localhost:8080"
+  # backend HTTP address, e.g. http://localhost:8080; empty: member per-meter requests get 503
+  backend-api: ""

@@ -1,0 +1,68 @@
+package rest_test
+
+import (
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+)
+
+// energystore 261025-ca1: a member reads a metering point only for the time it was its own (the
+// participation window the backend reports).
+
+func TestMemberOutsideWindowIs403(t *testing.T) {
+	// the stored day is 01.06.2026
+	for _, window := range [][2]string{{`"2026-06-02"`, "null"}, {`"2026-01-01"`, `"2026-05-31"`}} {
+		b := startBackendWindow(t, window[0], window[1])
+		h := memberRouter(t, b.URL)
+		for name, rt := range perMeter(meter) {
+			rec := send(h, memberAuth, "POST", rt[0], rt[1])
+			assert.Equal(t, 403, rec.Code, "%s %v", name, window)
+			assert.JSONEq(t, `{"error":"metering point not permitted"}`, rec.Body.String(), "%s %v", name, window)
+		}
+	}
+}
+
+func TestMemberPartlyOutsideWindowIsClamped(t *testing.T) {
+	b := startBackendWindow(t, `"2026-06-01"`, `"2026-06-01"`)
+	h := memberRouter(t, b.URL)
+	from, until := ms(day.AddDate(0, 0, -5)), ms(day.AddDate(0, 0, 5))
+	for name, rt := range map[string][2]string{
+		"report": {"/eeg/v2/" + ecId + "/report", `{"reportInterval":{"year":2026,"segment":6,"type":"YM"},"participants":[{"participantId":"P1","meters":[{"meterId":"` +
+			meter + `","meterDir":"CONSUMPTION","from":0,"until":` + fmt.Sprint(until) + `}]}]}`},
+		"raw": {"/eeg/v2/" + ecId + "/raw", fmt.Sprintf(`{"meters":["%s"],"start":%d,"end":%d}`, meter, from, until)},
+		"billing-check": {"/eeg/v2/" + ecId + "/billing-check", fmt.Sprintf(`{"start":%d,"end":%d,"cps":[{"meteringPoint":"%s","direction":"CONSUMPTION","activeSince":%d,"inactiveSince":0}]}`,
+			from, until, meter, from)},
+		"excel report": {"/eeg/" + ecId + "/excel/report/download", fmt.Sprintf(`{"start":%d,"end":%d,"communityId":"%s","cps":[{"meteringPoint":"%s","direction":"CONSUMPTION","activeSince":%d,"inactiveSince":%d}]}`,
+			from, until, ecId, meter, from, until)},
+	} {
+		rec := send(h, memberAuth, "POST", rt[0], rt[1])
+		assert.Equal(t, 200, rec.Code, "%s: %s", name, truncate(rec.Body.String()))
+	}
+	rec := send(h, memberAuth, "POST", "/eeg/v2/"+ecId+"/raw", fmt.Sprintf(`{"meters":["%s"],"start":%d,"end":%d}`, meter, from, until))
+	assert.Contains(t, rec.Body.String(), meter, "the own day is in the clamped range")
+}
+
+func TestMemberNamingNoMeterAsksNoBackend(t *testing.T) {
+	h := memberRouter(t, "") // not configured: any backend lookup would answer 503
+	start, end := ms(day), ms(day.Add(23*time.Hour+45*time.Minute))
+	for name, rt := range map[string][2]string{
+		"report": {"/eeg/v2/" + ecId + "/report", `{"reportInterval":{"year":2026,"segment":6,"type":"YM"},"participants":[]}`},
+		"raw":    {"/eeg/v2/" + ecId + "/raw", fmt.Sprintf(`{"meters":[],"start":%d,"end":%d}`, start, end)},
+	} {
+		rec := send(h, memberAuth, "POST", rt[0], rt[1])
+		assert.Equal(t, 200, rec.Code, "%s: %s", name, truncate(rec.Body.String()))
+		assert.NotContains(t, rec.Body.String(), otherMeter, name)
+	}
+}
+
+func TestMemberMalformedRequestIs400(t *testing.T) {
+	h := memberRouter(t, "") // validation comes before the backend lookup
+	tw := `{"key":"a","from":"08:00","to":"10:00"}`
+	rec := send(h, memberAuth, "POST", "/eeg/v2/"+ecId+"/report", `{"reportInterval":{"year":2026,"segment":6,"type":"YM"},"participants":[{"participantId":"P1","meters":[{"meterId":"`+
+		meter+`","meterDir":"CONSUMPTION","from":0,"until":0,"timeWindows":[`+tw+`,`+tw+`,`+tw+`]}]}]}`)
+	assert.Equal(t, 400, rec.Code, "report: %s", rec.Body.String())
+	rec = send(h, memberAuth, "POST", "/eeg/v2/"+ecId+"/billing-check", fmt.Sprintf(`{"start":0,"end":0,"cps":[{"meteringPoint":"%s","direction":"CONSUMPTION"}]}`, meter))
+	assert.Equal(t, 400, rec.Code, "billing-check: %s", rec.Body.String())
+}

@@ -1,9 +1,9 @@
-// Package ownmeters asks the backend which metering points belong to a member (energystore 261025-ca1).
+// Package ownmeters asks the backend which metering points belong to a member, and from when until when
+// (energystore 261025-ca1).
 //
-// The backend answers GET /participant with the caller's bearer token: for a member token (group /EEG_USER)
-// it returns the member's own participants (matched by tenant and token email), each with its "meters".
-// The answer is cached briefly per token subject and tenant, so a dashboard does not call the backend for
-// every request.
+// The backend answers GET /participant with the caller's bearer token: for a member token it returns the
+// member's own participants (matched by tenant and token email), each with its "meters". The answer is
+// cached briefly per token subject and tenant, so a dashboard does not call the backend for every request.
 package ownmeters
 
 import (
@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/singleflight"
 )
 
 const (
@@ -29,7 +31,7 @@ const (
 var ErrNotConfigured = errors.New("backend url not configured")
 
 type entry struct {
-	meters map[string]bool
+	meters Meters
 	until  time.Time
 }
 
@@ -37,6 +39,7 @@ type entry struct {
 type Resolver struct {
 	baseURL string
 	client  *http.Client
+	group   singleflight.Group
 
 	mu    sync.Mutex
 	cache map[string]entry
@@ -52,34 +55,39 @@ func New(baseURL string) *Resolver {
 	}
 }
 
-// Meters returns the caller's own metering points (upper case). authorization is the caller's
-// Authorization header, forwarded unchanged; subject and tenant key the cache. The returned map must
-// not be changed.
-func (r *Resolver) Meters(ctx context.Context, authorization, subject, tenant string) (map[string]bool, error) {
-	if r.baseURL == "" {
+// Meters returns the caller's own metering points. authorization is the caller's Authorization header,
+// forwarded unchanged; subject and tenant key the cache, and parallel misses of one key share one
+// backend call. The result must not be changed. A nil Resolver counts as not configured.
+func (r *Resolver) Meters(ctx context.Context, authorization, subject, tenant string) (Meters, error) {
+	if r == nil || r.baseURL == "" {
 		return nil, ErrNotConfigured
 	}
+	if subject == "" {
+		return r.fetch(ctx, authorization, tenant)
+	}
 	key := subject + "\x00" + strings.ToUpper(tenant)
-	if subject != "" {
-		r.mu.Lock()
-		e, ok := r.cache[key]
-		r.mu.Unlock()
-		if ok && time.Now().Before(e.until) {
-			return e.meters, nil
-		}
+	r.mu.Lock()
+	e, ok := r.cache[key]
+	r.mu.Unlock()
+	if ok && time.Now().Before(e.until) {
+		return e.meters, nil
 	}
 
-	meters, err := r.fetch(ctx, authorization, tenant)
+	v, err, _ := r.group.Do(key, func() (any, error) {
+		// shared by every caller of the key: not cancelled with the first caller's request
+		meters, err := r.fetch(context.WithoutCancel(ctx), authorization, tenant)
+		if err == nil {
+			r.store(key, meters)
+		}
+		return meters, err
+	})
 	if err != nil {
 		return nil, err
 	}
-	if subject != "" {
-		r.store(key, meters)
-	}
-	return meters, nil
+	return v.(Meters), nil
 }
 
-func (r *Resolver) fetch(ctx context.Context, authorization, tenant string) (map[string]bool, error) {
+func (r *Resolver) fetch(ctx context.Context, authorization, tenant string) (Meters, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.baseURL+"/participant", nil)
 	if err != nil {
 		return nil, err
@@ -98,25 +106,25 @@ func (r *Resolver) fetch(ctx context.Context, authorization, tenant string) (map
 	}
 
 	var participants []struct {
-		Meters []struct {
-			MeteringPoint string `json:"meteringPoint"`
-		} `json:"meters"`
+		Meters []backendMeter `json:"meters"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBody)).Decode(&participants); err != nil {
 		return nil, fmt.Errorf("backend participant: %w", err)
 	}
-	meters := map[string]bool{}
+	meters := Meters{}
 	for _, p := range participants {
 		for _, m := range p.Meters {
-			if m.MeteringPoint != "" {
-				meters[strings.ToUpper(m.MeteringPoint)] = true
+			if m.MeteringPoint == "" {
+				continue
 			}
+			id := strings.ToUpper(m.MeteringPoint)
+			meters[id] = append(meters[id], m.windows()...)
 		}
 	}
 	return meters, nil
 }
 
-func (r *Resolver) store(key string, meters map[string]bool) {
+func (r *Resolver) store(key string, meters Meters) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	now := time.Now()

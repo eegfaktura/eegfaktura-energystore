@@ -34,8 +34,14 @@ func fetchBillingCheck() middleware.JWTHandlerFunc {
 		for i, cp := range request.Cps {
 			meters[i] = cp.MeteringPoint
 		}
-		if _, ok := allowMeters(w, r, claims, tenant, meters); !ok {
+		own, ok := allowMeters(w, r, claims, tenant, meters)
+		if !ok {
 			return
+		}
+		for i := range request.Cps {
+			if !clampDays(w, own, request.Cps[i].MeteringPoint, &request.Cps[i].ActiveSince, &request.Cps[i].InactiveSince) {
+				return
+			}
 		}
 
 		resp, err := store.QueryBillingCheck(tenant, ecid, &request)

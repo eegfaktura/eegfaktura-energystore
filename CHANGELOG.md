@@ -16,9 +16,11 @@ this changelog highlights the changes relevant for overview and operations.
 - **Sample `keycloak.json`** (energystore #15): security relevant — details not published.
 - **Energy routes for member tokens** (energystore 261025-ca1): security relevant — details not published.
   Operations: new setting `services.backend-api` (the backend's HTTP address, e.g.
-  `http://eegfaktura-backend-service.eegfaktura:8080`); energystore now calls the backend's `GET /participant`
-  (contract: `meters[].meteringPoint`) and needs network access to the backend on port 8080. Without the setting
-  energystore logs a warning at start and members get 503 on per-meter requests; admins are unaffected.
+  `http://eegfaktura-backend-service.eegfaktura:8080`); set it before rolling out this version. energystore now
+  calls the backend's `GET /participant` (contract: `meters[].meteringPoint`, `meters[].registeredSince`,
+  `meters[].participantState.activeSince`/`inactiveSince`) and needs network access to the backend on port 8080.
+  Without the setting energystore logs a warning at start. Member logins get 503 on per-meter requests only while
+  the backend is unreachable or the setting is missing; admin and owner logins never call the backend.
 
 ### Fixed
 - **Gap filling: no phantom quarter hours on the summer-time day, fill rows in their own slot** (energystore #22).

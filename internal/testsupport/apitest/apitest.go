@@ -37,15 +37,18 @@ func Router() *mux.Router {
 	return r
 }
 
-// AppToken is a bearer token of the app realm with the given tenants and realm roles.
+// AppToken is a bearer token of the app realm with the given tenants and realm roles, in the group
+// /EEG_ADMIN: without admin, owner or superuser a token is restricted to its own metering points
+// (energystore 261025-ca1, rest/member_test.go).
 func AppToken(tenants []string, roles ...string) string {
 	if roles == nil {
 		roles = []string{}
 	}
 	return fakeoidc.Token(map[string]any{
-		"tenant":       tenants,
-		"realm_access": map[string]any{"roles": roles},
-		"email":        "member@example.org",
+		"tenant":        tenants,
+		"realm_access":  map[string]any{"roles": roles},
+		"email":         "member@example.org",
+		"access_groups": []string{"/EEG_ADMIN"},
 	})
 }
 

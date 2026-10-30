@@ -22,7 +22,8 @@ type caller struct {
 // ErrTenantMismatch wird geliefert, wenn das tenant-Argument nicht zum geprueften Mandanten passt.
 var ErrTenantMismatch = errors.New("tenant not permitted")
 
-// ErrMember: the field is not permitted for a member token (energystore 261025-ca1).
+// ErrMember: the field is not permitted for a member token, i.e. without admin, owner or superuser
+// (energystore 261025-ca1).
 var ErrMember = errors.New("not permitted for members")
 
 type memberKey struct{}

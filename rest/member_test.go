@@ -17,8 +17,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// energystore 261025-ca1: a member reads per-meter energy only of its own metering points; the backend
-// (GET /participant with the member's token) names them.
+// energystore 261025-ca1: a member (every bearer token without admin, owner or superuser) reads per-meter
+// energy only of its own metering points; the backend (GET /participant with the member's token) names them.
 
 const otherMeter = "AT0030000000000000000000000000002" // stored, belongs to another member
 
@@ -31,6 +31,11 @@ type fakeBackend struct {
 }
 
 func startBackend(t *testing.T) *fakeBackend {
+	return startBackendWindow(t, `"2026-01-01"`, "null")
+}
+
+// startBackendWindow: meter belongs to the member from activeSince until inactiveSince (JSON values).
+func startBackendWindow(t *testing.T, activeSince, inactiveSince string) *fakeBackend {
 	t.Helper()
 	b := &fakeBackend{}
 	b.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -42,7 +47,8 @@ func startBackend(t *testing.T) *fakeBackend {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprintf(w, `[{"id":"P1","firstname":"A","meters":[{"meteringPoint":"%s","direction":"CONSUMPTION"}]}]`, meter)
+		_, _ = fmt.Fprintf(w, `[{"id":"P1","firstname":"A","meters":[{"meteringPoint":"%s","direction":"CONSUMPTION",`+
+			`"registeredSince":"2025-01-01","participantState":{"activeSince":%s,"inactiveSince":%s}}]}]`, meter, activeSince, inactiveSince)
 	}))
 	t.Cleanup(b.Close)
 	return b
@@ -159,8 +165,10 @@ func TestMemberTotalsUnchanged(t *testing.T) {
 func TestAdminOwnerUnchanged(t *testing.T) {
 	b := startBackend(t)
 	h := memberRouter(t, b.URL)
+	super := "Bearer " + fakeoidc.Token(map[string]any{"tenant": []string{foreign}, "sub": "super-1",
+		"realm_access": map[string]any{"roles": []string{"superuser"}}})
 	for _, auth := range []string{groupToken("/EEG_ADMIN"), groupToken("/EEG_USER", "/EEG_ADMIN"),
-		groupToken("/EEG_USER", "/EEG_OWNER"), "Bearer " + apitest.AppToken([]string{tenant})} {
+		groupToken("/EEG_OWNER"), groupToken("/EEG_USER", "/EEG_OWNER"), super} {
 		for name, rt := range perMeter(otherMeter) {
 			rec := send(h, auth, "POST", rt[0], rt[1])
 			assert.Equal(t, 200, rec.Code, "%s: %s", name, truncate(rec.Body.String()))
@@ -169,6 +177,19 @@ func TestAdminOwnerUnchanged(t *testing.T) {
 		assert.Contains(t, rec.Body.String(), otherMeter)
 	}
 	assert.Equal(t, int32(0), b.calls.Load(), "the backend is asked for members only")
+}
+
+func TestTokenWithoutGroupIsRestricted(t *testing.T) {
+	b := startBackend(t)
+	h := memberRouter(t, b.URL)
+	noGroup := groupToken()
+	for name, rt := range perMeter(otherMeter) {
+		assert.Equal(t, 403, send(h, noGroup, "POST", rt[0], rt[1]).Code, name)
+	}
+	for name, rt := range perMeter(meter) {
+		assert.Equal(t, 200, send(h, noGroup, "POST", rt[0], rt[1]).Code, name)
+	}
+	assert.Equal(t, 403, send(h, noGroup, "POST", "/eeg/"+ecId+"/excel/export/2026/6", "").Code)
 }
 
 func TestMemberBackendDownIs503(t *testing.T) {
@@ -217,13 +238,27 @@ func TestMemberWritesAndCommunityExportsAre403(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.NotEmpty(t, resp.Errors, "singleUpload")
 	assert.Equal(t, "not permitted for members", resp.Errors[0].Message)
+	assert.Equal(t, int32(0), b.calls.Load())
+}
 
-	fakeoidc.SetUser("member-api", apiPass, map[string]any{"tenant": []string{tenant}, "access_groups": []string{"/EEG_USER"}})
-	for _, path := range []string{"/query/rawdata", "/query/" + ecId + "/metadata"} {
-		rec = apitest.Do(h, apitest.Request{Method: "POST", Path: path,
-			Body:   fmt.Sprintf(`{"cps":[{"meteringPoint":"%s"}],"ecId":"%s","start":%d,"end":%d}`, meter, ecId, start, end),
-			Header: map[string]string{"Authorization": apitest.Basic("member-api", apiPass), "X-Tenant": tenant}})
-		assert.Equal(t, 403, rec.Code, path)
+// The Basic-auth /query API keeps its behaviour for users without a group or with /EEG_USER: it is not
+// restricted and does not ask the backend.
+func TestBasicApiUnrestricted(t *testing.T) {
+	b := startBackend(t)
+	h := memberRouter(t, b.URL)
+	start, end := ms(day), ms(day.Add(23*time.Hour+45*time.Minute))
+	for user, claims := range map[string]map[string]any{
+		"api-nogroup": {"tenant": []string{tenant}},
+		"api-member":  {"tenant": []string{tenant}, "access_groups": []string{"/EEG_USER"}},
+	} {
+		fakeoidc.SetUser(user, apiPass, claims)
+		for _, path := range []string{"/query/rawdata", "/query/" + ecId + "/metadata"} {
+			rec := apitest.Do(h, apitest.Request{Method: "POST", Path: path,
+				Body:   fmt.Sprintf(`{"cps":[{"meteringPoint":"%s"}],"ecId":"%s","start":%d,"end":%d}`, otherMeter, ecId, start, end),
+				Header: map[string]string{"Authorization": apitest.Basic(user, apiPass), "X-Tenant": tenant}})
+			assert.Equal(t, 200, rec.Code, "%s %s", user, path)
+			assert.Contains(t, rec.Body.String(), otherMeter, "%s %s", user, path)
+		}
 	}
 	assert.Equal(t, int32(0), b.calls.Load())
 }

@@ -1,0 +1,176 @@
+package ownmeters
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+const answer = `[
+ {"id":"P1","meters":[
+  {"meteringPoint":"at001","registeredSince":"2025-01-01","participantState":{"activeSince":"2026-02-01","inactiveSince":"2026-03-31"}},
+  {"meteringPoint":"AT002","registeredSince":"2025-01-01","participantState":{"activeSince":null,"inactiveSince":null}},
+  {"meteringPoint":"AT003","registeredSince":"0000-01-01","participantState":{"activeSince":null,"inactiveSince":null}}]},
+ {"id":"P2","meters":[
+  {"meteringPoint":"AT001","registeredSince":"2025-01-01","participantState":{"activeSince":"2026-06-01","inactiveSince":null}}]}]`
+
+func backend(t *testing.T, status int, body string) (*httptest.Server, *atomic.Int32) {
+	t.Helper()
+	var calls atomic.Int32
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		assert.Equal(t, "/participant", r.URL.Path)
+		assert.Equal(t, "Bearer tok", r.Header.Get("Authorization"))
+		assert.Equal(t, "TE100001", r.Header.Get("tenant"))
+		w.WriteHeader(status)
+		_, _ = fmt.Fprint(w, body)
+	}))
+	t.Cleanup(s.Close)
+	return s, &calls
+}
+
+func date(s string) time.Time {
+	d, _ := time.ParseInLocation("2006-01-02", s, time.Local)
+	return d
+}
+
+func TestNotConfigured(t *testing.T) {
+	var nilResolver *Resolver
+	_, err := nilResolver.Meters(context.Background(), "Bearer tok", "sub", "TE100001")
+	assert.ErrorIs(t, err, ErrNotConfigured)
+	_, err = New("").Meters(context.Background(), "Bearer tok", "sub", "TE100001")
+	assert.ErrorIs(t, err, ErrNotConfigured)
+}
+
+func TestMetersAndWindows(t *testing.T) {
+	s, _ := backend(t, 200, answer)
+	m, err := New(s.URL+"/").Meters(context.Background(), "Bearer tok", "sub", "TE100001")
+	require.NoError(t, err)
+	assert.Equal(t, Meters{
+		"AT001": {{From: date("2026-02-01"), Until: date("2026-03-31")}, {From: date("2026-06-01"), Until: openEnd}},
+		"AT002": {{From: date("2025-01-01"), Until: openEnd}}, // backend defaults: registeredSince, open end
+		"AT003": nil,                                          // no valid start date: no window
+	}, m)
+	assert.True(t, m.Owns("at003"))
+	assert.False(t, m.Owns("AT004"))
+}
+
+func TestBackendErrors(t *testing.T) {
+	for _, c := range []struct {
+		status int
+		body   string
+	}{{401, ""}, {500, "[]"}, {200, "{not json"}} {
+		s, _ := backend(t, c.status, c.body)
+		_, err := New(s.URL).Meters(context.Background(), "Bearer tok", "sub", "TE100001")
+		assert.Error(t, err, "%d %s", c.status, c.body)
+	}
+	s, _ := backend(t, 200, "null")
+	m, err := New(s.URL).Meters(context.Background(), "Bearer tok", "sub", "TE100001")
+	require.NoError(t, err)
+	assert.Empty(t, m, "no participant for the token's email")
+}
+
+func TestCachePerSubjectAndTenant(t *testing.T) {
+	s, calls := backend(t, 200, answer)
+	r := New(s.URL)
+	for i := 0; i < 3; i++ {
+		_, err := r.Meters(context.Background(), "Bearer tok", "sub", "TE100001")
+		require.NoError(t, err)
+	}
+	assert.Equal(t, int32(1), calls.Load())
+	_, _ = r.Meters(context.Background(), "Bearer tok", "sub", "te100001")
+	assert.Equal(t, int32(1), calls.Load(), "tenant case does not matter")
+	_, _ = r.Meters(context.Background(), "Bearer tok", "other", "TE100001")
+	assert.Equal(t, int32(2), calls.Load(), "another subject")
+	_, _ = r.Meters(context.Background(), "Bearer tok", "", "TE100001")
+	_, _ = r.Meters(context.Background(), "Bearer tok", "", "TE100001")
+	assert.Equal(t, int32(4), calls.Load(), "no subject: not cached")
+}
+
+func TestParallelMissesShareOneCall(t *testing.T) {
+	release := make(chan struct{})
+	var calls atomic.Int32
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		<-release
+		_, _ = fmt.Fprint(w, answer)
+	}))
+	t.Cleanup(s.Close)
+	r := New(s.URL)
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := r.Meters(context.Background(), "Bearer tok", "sub", "TE100001")
+			assert.NoError(t, err)
+		}()
+	}
+	time.Sleep(100 * time.Millisecond) // let the goroutines join the pending call
+	close(release)
+	wg.Wait()
+	assert.Equal(t, int32(1), calls.Load())
+}
+
+func TestClampDays(t *testing.T) {
+	m := Meters{"AT001": {{From: date("2026-02-01"), Until: date("2026-03-31")}, {From: date("2026-06-01"), Until: openEnd}}}
+	ms := func(s string) int64 { return date(s).UnixMilli() }
+	utcMidnight := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC).UnixMilli() // as the web sends activeSince
+
+	cases := []struct {
+		name              string
+		from, until       int64
+		wantFrom, wantTil int64
+		ok                bool
+	}{
+		{"inside unchanged", utcMidnight, ms("2026-03-31"), utcMidnight, ms("2026-03-31"), true},
+		{"partly before", ms("2026-01-01"), ms("2026-02-15"), ms("2026-02-01"), ms("2026-02-15"), true},
+		{"partly after", ms("2026-03-01"), ms("2026-04-30"), ms("2026-03-01"), ms("2026-03-31"), true},
+		{"open until", ms("2026-02-10"), 0, ms("2026-02-10"), ms("2026-03-31"), true},
+		{"second window", ms("2026-05-01"), ms("2026-07-01"), ms("2026-06-01"), ms("2026-07-01"), true},
+		{"gap between", ms("2026-04-01"), ms("2026-05-31"), 0, 0, false},
+		{"before all", ms("2025-01-01"), ms("2026-01-31"), 0, 0, false},
+	}
+	for _, c := range cases {
+		f, u, ok := m.ClampDays("at001", c.from, c.until)
+		assert.Equal(t, c.ok, ok, c.name)
+		assert.Equal(t, c.wantFrom, f, c.name)
+		assert.Equal(t, c.wantTil, u, c.name)
+	}
+	_, _, ok := m.ClampDays("AT009", ms("2026-02-10"), ms("2026-02-11"))
+	assert.False(t, ok, "foreign meter")
+	_, _, ok = Meters{"AT003": nil}.ClampDays("AT003", ms("2026-02-10"), ms("2026-02-11"))
+	assert.False(t, ok, "own meter without a window")
+}
+
+func TestClampRange(t *testing.T) {
+	m := Meters{
+		"AT001": {{From: date("2026-02-01"), Until: date("2026-03-31")}},
+		"AT002": {{From: date("2026-03-01"), Until: openEnd}},
+	}
+	ms := func(s string) int64 { return date(s).UnixMilli() }
+	endOf := func(s string) int64 { return date(s).AddDate(0, 0, 1).UnixMilli() - 1 }
+
+	s, e, ok := m.ClampRange([]string{"AT001"}, ms("2026-03-31"), endOf("2026-04-01"))
+	assert.True(t, ok)
+	assert.Equal(t, ms("2026-03-31"), s)
+	assert.Equal(t, endOf("2026-03-31"), e, "the last day counts whole")
+
+	s, e, ok = m.ClampRange([]string{"AT001", "AT002"}, ms("2026-01-01"), endOf("2026-12-31"))
+	assert.True(t, ok)
+	assert.Equal(t, ms("2026-03-01"), s)
+	assert.Equal(t, endOf("2026-03-31"), e)
+
+	_, _, ok = m.ClampRange([]string{"AT001"}, ms("2026-04-01"), endOf("2026-04-01"))
+	assert.False(t, ok, "outside")
+	_, _, ok = m.ClampRange([]string{"AT001", "AT002"}, ms("2026-02-01"), endOf("2026-02-10"))
+	assert.False(t, ok, "AT002 not yet the member's")
+}

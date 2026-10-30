@@ -13,6 +13,7 @@ import (
 
 	"at.ourproject/energystore/middleware"
 	"at.ourproject/energystore/model"
+	"at.ourproject/energystore/ownmeters"
 	protobuf "at.ourproject/energystore/protoc"
 	"at.ourproject/energystore/services"
 	"at.ourproject/energystore/store"
@@ -23,8 +24,8 @@ import (
 func InitQueryApiRouter(r *mux.Router) *mux.Router {
 	s := r.PathPrefix("/query").Subrouter()
 
-	s.HandleFunc("/rawdata", middleware.ProtectApi(noMembers(queryRawData()))).Methods("POST")
-	s.HandleFunc("/{ecid}/metadata", middleware.ProtectApi(noMembers(queryMetaData()))).Methods("POST")
+	s.HandleFunc("/rawdata", middleware.ProtectApi(queryRawData())).Methods("POST")
+	s.HandleFunc("/{ecid}/metadata", middleware.ProtectApi(queryMetaData(false))).Methods("POST")
 	return r
 }
 
@@ -91,12 +92,17 @@ func targetsOf(meters []*protobuf.MeteringPoint) []store.TargetMP {
 	return cps
 }
 
-func queryMetaData() middleware.JWTHandlerFunc {
+// queryMetaData lists the meta data of the community's metering points; with restrict a member sees its
+// own metering points only (bearer route; the Basic-auth /query API is not restricted).
+func queryMetaData(restrict bool) middleware.JWTHandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request, claims *middleware.PlatformClaims, tenant string) {
 		vars := mux.Vars(r)
-		own, ok := ownMeters(w, r, claims, tenant)
-		if !ok {
-			return
+		var own ownmeters.Meters
+		if restrict {
+			var ok bool
+			if own, ok = ownMeters(w, r, claims, tenant); !ok {
+				return
+			}
 		}
 		resp, err := store.QueryMetaData(tenant, vars["ecid"])
 		if err != nil {
@@ -106,7 +112,7 @@ func queryMetaData() middleware.JWTHandlerFunc {
 		if own != nil {
 			// a member sees the meta data of its own metering points only
 			for k := range resp {
-				if !own[strings.ToUpper(k)] {
+				if !own.Owns(k) {
 					delete(resp, k)
 				}
 			}
