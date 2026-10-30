@@ -19,8 +19,10 @@ this changelog highlights the changes relevant for overview and operations.
   `http://eegfaktura-backend-service.eegfaktura:8080`); set it before rolling out this version. energystore now
   calls the backend's `GET /participant` (contract: `meters[].meteringPoint`, `meters[].registeredSince`,
   `meters[].participantState.activeSince`/`inactiveSince`) and needs network access to the backend on port 8080.
-  Without the setting energystore logs a warning at start. Member logins get 503 on per-meter requests only while
-  the backend is unreachable or the setting is missing; admin and owner logins never call the backend.
+  Without the setting energystore logs a warning at start. Logins without admin or owner rights get 503 on
+  per-meter requests only while the backend is unreachable, the setting is missing, or the backend refuses the
+  token (e.g. 401 for a login without any group, which the backend does not accept); admin and owner logins never
+  call the backend.
 
 ### Fixed
 - **Gap filling: no phantom quarter hours on the summer-time day, fill rows in their own slot** (energystore #22).
