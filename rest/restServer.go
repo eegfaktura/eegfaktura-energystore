@@ -266,7 +266,7 @@ func exportMeteringData() middleware.JWTHandlerFunc {
 			return
 		}
 
-		glog.V(3).Infof("Send Mail to %s", email)
+		glog.V(3).Infof("Send energy export mail tenant=%s", tenant)
 
 		err = excel.ExportEnergyDataToMail(tenant, ecid, email, year, month, nil)
 		if err != nil {
