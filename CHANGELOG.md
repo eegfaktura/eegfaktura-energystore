@@ -16,8 +16,8 @@ this changelog highlights the changes relevant for overview and operations.
   the reason is logged as a warning, never returned. The check has a 2 s timeout, concurrent calls share one running
   check, and a hanging check is not started twice. `/readyz` takes no handle from the connection pool and opens no
   tenant database. At start energystore now creates `persistence.path` if it is missing (mode 0700, as Badger does;
-  an error is logged), so a fresh volume reports ready. Behind the public ingress the endpoints are reachable as
-  `/energystore/healthz` and `/energystore/readyz`.
+  an error is logged), so a fresh volume reports ready. The public ingress blocks `/energystore/healthz` and
+  `/energystore/readyz` (vfeeg-development/eegfaktura-gitops#159); kubelet probes reach the pods directly.
 
 ### Security
 - **Basic authentication of the `/query` API** (energystore #39): security relevant — details not published.
