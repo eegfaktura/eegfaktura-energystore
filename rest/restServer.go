@@ -21,12 +21,13 @@ import (
 
 func NewRestServer() *mux.Router {
 	//jwtWrapper := middleware.JWTMiddleware(viper.GetString("jwt.pubKeyFile"))
+	initMemberMeters()
 	r := mux.NewRouter()
 	//s := r.PathPrefix("/rest").Subrouter()
 	//r.HandleFunc("/eeg/{year}/{month}", jwtWrapper(fetchEnergy())).Methods("GET")
 	//r.HandleFunc("/eeg/report", middleware.ProtectApp(fetchEnergyReport())).Methods("POST")
 	r.HandleFunc("/eeg/v2/{ecid}/report", middleware.ProtectApp(fetchEnergyReportV2())).Methods("POST")
-	r.HandleFunc("/eeg/v2/{ecid}/meta", middleware.ProtectApp(queryMetaData())).Methods("GET")
+	r.HandleFunc("/eeg/v2/{ecid}/meta", middleware.ProtectApp(queryMetaData(true))).Methods("GET")
 	r.HandleFunc("/eeg/v2/{ecid}/raw", middleware.ProtectApp(fetchRawEnergyV2())).Methods("POST")
 	r.HandleFunc("/eeg/v2/{ecid}/rawdata/delete", middleware.ProtectApp(deleteRawData())).Methods("POST")
 	r.HandleFunc("/eeg/v2/{ecid}/intra-day-report", middleware.ProtectApp(fetchIntraDayReportV2())).Methods("POST")
@@ -93,9 +94,37 @@ func fetchEnergyReportV2() middleware.JWTHandlerFunc {
 			return
 		}
 
+		var meters []string
+		for _, p := range request.Participants {
+			for _, m := range p.Meters {
+				meters = append(meters, m.MeterId)
+			}
+		}
+		own, ok := allowMeters(w, r, claims, tenant, meters)
+		if !ok {
+			return
+		}
+		for _, p := range request.Participants {
+			for _, m := range p.Meters {
+				if !clampDays(w, own, m.MeterId, &m.From, &m.Until) {
+					return
+				}
+			}
+		}
+
 		if energy, err = calculation.EnergyReportV2(tenant, ecid, request.Participants, request.ReportInterval.Year, request.ReportInterval.Segment, request.ReportInterval.Period); err != nil {
 			respondWithQueryError(w, http.StatusInternalServerError, tenant, err)
 			return
+		}
+		if own != nil {
+			// a member sees the meta records of its own metering points only
+			meta := energy.Meta[:0]
+			for _, m := range energy.Meta {
+				if own.Owns(m.Name) {
+					meta = append(meta, m)
+				}
+			}
+			energy.Meta = meta
 		}
 		glog.V(4).Infof("Time Monitor fetchEnergyReport. %v\n", time.Now().Sub(startMonitor))
 		respondWithJSON(w, http.StatusOK, &energy)
@@ -115,6 +144,17 @@ func fetchRawEnergyV2() middleware.JWTHandlerFunc {
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
+		}
+		own, ok := allowMeters(w, r, claims, tenant, request.Meters)
+		if !ok {
+			return
+		}
+		if own != nil && len(request.Meters) > 0 {
+			// one range for all meters: cut to the time they were the member's
+			if request.Start, request.End, ok = own.ClampRange(request.Meters, request.Start, request.End); !ok {
+				forbidMeter(w)
+				return
+			}
 		}
 
 		cps := make([]store.TargetMP, len(request.Meters))
@@ -204,6 +244,10 @@ func lastRecordDate() middleware.JWTHandlerFunc {
 
 func exportMeteringData() middleware.JWTHandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request, claims *middleware.PlatformClaims, tenant string) {
+		// sends the energy of every metering point of the community
+		if denyMember(w, claims) {
+			return
+		}
 		email := claims.Email
 		vars := mux.Vars(r)
 		var year, month int
@@ -244,6 +288,19 @@ func exportReport() middleware.JWTHandlerFunc {
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
+		}
+		meters := make([]string, len(cps.Cps))
+		for i, cp := range cps.Cps {
+			meters[i] = cp.MeteringPoint
+		}
+		own, ok := allowMeters(w, r, claims, tenant, meters)
+		if !ok {
+			return
+		}
+		for i := range cps.Cps {
+			if !clampDays(w, own, cps.Cps[i].MeteringPoint, &cps.Cps[i].ActiveSince, &cps.Cps[i].InactiveSince) {
+				return
+			}
 		}
 
 		//b, err := excel.CreateExcelFile(tenant, time.UnixMilli(cps.Start), time.UnixMilli(cps.End), &cps)
