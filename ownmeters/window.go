@@ -69,7 +69,11 @@ func overlapDays(from, until time.Time, w Window) int {
 	if f.After(u) {
 		return 0
 	}
-	return int(u.Sub(f).Round(24*time.Hour)/(24*time.Hour)) + 1
+	// by calendar date, not time.Duration: an open end (2999) is beyond its ~292-year range
+	dayNo := func(t time.Time) int64 {
+		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC).Unix() / 86400
+	}
+	return int(dayNo(u)-dayNo(f)) + 1
 }
 
 // ClampRange limits the time range [start, end] (epoch ms) of a query over several meters to the

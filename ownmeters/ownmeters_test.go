@@ -157,6 +157,11 @@ func TestClampDays(t *testing.T) {
 	f, u, ok := tie.ClampDays("AT001", ms("2026-01-06"), ms("2026-01-25"))
 	assert.True(t, ok)
 	assert.Equal(t, [2]int64{ms("2026-01-21"), ms("2026-01-25")}, [2]int64{f, u}, "tie: the latest window")
+	twoOpen := Meters{"AT001": {{From: date("2024-01-01"), Until: openEnd}, {From: date("2025-01-01"), Until: openEnd}}}
+	f, u, ok = twoOpen.ClampDays("AT001", ms("2024-01-01"), 0)
+	assert.True(t, ok)
+	assert.Equal(t, [2]int64{ms("2024-01-01"), 0}, [2]int64{f, u}, "two open windows: the one overlapping more")
+
 	f, u, ok = tie.ClampDays("AT001", ms("2026-01-25"), 0)
 	assert.True(t, ok)
 	assert.Equal(t, [2]int64{ms("2026-01-25"), ms("2026-01-30")}, [2]int64{f, u}, "open until, ended window: its last day")
