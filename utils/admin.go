@@ -1,11 +1,11 @@
 package utils
 
 import (
+	"at.ourproject/energystore/internal/logging/glog"
 	protobuf "at.ourproject/energystore/protoc"
 	"bytes"
 	"context"
 	"errors"
-	"github.com/golang/glog"
 	"github.com/spf13/viper"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"

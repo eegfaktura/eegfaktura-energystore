@@ -19,6 +19,59 @@ this changelog highlights the changes relevant for overview and operations.
   an error is logged), so a fresh volume reports ready. The public ingress blocks `/energystore/healthz` and
   `/energystore/readyz` (vfeeg-development/eegfaktura-gitops#159); kubelet probes reach the pods directly.
 
+### Changed
+- **Log output is now JSON on stdout** (logging concept W-261008-ca2, ES-5) — this changes what operators,
+  `kubectl logs` and Dynatrace receive. Every line (the former glog calls, the standard `log` package, the MQTT
+  publish error) goes through one module, `internal/logging`: one JSON object per line on **stdout** (glog wrote
+  text to stderr) with the ECS fields `@timestamp` (UTC, ms), `log.level`, `message`, `service.name`
+  (`eegfaktura-energystore`), `service.version`, `log.origin.file.name`/`.line` and, for errors, `error.type`/
+  `error.message`. Only whitelisted fields are written. New environment variables:
+  - `LOG_FORMAT` = `json` (default) or `text` (key=value, for local reading);
+  - `LOG_LEVEL` = `trace`, `debug`, `info` (default), `warn` or `error`; an unknown value stops the start, an empty
+    `LOG_LEVEL`/`LOG_FORMAT` is the default (same rule as the backend);
+  - `LOG_LEVEL_<PKG>` (optional) for one package, e.g. `LOG_LEVEL_MQTTCLIENT=debug`, `LOG_LEVEL_EBOW=trace`; an empty
+    value is no override;
+  - `SERVICE_VERSION` — set by the image build (release workflow), default `dev`.
+  The operator CLI `estore` writes its log lines to **stderr**, so its tables on stdout stay clean, and stops with
+  exit code 2 on an invalid `LOG_*` value.
+- **The glog flags no longer set anything.** `-v`, `-vmodule`, `-logtostderr`, `-stderrthreshold` and the other
+  glog flags are still accepted (the deployment passes them), `-v`/`-vmodule` with a warning at start. The former
+  `V(1..3)` lines are now `debug`, `V(4)` and above `trace`. **Operations:** prod runs with `-v=3` today, so the
+  `V(3)` diagnostics (start-up steps, import counts, timings) disappear at the default `info`; set `LOG_LEVEL=debug`
+  to keep them. The former `V(3)` lines that report a failure are now `warn` and stay visible: the row-id
+  conversion error of the energy calculation (261008-ca1) and the skipped Excel import rows (now **one** warning per
+  sheet with the number of skipped rows, the first skipped row number and its cell style; before, one line per row
+  with the whole row).
+- **Access line per HTTP request** (`event.action=http.access`; info, warn for 401/403), written after the token check of the REST
+  routes, `/query` (GraphQL) and the Basic-auth `/query/*` API: `http.request.method`, `http.route` (the route
+  template, no ids; missing for unmatched paths), `http.response.status_code`, `event.duration` (ns),
+  `event.outcome` (`success`, `refused` for 401/403, `failure`), `request.id`, `trace.id`/`span.id` (from a valid W3C
+  `traceparent`), `tenant.id` (the tenant the check accepted), `client.id` (the token's `azp`; for Basic auth the API
+  client id) and `graphql.operation.name` (unset for an anonymous operation). Message `<METHOD> <route> <status>`
+  with the numeric status, `-` for an unmatched path (same convention as the backend). No user, e-mail, name, IP,
+  user agent, query value or body (DSGVO). **Known limit:** GraphQL answers a refused or failed operation with HTTP 200
+  and an `errors` array; its access line says `event.outcome=success` — the outcome reflects the HTTP status only (same
+  in the backend). More known limits (follow-ups, unchanged now): CORS preflights (`OPTIONS`, answered by the CORS
+  wrapper outside the access log) get no access line and no `X-Request-Id`; `X-Request-Id` is not an exposed CORS
+  header and `X-Request-Id`/`traceparent` are not in the allowed request headers, so browsers cannot send or read them;
+  the GraphQL websocket transport on `/query` is logged as one line with status 200 and the socket's lifetime as
+  duration, and operations on one socket share the operation name.
+- **A panic in a REST handler** is logged as one error line (`event.action=http.panic`, `error.type`, `error.message`,
+  `error.stack_trace`) and answered with 500; the access line says 500. Before, net/http logged `http: panic serving
+  <remote address>` with a plain stack (an IP in the log) and there was no access line. If the response had already
+  begun, the connection is aborted.
+  `/healthz` and `/readyz` are not logged. `X-Request-Id` is taken when it matches `[A-Za-z0-9._:-]{1,128}`,
+  otherwise a UUIDv4 (32 hex) is generated, and it is returned as a response header; `X-Request-Id` and a child
+  `traceparent` (same trace id, a new span id) are passed on to the backend call for the metering points of a member.
+  energystore had no access log before (none with IP or user agent to switch off).
+- **A panic in a GraphQL resolver is logged as one error line** (`event.action=graphql.panic`, `error.type`,
+  `error.message`, `error.stack_trace`) through the logging module, instead of gqlgen's plain-text stack on stderr.
+  The client gets the same generic `internal system error` as before.
+- **Raw-data deletion audit line** (`POST /eeg/v2/{ecid}/rawdata/delete`, superuser only): now
+  `event.action=rawdata.delete.done` (warn) or `rawdata.delete.failed` (error, newly logged) with `tenant.id` and the
+  operator's user name in `audit.operator`. Documented exception to 'no persons in logs' (decision 2026-10-30):
+  accountability over anonymity for this destructive ops tool; `audit.operator` is written on these two events only.
+
 ### Security
 - **Basic authentication of the `/query` API** (energystore #39): security relevant — details not published.
   Compatibility: clients that send Basic credentials as standard base64 (RFC 7617) are unaffected; a client that
@@ -39,6 +92,12 @@ this changelog highlights the changes relevant for overview and operations.
   admin and owner logins are unchanged.
 
 ### Fixed
+- **No personal data or payloads in the log** (logging concept, never-log list): the request body of
+  `POST /query/rawdata` (energystore #38), MQTT message payloads (261008-ca2), the energy values when GraphQL
+  marshalling fails (261030-mm3), the recipient e-mail address of the mail export (261030-mm4) and the backend's
+  metering-point list (with addresses, 261030-mm5) are no longer logged — sizes, counts or the tenant instead.
+- **Excel import: the warning about a skipped row names the cell style of the row's first cell** (energystore
+  261030-mm2); before, it always said 0 and a lookup error was lost.
 - **Gap filling: no phantom quarter hours on the summer-time day, fill rows in their own slot** (energystore #22).
   **This changes values in reports, raw-data queries and Excel exports.** Where the store has no row for a
   quarter hour, the reports insert an empty row (0 kWh, quality L0). Two errors are fixed:

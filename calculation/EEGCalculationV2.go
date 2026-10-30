@@ -6,11 +6,11 @@ import (
 	"sort"
 	"time"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
 	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
-	"github.com/golang/glog"
 )
 
 type AllocationHandlerV2 func(*model.Matrix, *model.Matrix) (*model.Matrix, *model.Matrix, *model.Matrix)
@@ -185,7 +185,7 @@ func CalculateParticipantPeriod(db *ebow.BowStorage, allocFunc AllocationHandler
 
 		ct, err := utils.ConvertRowIdToTime(rowPrefix, line.Id)
 		if err != nil {
-			glog.V(3).Infof("Error converting row id to timestamp: %s", err.Error())
+			glog.Warningf("Error converting row id to timestamp: %s", err.Error())
 			continue
 		}
 

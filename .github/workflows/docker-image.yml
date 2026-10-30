@@ -165,6 +165,9 @@ jobs:
           tags: ${{ steps.meta.outputs.tags || 'latest' }}
           labels: ${{ steps.meta.outputs.labels || '' }}
           annotations: ${{ steps.meta.outputs.annotations }}
+          # service.version in the JSON log lines (internal/logging)
+          build-args: |
+            SERVICE_VERSION=${{ steps.meta.outputs.version }}
 
       - name: Generate artifact attestation
         if: github.event_name == 'push'

@@ -6,8 +6,8 @@ import (
 	"regexp"
 	"sync"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/model"
-	"github.com/golang/glog"
 )
 
 // idPattern begrenzt Mandant und ecId auf Buchstaben und Ziffern. Beide fliessen in den

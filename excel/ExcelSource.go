@@ -1,13 +1,13 @@
 package excel
 
 import (
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
 	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
 	"errors"
 	"fmt"
-	"github.com/golang/glog"
 	"github.com/xuri/excelize/v2"
 	"io"
 	"math"
@@ -82,7 +82,7 @@ func OpenReader(r io.Reader, filename string) (*excelize.File, func(), error) {
 	}
 	f.Path = filename
 
-	if glog.V(3) {
+	if glog.V(3).Enabled() {
 		glog.Infof("Read Excel File with Sheets %+v", f.GetSheetList())
 	}
 	keepTmpDir = true
@@ -152,6 +152,7 @@ func ImportExcelEnergyFile(f *excelize.File, sheet string, db *ebow.BowStorage) 
 
 	t := time.Now()
 	totalRowCols := 0
+	skippedRows, firstSkippedRow, firstSkippedStyle := 0, 0, 0
 	for rows.Next() {
 		totalRowCols = totalRowCols + 1
 		if cols, err := rows.Columns(excelize.Options{RawCellValue: true}); err == nil && len(cols) > 0 {
@@ -262,14 +263,23 @@ func ImportExcelEnergyFile(f *excelize.File, sheet string, db *ebow.BowStorage) 
 					//
 					rIdx += 1
 				} else {
-					s, e := f.GetCellStyle(sheet, cols[0])
-					if err != nil {
-						glog.Errorf("Error get cell format %+v", e)
+					skippedRows++
+					if skippedRows == 1 {
+						firstSkippedRow = totalRowCols
+						cell, _ := excelize.CoordinatesToCellName(1, totalRowCols)
+						s, e := f.GetCellStyle(sheet, cell)
+						if e != nil {
+							glog.Errorf("Error get cell format %+v", e)
+						}
+						firstSkippedStyle = s
 					}
-					glog.V(3).Infof("Could not handle row format (%d). Cols %+v <%v>", s, cols, cols[0])
 				}
 			}
 		}
+	}
+	if skippedRows > 0 { // one line per sheet, no cell content
+		glog.Warningf("Could not handle row format, %d rows skipped; first skipped row %d (cell style %d)",
+			skippedRows, firstSkippedRow, firstSkippedStyle)
 	}
 	glog.Infof("Time taken via read file: %v (%d Rows)", time.Since(t), totalRowCols)
 	if err := db.SetLines(rawDatas); err != nil {

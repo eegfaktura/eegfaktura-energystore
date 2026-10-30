@@ -15,9 +15,10 @@ import (
 	"strings"
 	"time"
 
+	"at.ourproject/energystore/internal/logging"
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/tenantctx"
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/golang/glog"
 )
 
 const (
@@ -217,6 +218,7 @@ func GQLProtect(next http.Handler) http.Handler {
 
 		// Die Resolver bekommen tenant als Argument; geprueft ist nur der Header. Den geprueften
 		// Mandanten weiterreichen, damit die Resolver das Argument abgleichen (tenantctx.Check).
+		logging.SetCaller(r.Context(), strings.ToUpper(tenant), claims.AuthorizedParty)
 		ctx := tenantctx.WithCaller(r.Context(), tenant, superuser)
 		if claims.IsMember() {
 			ctx = tenantctx.WithMember(ctx)
@@ -257,6 +259,7 @@ func verifyRequest(handler JWTHandlerFunc) func(w http.ResponseWriter, r *http.R
 			}
 		}
 
+		logging.SetCaller(r.Context(), strings.ToUpper(tenant), claims.AuthorizedParty)
 		handler(w, r, claims, strings.ToUpper(tenant))
 	}
 }

@@ -7,11 +7,11 @@ import (
 	"sort"
 	"time"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
 	"at.ourproject/energystore/store/ebow"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/golang/glog"
 )
 
 // errStopped: the import of the message was stopped because the dispatcher closes; it stays unacked and

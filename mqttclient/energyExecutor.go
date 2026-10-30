@@ -13,11 +13,11 @@ import (
 	"sync"
 	"time"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
 	"at.ourproject/energystore/store/ebow"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/golang/glog"
 	"github.com/spf13/viper"
 )
 

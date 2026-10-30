@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/model"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/golang/glog"
 	"github.com/spf13/viper"
 )
 
@@ -126,7 +126,7 @@ func (m *MQTTStreamer) SendMessage(tenant string, msg *model.MqttEnergyMessage) 
 	go func() {
 		<-token.Done()
 		if token.Error() != nil {
-			fmt.Printf("MQTT ERROR PUBLISHING: %s\n", token.Error())
+			glog.Errorf("MQTT ERROR PUBLISHING: %v", token.Error())
 		}
 	}()
 	token.Wait()

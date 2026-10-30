@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/middleware"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
-	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 )
 

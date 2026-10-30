@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	protobuf "at.ourproject/energystore/protoc"
-	"github.com/golang/glog"
 	"github.com/spf13/viper"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -33,7 +33,7 @@ func RequestActiveMeteringPoints(tenant string, from, to *uint64) ([]*protobuf.M
 	}
 
 	r, err := c.MasterData_MeteringPoint(ctx, request)
-	glog.V(5).Infof("Response from MASTER-DATA Service: %v", r)
+	glog.V(5).Infof("Response from MASTER-DATA Service: %d metering points", len(r.GetMeteringPoints()))
 	if r == nil {
 		if err != nil {
 			glog.Error(fmt.Sprintf("Error Servicecall: %v", err))

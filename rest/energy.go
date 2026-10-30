@@ -11,13 +11,13 @@ import (
 	"strings"
 	"time"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/middleware"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/ownmeters"
 	protobuf "at.ourproject/energystore/protoc"
 	"at.ourproject/energystore/services"
 	"at.ourproject/energystore/store"
-	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 )
 
@@ -41,7 +41,7 @@ func queryRawData() middleware.JWTHandlerFunc {
 		}
 
 		body, err := io.ReadAll(r.Body)
-		glog.V(4).Infof("API-DATA: %s - %v", string(body), err)
+		glog.V(4).Infof("API-DATA: %d bytes - %v", len(body), err)
 
 		err = json.Unmarshal(body, &request)
 		if err != nil {

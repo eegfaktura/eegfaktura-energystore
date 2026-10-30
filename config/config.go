@@ -8,7 +8,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/golang/glog"
+	"at.ourproject/energystore/internal/logging/glog"
 	"github.com/spf13/viper"
 )
 
