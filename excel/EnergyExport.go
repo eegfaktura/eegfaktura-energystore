@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"time"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
 	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
-	"github.com/golang/glog"
 	"github.com/xuri/excelize/v2"
 )
 

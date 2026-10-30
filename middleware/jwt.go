@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"github.com/golang-jwt/jwt/v4"
-	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 )
 

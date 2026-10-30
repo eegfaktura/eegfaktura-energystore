@@ -9,10 +9,10 @@ import (
 
 	"at.ourproject/energystore/excel"
 	"at.ourproject/energystore/graph/generated"
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/services"
 	"at.ourproject/energystore/tenantctx"
 	"github.com/99designs/gqlgen/graphql"
-	"github.com/golang/glog"
 )
 
 // SingleUpload is the resolver for the singleUpload field.

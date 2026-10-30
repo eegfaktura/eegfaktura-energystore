@@ -10,7 +10,6 @@ require (
 	github.com/dgraph-io/badger/v4 v4.9.1
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/golang-jwt/jwt/v4 v4.5.2
-	github.com/golang/glog v1.2.5
 	github.com/gorilla/handlers v1.5.2
 	github.com/gorilla/mux v1.8.1
 	github.com/sony/sonyflake v1.2.0

@@ -11,13 +11,13 @@ import (
 	"strings"
 	"time"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/middleware"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/ownmeters"
 	protobuf "at.ourproject/energystore/protoc"
 	"at.ourproject/energystore/services"
 	"at.ourproject/energystore/store"
-	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 )
 

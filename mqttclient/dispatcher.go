@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/golang/glog"
 	"github.com/spf13/viper"
 )
 

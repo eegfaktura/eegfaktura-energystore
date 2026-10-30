@@ -5,7 +5,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/golang/glog"
+	"at.ourproject/energystore/internal/logging/glog"
 )
 
 // Lifecycle of the TopicDispatcher's executors: the cap on open stores (import.maxOpen) and the janitor.

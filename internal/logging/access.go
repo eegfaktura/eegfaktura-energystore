@@ -1,0 +1,197 @@
+package logging
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"log/slog"
+	"net/http"
+	"regexp"
+	"strings"
+	"time"
+
+	"github.com/99designs/gqlgen/graphql"
+	"github.com/gorilla/mux"
+)
+
+// The access line (logging concept point 6, logging-api-alt stage 2): one line per HTTP request,
+// written after the response, with what the service's own token check decided. It names the
+// community (tenant.id) and the Keycloak client (client.id), never a person: no user, e-mail,
+// name, user agent, IP, query value or body (DSGVO, decided 2026-10-29).
+
+type ctxKey struct{}
+
+// requestInfo travels in the request context; the token check and the router fill it in.
+type requestInfo struct {
+	requestID, traceID, spanID string
+	traceparent                string
+	route, operation           string
+	tenant, client             string
+}
+
+func idsFrom(ctx context.Context) *requestInfo {
+	if ctx == nil {
+		return nil
+	}
+	ri, _ := ctx.Value(ctxKey{}).(*requestInfo)
+	return ri
+}
+
+// probes are not logged (noise).
+var probes = map[string]bool{"/healthz": true, "/readyz": true}
+
+var (
+	requestIDPattern   = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,128}$`)
+	traceparentPattern = regexp.MustCompile(`^([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-[0-9a-f]{2}$`)
+)
+
+// parseTraceparent accepts a W3C traceparent; version ff and all-zero ids are invalid.
+func parseTraceparent(s string) (traceID, spanID string, ok bool) {
+	m := traceparentPattern.FindStringSubmatch(s)
+	if m == nil || m[1] == "ff" || strings.Trim(m[2], "0") == "" || strings.Trim(m[3], "0") == "" {
+		return "", "", false
+	}
+	return m[2], m[3], true
+}
+
+// AccessLog wraps the whole HTTP surface. It takes X-Request-Id when it is a plain token (else
+// generates one), reads trace.id/span.id from a W3C traceparent, answers with X-Request-Id and
+// writes the access line after the handler returned.
+func AccessLog(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if probes[r.URL.Path] {
+			next.ServeHTTP(w, r)
+			return
+		}
+		start := time.Now()
+		ri := &requestInfo{requestID: r.Header.Get("X-Request-Id")}
+		if !requestIDPattern.MatchString(ri.requestID) {
+			ri.requestID = newRequestID()
+		}
+		if tp := r.Header.Get("traceparent"); tp != "" {
+			if tid, sid, ok := parseTraceparent(tp); ok {
+				ri.traceparent, ri.traceID, ri.spanID = tp, tid, sid
+			}
+		}
+		w.Header().Set("X-Request-Id", ri.requestID)
+		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
+		ctx := context.WithValue(r.Context(), ctxKey{}, ri)
+		next.ServeHTTP(sw, r.WithContext(ctx))
+
+		outcome := "success"
+		switch {
+		case sw.status == http.StatusUnauthorized || sw.status == http.StatusForbidden:
+			outcome = "refused"
+		case sw.status >= 400:
+			outcome = "failure"
+		}
+		attrs := []slog.Attr{
+			slog.String("event.action", "http.access"),
+			slog.String("event.outcome", outcome),
+			slog.String("http.request.method", r.Method),
+			slog.Int("http.response.status_code", sw.status),
+			slog.Int64("event.duration", time.Since(start).Nanoseconds()), // ECS: nanoseconds
+		}
+		route := "-" // unmatched: no http.route
+		if ri.route != "" {
+			route = ri.route
+			attrs = append(attrs, slog.String("http.route", route))
+		}
+		if ri.operation != "" {
+			attrs = append(attrs, slog.String("graphql.operation.name", ri.operation))
+		}
+		if ri.tenant != "" {
+			attrs = append(attrs, slog.String("tenant.id", ri.tenant))
+		}
+		if ri.client != "" {
+			attrs = append(attrs, slog.String("client.id", ri.client))
+		}
+		Log(ctx, 0, slog.LevelInfo, r.Method+" "+route+" "+http.StatusText(sw.status), attrs...)
+	})
+}
+
+// MuxRoute is a gorilla/mux middleware that records the route template ("/eeg/v2/{ecid}/meta")
+// for the access line, so no id of the path is logged.
+func MuxRoute(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if ri := idsFrom(r.Context()); ri != nil {
+			if rt := mux.CurrentRoute(r); rt != nil {
+				ri.route, _ = rt.GetPathTemplate()
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// SetCaller records what the token check decided: the tenant it checked and the Keycloak client
+// (token azp, or the API client of the Basic-auth /query API). Never a user.
+func SetCaller(ctx context.Context, tenant, client string) {
+	if ri := idsFrom(ctx); ri != nil {
+		ri.tenant, ri.client = tenant, client
+	}
+}
+
+// GQLOperation is a gqlgen operation middleware (AroundOperations) that records the GraphQL
+// operation name; without it every GraphQL call is just "/query".
+func GQLOperation(ctx context.Context, next graphql.OperationHandler) graphql.ResponseHandler {
+	if ri := idsFrom(ctx); ri != nil && graphql.HasOperationContext(ctx) {
+		oc := graphql.GetOperationContext(ctx)
+		ri.operation = oc.OperationName
+		if ri.operation == "" && oc.Operation != nil {
+			ri.operation = oc.Operation.Name
+		}
+		if ri.operation == "" && oc.Operation != nil {
+			ri.operation = string(oc.Operation.Operation) // anonymous: "query" / "mutation"
+		}
+	}
+	return next(ctx)
+}
+
+// Propagate passes X-Request-Id and the incoming traceparent (unchanged: energystore starts no
+// spans) on to an outgoing request.
+func Propagate(ctx context.Context, h http.Header) {
+	ri := idsFrom(ctx)
+	if ri == nil {
+		return
+	}
+	h.Set("X-Request-Id", ri.requestID)
+	if ri.traceparent != "" {
+		h.Set("traceparent", ri.traceparent)
+	}
+}
+
+// newRequestID is a random UUID (version 4) as 32 hex characters.
+func newRequestID() string {
+	var b [16]byte
+	_, _ = rand.Read(b[:])
+	b[6] = b[6]&0x0f | 0x40
+	b[8] = b[8]&0x3f | 0x80
+	return hex.EncodeToString(b[:])
+}
+
+// statusWriter records the status code; Unwrap lets http.ResponseController reach the original.
+type statusWriter struct {
+	http.ResponseWriter
+	status      int
+	wroteHeader bool
+}
+
+func (s *statusWriter) WriteHeader(code int) {
+	if !s.wroteHeader {
+		s.status, s.wroteHeader = code, true
+	}
+	s.ResponseWriter.WriteHeader(code)
+}
+
+func (s *statusWriter) Write(b []byte) (int, error) {
+	s.wroteHeader = true
+	return s.ResponseWriter.Write(b)
+}
+
+func (s *statusWriter) Flush() {
+	if f, ok := s.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func (s *statusWriter) Unwrap() http.ResponseWriter { return s.ResponseWriter }

@@ -16,7 +16,7 @@ import (
 	jsoncodec "at.ourproject/energystore/store/ebow/codec/json"
 	keycodec "at.ourproject/energystore/store/ebow/codec/key"
 
-	"github.com/golang/glog"
+	"at.ourproject/energystore/internal/logging/glog"
 	"github.com/sony/sonyflake"
 )
 

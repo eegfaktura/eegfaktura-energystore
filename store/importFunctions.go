@@ -6,10 +6,10 @@ import (
 	"sort"
 	"time"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
-	"github.com/golang/glog"
 )
 
 // ErrMetaRecord: the meta record cpmeta/0 of the store could not be read or updated. It affects every

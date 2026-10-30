@@ -5,8 +5,8 @@ import (
 	"strings"
 	"sync"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"github.com/dgraph-io/badger/v4"
-	"github.com/golang/glog"
 	"github.com/spf13/viper"
 )
 

@@ -1,13 +1,13 @@
 package excel
 
 import (
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
 	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
 	"errors"
 	"fmt"
-	"github.com/golang/glog"
 	"github.com/xuri/excelize/v2"
 	"io"
 	"math"
@@ -82,7 +82,7 @@ func OpenReader(r io.Reader, filename string) (*excelize.File, func(), error) {
 	}
 	f.Path = filename
 
-	if glog.V(3) {
+	if glog.V(3).Enabled() {
 		glog.Infof("Read Excel File with Sheets %+v", f.GetSheetList())
 	}
 	keepTmpDir = true

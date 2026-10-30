@@ -6,7 +6,7 @@ import (
 	"io"
 	"path/filepath"
 
-	"github.com/golang/glog"
+	"at.ourproject/energystore/internal/logging/glog"
 )
 
 func ImportFile(tenant, ecId, filename, sheet string, file io.Reader) error {

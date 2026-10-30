@@ -1,11 +1,11 @@
 package excel
 
 import (
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
 	"fmt"
-	"github.com/golang/glog"
 	"github.com/xuri/excelize/v2"
 	"math"
 	"strings"

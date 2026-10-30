@@ -6,11 +6,11 @@ import (
 	"sort"
 	"time"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
 	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
-	"github.com/golang/glog"
 )
 
 type AllocationHandlerV2 func(*model.Matrix, *model.Matrix) (*model.Matrix, *model.Matrix, *model.Matrix)

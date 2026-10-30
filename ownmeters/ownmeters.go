@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"at.ourproject/energystore/internal/logging"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -135,6 +136,7 @@ func (r *Resolver) fetch(ctx context.Context, authorization, tenant string, mete
 	req.Header.Set("Authorization", authorization)
 	req.Header.Set("tenant", tenant)
 	req.Header.Set("Accept", "application/json")
+	logging.Propagate(ctx, req.Header)
 
 	resp, err := r.client.Do(req)
 	if err != nil {

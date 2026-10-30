@@ -11,11 +11,12 @@ import (
 
 	"at.ourproject/energystore/calculation"
 	"at.ourproject/energystore/excel"
+	"at.ourproject/energystore/internal/logging"
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/middleware"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/services"
 	"at.ourproject/energystore/store"
-	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 )
 
@@ -23,6 +24,7 @@ func NewRestServer() *mux.Router {
 	//jwtWrapper := middleware.JWTMiddleware(viper.GetString("jwt.pubKeyFile"))
 	initMemberMeters()
 	r := mux.NewRouter()
+	r.Use(logging.MuxRoute) // route template for the access line (logging.AccessLog, server.go)
 	//s := r.PathPrefix("/rest").Subrouter()
 	//r.HandleFunc("/eeg/{year}/{month}", jwtWrapper(fetchEnergy())).Methods("GET")
 	//r.HandleFunc("/eeg/report", middleware.ProtectApp(fetchEnergyReport())).Methods("POST")

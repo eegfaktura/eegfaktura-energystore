@@ -1,12 +1,12 @@
 package rest
 
 import (
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
 	"at.ourproject/energystore/store/ebow"
 	"encoding/json"
 	"errors"
-	"github.com/golang/glog"
 	"net/http"
 )
 

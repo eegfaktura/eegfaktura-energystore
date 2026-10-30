@@ -23,6 +23,8 @@ type PlatformClaims struct {
 	// AccessGroups are the Keycloak groups of the user (full path, e.g. "/EEG_ADMIN"), as in the backend.
 	// They are not per community (api 261025-ca3).
 	AccessGroups []string `json:"access_groups"`
+	// AuthorizedParty is the Keycloak client the token was issued to (azp): client.id in the access line.
+	AuthorizedParty string `json:"azp"`
 	// RegisteredClaims (not the deprecated StandardClaims) so `aud` parses as
 	// either a string or an array — RFC 7519 allows both, and Keycloak emits an
 	// array when a token carries more than one audience (e.g. the admin client).

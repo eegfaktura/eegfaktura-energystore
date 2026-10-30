@@ -5,7 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/golang/glog"
+	"at.ourproject/energystore/internal/logging"
+	"at.ourproject/energystore/internal/logging/glog"
 )
 
 var (
@@ -63,6 +64,8 @@ func ProtectApi(handler JWTHandlerFunc) http.HandlerFunc {
 			return
 		}
 
+		// client.id is the API client; the Basic user is not logged
+		logging.SetCaller(r.Context(), strings.ToUpper(tenant), kcClientAPI.clientID)
 		handler(w, r, &claims, strings.ToUpper(tenant))
 	}
 }

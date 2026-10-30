@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"strings"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/middleware"
 	"at.ourproject/energystore/ownmeters"
 	"at.ourproject/energystore/store"
-	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 	"github.com/spf13/viper"
 )
