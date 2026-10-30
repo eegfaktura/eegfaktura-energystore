@@ -65,15 +65,18 @@ func TestMemberBillingCheckOpenEndAsAdmin(t *testing.T) {
 	assert.JSONEq(t, admin.Body.String(), member.Body.String())
 }
 
-// The backend matches the member by the token's email: a member token without one gets 503 without a
-// backend call.
-func TestMemberWithoutEmailIs503(t *testing.T) {
+// The backend matches the member by the token's email. Without email_verified (as a token without email
+// has none) the answer is 403 (permission); a verified token without an email gets 503. No backend call.
+func TestMemberWithoutEmail(t *testing.T) {
 	b := startBackend(t)
 	h := memberRouter(t, b.URL)
 	noEmail := "Bearer " + fakeoidc.Token(map[string]any{"tenant": []string{tenant}, "access_groups": []string{"/EEG_USER"},
 		"sub": "member-2", "realm_access": map[string]any{"roles": []string{}}})
+	verifiedNoEmail := "Bearer " + fakeoidc.Token(map[string]any{"tenant": []string{tenant}, "access_groups": []string{"/EEG_USER"},
+		"sub": "member-2", "email_verified": true, "realm_access": map[string]any{"roles": []string{}}})
 	for name, rt := range perMeter(meter) {
-		assert.Equal(t, 503, send(h, noEmail, "POST", rt[0], rt[1]).Code, name)
+		assert.Equal(t, 403, send(h, noEmail, "POST", rt[0], rt[1]).Code, name)
+		assert.Equal(t, 503, send(h, verifiedNoEmail, "POST", rt[0], rt[1]).Code, name)
 	}
 	assert.Equal(t, int32(0), b.calls.Load())
 }
@@ -147,4 +150,31 @@ func TestMemberMeterWithoutActiveSince(t *testing.T) {
 		rt := perMeter(meter)["raw"]
 		assert.Equal(t, c.want, send(h, memberAuth, "POST", rt[0], rt[1]).Code, "%+v", c)
 	}
+}
+
+// A member is looked up only with a verified email (energystore 261025-ca1): email_verified false or
+// missing → 403 on per-meter routes, without a backend call; totals and admins are unaffected.
+func TestMemberWithUnverifiedEmailIs403(t *testing.T) {
+	b := startBackend(t)
+	h := memberRouter(t, b.URL)
+	for name, verified := range map[string]any{"false": false, "missing": nil} {
+		claims := map[string]any{"tenant": []string{tenant}, "access_groups": []string{"/EEG_USER"}, "sub": "member-3",
+			"email": "member@example.org", "realm_access": map[string]any{"roles": []string{}}}
+		if verified != nil {
+			claims["email_verified"] = verified
+		}
+		auth := "Bearer " + fakeoidc.Token(claims)
+		for route, rt := range perMeter(meter) {
+			rec := send(h, auth, "POST", rt[0], rt[1])
+			assert.Equal(t, 403, rec.Code, "%s %s", name, route)
+		}
+		rec := send(h, auth, "POST", "/eeg/v2/"+ecId+"/summary", `{"year":2026,"segment":6,"type":"YM"}`)
+		assert.Equal(t, 200, rec.Code, "%s: totals unaffected", name)
+	}
+	adminUnverified := "Bearer " + fakeoidc.Token(map[string]any{"tenant": []string{tenant}, "access_groups": []string{"/EEG_ADMIN"},
+		"sub": "admin-1", "email": "admin@example.org", "email_verified": false})
+	for route, rt := range perMeter(otherMeter) {
+		assert.Equal(t, 200, send(h, adminUnverified, "POST", rt[0], rt[1]).Code, "admin %s", route)
+	}
+	assert.Equal(t, int32(0), b.calls.Load())
 }

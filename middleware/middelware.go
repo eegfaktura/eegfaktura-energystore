@@ -23,6 +23,9 @@ type PlatformClaims struct {
 	// AccessGroups are the Keycloak groups of the user (full path, e.g. "/EEG_ADMIN"), as in the backend.
 	// They are not per community (api 261025-ca3).
 	AccessGroups []string `json:"access_groups"`
+	// EmailVerified (standard `email` scope): a member is looked up by its email only when it is verified;
+	// missing counts as false (energystore 261025-ca1).
+	EmailVerified bool `json:"email_verified"`
 	// RegisteredClaims (not the deprecated StandardClaims) so `aud` parses as
 	// either a string or an array — RFC 7519 allows both, and Keycloak emits an
 	// array when a token carries more than one audience (e.g. the admin client).
@@ -31,17 +34,60 @@ type PlatformClaims struct {
 	jwt.RegisteredClaims
 }
 
-// UnmarshalJSON reads the `tenant` claim with tenantClaim; every other claim as before.
+// UnmarshalJSON reads the `tenant` claim with tenantClaim, `access_groups` with looseStrings and
+// `email_verified` with looseBool; every other claim as before.
 func (c *PlatformClaims) UnmarshalJSON(b []byte) error {
 	type plain PlatformClaims // without this method
 	aux := struct {
 		*plain
-		Tenants tenantClaim `json:"tenant"`
+		Tenants       tenantClaim  `json:"tenant"`
+		AccessGroups  looseStrings `json:"access_groups"`
+		EmailVerified looseBool    `json:"email_verified"`
 	}{plain: (*plain)(c)}
 	if err := json.Unmarshal(b, &aux); err != nil {
 		return err
 	}
 	c.Tenants = aux.Tenants
+	c.AccessGroups = aux.AccessGroups
+	c.EmailVerified = bool(aux.EmailVerified)
+	return nil
+}
+
+// looseBool reads a JSON bool or the strings "true"/"false"; any other value is false and never an error,
+// so an odd mapper cannot refuse the whole token (energystore 261025-ca1).
+type looseBool bool
+
+func (lb *looseBool) UnmarshalJSON(b []byte) error {
+	var v bool
+	if err := json.Unmarshal(b, &v); err == nil {
+		*lb = looseBool(v)
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(b, &s); err == nil {
+		*lb = looseBool(strings.EqualFold(s, "true"))
+		return nil
+	}
+	*lb = false
+	return nil
+}
+
+// looseStrings reads an array of strings or a single string (a one-element list); any other value is an
+// empty list (no group: the token counts as a member) and never an error.
+type looseStrings []string
+
+func (ls *looseStrings) UnmarshalJSON(b []byte) error {
+	var list []string
+	if err := json.Unmarshal(b, &list); err == nil {
+		*ls = list
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(b, &s); err == nil && s != "" {
+		*ls = looseStrings{s}
+		return nil
+	}
+	*ls = nil
 	return nil
 }
 
@@ -103,7 +149,8 @@ func appendTenant(tenants []string, t string) []string {
 
 // IsMember: every token without the group /EEG_ADMIN or /EEG_OWNER and without the realm role superuser —
 // /EEG_USER and a token without any group alike. A member reads per-meter energy only of its own metering
-// points (energystore 261025-ca1). Applied to bearer tokens only; the Basic-auth /query/* API does not use it.
+// points (energystore 261025-ca1); the Basic-auth /query/* API refuses members altogether (noMembers). On
+// that path the realm role superuser is not in the token, so only the two groups count there.
 func (c *PlatformClaims) IsMember() bool {
 	return !slices.Contains(c.AccessGroups, "/EEG_ADMIN") &&
 		!slices.Contains(c.AccessGroups, "/EEG_OWNER") &&

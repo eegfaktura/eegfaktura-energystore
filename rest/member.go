@@ -37,6 +37,12 @@ func ownMeters(w http.ResponseWriter, r *http.Request, claims *middleware.Platfo
 	if !claims.IsMember() {
 		return nil, true
 	}
+	// permission first: an unverified (or missing) address is 403, not 503
+	if !claims.EmailVerified {
+		// the backend matches the member by email: only a confirmed address may name its metering points
+		respondWithError(w, http.StatusForbidden, "email address not verified")
+		return nil, false
+	}
 	if strings.TrimSpace(claims.Email) == "" {
 		// the backend finds the member by the token's email; without one there is nothing to match
 		glog.Warningf("member token without email claim: own metering points not available tenant=%s", tenant)
@@ -120,6 +126,16 @@ func clampDays(w http.ResponseWriter, own ownmeters.Meters, meter string, from, 
 	}
 	*from, *until = f, u
 	return true
+}
+
+// noMembers answers 403 to a member before h.
+func noMembers(h middleware.JWTHandlerFunc) middleware.JWTHandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request, claims *middleware.PlatformClaims, tenant string) {
+		if denyMember(w, claims) {
+			return
+		}
+		h(w, r, claims, tenant)
+	}
 }
 
 // denyMember answers 403 to a member (writes, imports, exports of the whole community).
