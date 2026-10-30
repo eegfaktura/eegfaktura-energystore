@@ -108,6 +108,12 @@ func (r *Resolver) fetchAll(ctx context.Context, authorization, requested string
 		}
 		seen[t] = true
 		if err := r.fetch(ctx, authorization, t, meters); err != nil {
+			// another tenant of the token that the backend refuses for this user (401/403) adds nothing;
+			// the requested tenant, 5xx and network errors fail the lookup
+			var se *statusError
+			if t != strings.ToUpper(requested) && errors.As(err, &se) && (se.code == 401 || se.code == 403) {
+				continue
+			}
 			return nil, err
 		}
 	}
@@ -116,6 +122,10 @@ func (r *Resolver) fetchAll(ctx context.Context, authorization, requested string
 	}
 	return meters, nil
 }
+
+type statusError struct{ code int }
+
+func (e *statusError) Error() string { return fmt.Sprintf("backend participant: status %d", e.code) }
 
 func (r *Resolver) fetch(ctx context.Context, authorization, tenant string, meters Meters) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.baseURL+"/participant", nil)
@@ -132,7 +142,7 @@ func (r *Resolver) fetch(ctx context.Context, authorization, tenant string, mete
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("backend participant: status %d", resp.StatusCode)
+		return &statusError{resp.StatusCode}
 	}
 
 	var participants []struct {

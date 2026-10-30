@@ -208,8 +208,10 @@ func TestEveryTenantOfTheToken(t *testing.T) {
 		switch r.Header.Get("tenant") {
 		case "GC123456-001":
 			_, _ = fmt.Fprint(w, `[{"meters":[{"meteringPoint":"AT001","participantState":{"activeSince":"2026-01-01","inactiveSince":null}}]}]`)
+		case "REFUSED":
+			w.WriteHeader(http.StatusForbidden)
 		case "BROKEN":
-			w.WriteHeader(http.StatusUnauthorized)
+			w.WriteHeader(http.StatusInternalServerError)
 		default:
 			_, _ = fmt.Fprint(w, `[]`)
 		}
@@ -223,7 +225,14 @@ func TestEveryTenantOfTheToken(t *testing.T) {
 	assert.Equal(t, []string{"RC123456", "GC123456-001"}, asked)
 
 	_, err = New(s.URL).Meters(context.Background(), "Bearer tok", "sub", "RC123456", []string{"RC123456", "BROKEN"})
-	assert.Error(t, err)
+	assert.Error(t, err, "5xx of another tenant fails the lookup")
+
+	m, err = New(s.URL).Meters(context.Background(), "Bearer tok", "sub", "RC123456", []string{"REFUSED", "GC123456-001"})
+	require.NoError(t, err, "401/403 of another tenant is skipped")
+	assert.True(t, m.Owns("AT001"))
+
+	_, err = New(s.URL).Meters(context.Background(), "Bearer tok", "sub", "REFUSED", []string{"REFUSED", "GC123456-001"})
+	assert.Error(t, err, "403 for the requested tenant fails the lookup")
 
 	asked = nil
 	many := make([]string, 15)
