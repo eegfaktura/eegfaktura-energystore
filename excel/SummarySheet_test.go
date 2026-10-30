@@ -215,3 +215,36 @@ func TestSummaryQoVDayComments(t *testing.T) {
 	assert.Contains(t, sheetXML, "<legacyDrawing",
 		"Blatt verweist auf die Kommentare")
 }
+
+// Die Summen B5-B9 entstehen aus float64-Additionen mit Rundungsrauschen
+// (10000.1 + 11547.877599 = 21547.977598999998). excelize schreibt hoechstens
+// 15 signifikante Stellen und schneidet ab -- ohne Rundung stuende
+// 21547.9775989999 in der Zelle statt 21547.977599.
+func TestSummaryTotalsAreRoundedTo6Decimals(t *testing.T) {
+	f := excelize.NewFile()
+	defer func() { _ = f.Close() }()
+	assert.NoError(t, f.SetSheetName("Sheet1", "Summary"))
+
+	cp := func(id string, dir model.MeterDirection, r model.EnergyDescription) *ParticipantCp {
+		return &ParticipantCp{MeteringPoint: id, Direction: dir, Report: r}
+	}
+	ctx := &RunnerContext{
+		start: time.Date(2023, 1, 1, 0, 0, 0, 0, time.Local),
+		end:   time.Date(2023, 1, 31, 0, 0, 0, 0, time.Local),
+		cps: []*ParticipantCp{
+			cp("C1", "CONSUMPTION", model.EnergyDescription{Consumed: 10000.1, Shared: 10000.1, Allocated: 10000.1}),
+			cp("C2", "CONSUMPTION", model.EnergyDescription{Consumed: 11547.877599, Shared: 11547.877599, Allocated: 11547.877599}),
+			cp("P1", "GENERATION", model.EnergyDescription{Produced: 10000.1, Distributed: 10000.1}),
+			cp("P2", "GENERATION", model.EnergyDescription{Produced: 11547.877599, Distributed: 11547.877599}),
+		},
+		metaMap: map[string]*model.CounterPointMeta{"C1": {}, "C2": {}, "P1": {}, "P2": {}},
+	}
+	ss := &SummarySheet{name: "Summary", excel: f}
+	assert.NoError(t, ss.closeSheet(ctx))
+
+	for _, cell := range []string{"B5", "B6", "B7", "B8", "B9"} {
+		v, err := f.GetCellValue("Summary", cell, excelize.Options{RawCellValue: true})
+		assert.NoError(t, err)
+		assert.Equal(t, "21547.977599", v, cell)
+	}
+}
