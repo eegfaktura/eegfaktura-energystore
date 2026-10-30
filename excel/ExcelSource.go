@@ -266,7 +266,7 @@ func ImportExcelEnergyFile(f *excelize.File, sheet string, db *ebow.BowStorage) 
 					if err != nil {
 						glog.Errorf("Error get cell format %+v", e)
 					}
-					glog.V(3).Infof("Could not handle row format (%d). Cols %+v <%v>", s, cols, cols[0])
+					glog.Warningf("Could not handle row format (%d), row skipped: %d columns <%v>", s, len(cols), cols[0])
 				}
 			}
 		}
