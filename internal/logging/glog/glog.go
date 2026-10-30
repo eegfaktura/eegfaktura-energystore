@@ -70,9 +70,16 @@ func vLevel(l Level) slog.Level {
 	return slog.LevelDebug
 }
 
-// V reports whether verbosity level l is on for the calling package.
+// V reports whether verbosity level l is on for the calling package. The caller's stack is read
+// only when a per-package override could change the answer (V is called on hot paths).
 func V(l Level) Verbose {
 	lv := vLevel(l)
+	if !logging.EnabledAnywhere(lv) {
+		return Verbose{level: lv}
+	}
+	if !logging.HasOverrides() {
+		return Verbose{enabled: true, level: lv}
+	}
 	return Verbose{enabled: logging.Enabled(callerPC(), lv), level: lv}
 }
 

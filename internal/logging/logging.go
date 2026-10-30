@@ -164,6 +164,14 @@ func replaceAttr(groups []string, a slog.Attr) slog.Attr {
 // global level only).
 func Enabled(pc uintptr, l slog.Level) bool { return cur.levelFor(pc) <= l }
 
+// EnabledAnywhere reports whether level l reaches the global level or any package override; it
+// needs no caller pc.
+func EnabledAnywhere(l slog.Level) bool { return l >= cur.min }
+
+// HasOverrides reports whether a LOG_LEVEL_<PKG> override is set (only then the caller's package
+// matters).
+func HasOverrides() bool { return len(cur.overrides) > 0 }
+
 // handler applies LOG_LEVEL and the per-package overrides, and adds log.origin and the request
 // ids carried in the context.
 type handler struct {

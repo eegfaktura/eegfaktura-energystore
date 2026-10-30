@@ -73,6 +73,12 @@ func TestVerbosityFollowsLogLevel(t *testing.T) {
 
 	capture(t, "LOG_LEVEL=info", "LOG_LEVEL_GLOG=trace")
 	assert.True(t, V(5).Enabled(), "the package override applies to the caller's package")
+
+	capture(t, "LOG_LEVEL=info", "LOG_LEVEL_EBOW=trace")
+	assert.False(t, V(5).Enabled(), "an override for another package does not apply here")
+	capture(t, "LOG_LEVEL=info", "LOG_LEVEL_GLOG=debug")
+	assert.True(t, V(3).Enabled())
+	assert.False(t, V(4).Enabled(), "V(4) is trace, below the override")
 }
 
 func TestErrorArgumentBecomesErrorFields(t *testing.T) {
