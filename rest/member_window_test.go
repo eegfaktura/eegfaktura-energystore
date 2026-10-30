@@ -5,7 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"at.ourproject/energystore/internal/testsupport"
+	"at.ourproject/energystore/internal/testsupport/apitest"
 	"at.ourproject/energystore/internal/testsupport/fakeoidc"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -94,4 +97,21 @@ func TestMemberMalformedRequestIs400(t *testing.T) {
 	assert.Equal(t, 400, rec.Code, "report: %s", rec.Body.String())
 	rec = send(h, memberAuth, "POST", "/eeg/v2/"+ecId+"/billing-check", fmt.Sprintf(`{"start":0,"end":0,"cps":[{"meteringPoint":"%s","direction":"CONSUMPTION"}]}`, meter))
 	assert.Equal(t, 400, rec.Code, "billing-check: %s", rec.Body.String())
+}
+
+// A community without any energy data (no meta record) answers a member's report like an admin's: an
+// empty report, no 403 and no backend-dependent failure.
+func TestMemberCommunityWithoutData(t *testing.T) {
+	b := startBackend(t)
+	testsupport.UseTempPersistence(t)
+	fakeoidc.ResetUsers()
+	apitest.StartFakes(t)
+	viper.Set("services.backend-api", b.URL)
+	t.Cleanup(func() { viper.Set("services.backend-api", "") })
+	h := apitest.Router()
+	rt := perMeter(meter)["report"]
+	member := send(h, memberAuth, "POST", rt[0], rt[1])
+	admin := send(h, groupToken("/EEG_ADMIN"), "POST", rt[0], rt[1])
+	assert.Equal(t, admin.Code, member.Code, "member %s admin %s", member.Body.String(), admin.Body.String())
+	assert.Equal(t, 200, member.Code, member.Body.String())
 }

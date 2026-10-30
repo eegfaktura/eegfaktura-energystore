@@ -8,7 +8,6 @@ import (
 	"at.ourproject/energystore/middleware"
 	"at.ourproject/energystore/ownmeters"
 	"at.ourproject/energystore/store"
-	"at.ourproject/energystore/store/ebow"
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 	"github.com/spf13/viper"
@@ -60,15 +59,16 @@ func ownMeters(w http.ResponseWriter, r *http.Request, claims *middleware.Platfo
 
 // inCommunity keeps the meters that the requested community (tenant and ecid, already checked against
 // the token) has in this store: the backend lookup spans every tenant of the token (GEA), so a meter of
-// another community is never readable here. A community without meta data has no energy to read; its
-// set stays as it is.
+// another community is never readable here. A community without any meta record (QueryMetaData then
+// answers an empty map, no error) has no energy to read: its set stays as it is, so the member gets the
+// same empty report as an admin instead of 403.
 func inCommunity(all ownmeters.Meters, tenant, ecid string) (ownmeters.Meters, error) {
 	meta, err := store.QueryMetaData(tenant, ecid)
-	if errors.Is(err, ebow.ErrNotFound) {
-		return all, nil
-	}
 	if err != nil {
 		return nil, err
+	}
+	if len(meta) == 0 {
+		return all, nil
 	}
 	own := ownmeters.Meters{}
 	for name := range meta {
