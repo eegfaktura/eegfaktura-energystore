@@ -56,6 +56,7 @@ func ImportExcelEnergyFileNew(f *excelize.File, sheet string, db ebow.IBowStorag
 
 	t := time.Now()
 	totalRowCols := 0
+	skippedRows, firstSkippedRow, firstSkippedStyle := 0, 0, 0
 	for rows.Next() {
 		totalRowCols = totalRowCols + 1
 		if cols, err := rows.Columns(excelize.Options{RawCellValue: true}); err == nil && len(cols) > 0 {
@@ -175,17 +176,25 @@ func ImportExcelEnergyFileNew(f *excelize.File, sheet string, db ebow.IBowStorag
 					rowIdVisited[rawDataId] = &model.RawSourceLine{Id: rawData.Id, Consumers: consumerMatrix.Elements, Producers: producerMatrix.Elements,
 						QoVConsumers: rawData.QoVConsumers, QoVProducers: rawData.QoVProducers}
 				} else {
-					cell, _ := excelize.CoordinatesToCellName(1, totalRowCols)
-					s, e := f.GetCellStyle(sheet, cell)
-					if e != nil {
-						glog.Errorf("Error get cell format %+v", e)
+					skippedRows++
+					if skippedRows == 1 {
+						firstSkippedRow = totalRowCols
+						cell, _ := excelize.CoordinatesToCellName(1, totalRowCols)
+						s, e := f.GetCellStyle(sheet, cell)
+						if e != nil {
+							glog.Errorf("Error get cell format %+v", e)
+						}
+						firstSkippedStyle = s
 					}
-					glog.Warningf("Could not handle row format (%d), row skipped: %d columns <%v>", s, len(cols), cols[0])
 				}
 			}
 		}
 	}
 
+	if skippedRows > 0 { // one line per sheet, no cell content
+		glog.Warningf("Could not handle row format, %d rows skipped; first skipped row %d (cell style %d)",
+			skippedRows, firstSkippedRow, firstSkippedStyle)
+	}
 	if !excelHeaderInitialized {
 		return fmt.Errorf("no energy data found in sheet %s", sheet)
 	}
