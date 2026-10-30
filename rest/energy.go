@@ -41,7 +41,7 @@ func queryRawData() middleware.JWTHandlerFunc {
 		}
 
 		body, err := io.ReadAll(r.Body)
-		glog.V(4).Infof("API-DATA: %s - %v", string(body), err)
+		glog.V(4).Infof("API-DATA: %d bytes - %v", len(body), err)
 
 		err = json.Unmarshal(body, &request)
 		if err != nil {
