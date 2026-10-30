@@ -65,15 +65,18 @@ func TestMemberBillingCheckOpenEndAsAdmin(t *testing.T) {
 	assert.JSONEq(t, admin.Body.String(), member.Body.String())
 }
 
-// The backend matches the member by the token's email: a member token without one gets 503 without a
-// backend call.
-func TestMemberWithoutEmailIs503(t *testing.T) {
+// The backend matches the member by the token's email. Without email_verified (as a token without email
+// has none) the answer is 403 (permission); a verified token without an email gets 503. No backend call.
+func TestMemberWithoutEmail(t *testing.T) {
 	b := startBackend(t)
 	h := memberRouter(t, b.URL)
 	noEmail := "Bearer " + fakeoidc.Token(map[string]any{"tenant": []string{tenant}, "access_groups": []string{"/EEG_USER"},
 		"sub": "member-2", "realm_access": map[string]any{"roles": []string{}}})
+	verifiedNoEmail := "Bearer " + fakeoidc.Token(map[string]any{"tenant": []string{tenant}, "access_groups": []string{"/EEG_USER"},
+		"sub": "member-2", "email_verified": true, "realm_access": map[string]any{"roles": []string{}}})
 	for name, rt := range perMeter(meter) {
-		assert.Equal(t, 503, send(h, noEmail, "POST", rt[0], rt[1]).Code, name)
+		assert.Equal(t, 403, send(h, noEmail, "POST", rt[0], rt[1]).Code, name)
+		assert.Equal(t, 503, send(h, verifiedNoEmail, "POST", rt[0], rt[1]).Code, name)
 	}
 	assert.Equal(t, int32(0), b.calls.Load())
 }
