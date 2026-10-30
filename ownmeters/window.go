@@ -107,6 +107,7 @@ func dayOf(ms int64) time.Time {
 // backendMeter is the part of a metering point in the backend's answer that is used.
 type backendMeter struct {
 	MeteringPoint   string `json:"meteringPoint"`
+	Status          string `json:"status"`
 	RegisteredSince string `json:"registeredSince"`
 	State           *struct {
 		ActiveSince   *string `json:"activeSince"`
@@ -116,23 +117,29 @@ type backendMeter struct {
 
 var openEnd = time.Date(2999, 12, 31, 0, 0, 0, 0, time.Local)
 
-// windows reads the participation's window with the backend's defaults (meteringPointDao): activeSince,
-// else registeredSince; inactiveSince, else open. Without a valid start date there is no window.
-//
-// Open point (held 2026-10-30): a meter without activeSince gets registeredSince → open end. In prod about
-// 2600 meters have activeSince NULL (mostly status INIT) and may still deliver data, so "no window until
-// activated" could cut members off their own data; decided separately. Rejected registrations likewise.
+// registeredPlaceholder: a registeredSince before it (e.g. 0001-01-01) is a placeholder, not a date.
+var registeredPlaceholder = time.Date(2000, 1, 1, 0, 0, 0, 0, time.Local)
+
+// windows reads the participation's window (decided 2026-10-30): from activeSince until inactiveSince,
+// open without an end date. Without activeSince only a meter with status ACTIVE or INACTIVE starts at
+// registeredSince (as the backend defaults it in meteringPointDao), and not with a placeholder date before
+// 2000; status INIT, NEW, empty or unknown has no window: such a meter has no energy in the community yet.
 func (bm backendMeter) windows() []Window {
-	from, ok := day(bm.RegisteredSince)
-	until := openEnd
-	if bm.State != nil {
-		if bm.State.ActiveSince != nil {
-			from, ok = day(*bm.State.ActiveSince)
+	var from time.Time
+	ok := false
+	if bm.State != nil && bm.State.ActiveSince != nil {
+		from, ok = day(*bm.State.ActiveSince)
+	} else {
+		switch strings.ToUpper(bm.Status) {
+		case "ACTIVE", "INACTIVE":
+			from, ok = day(bm.RegisteredSince)
+			ok = ok && !from.Before(registeredPlaceholder)
 		}
-		if bm.State.InactiveSince != nil {
-			if d, valid := day(*bm.State.InactiveSince); valid {
-				until = d
-			}
+	}
+	until := openEnd
+	if bm.State != nil && bm.State.InactiveSince != nil {
+		if d, valid := day(*bm.State.InactiveSince); valid {
+			until = d
 		}
 	}
 	if !ok || until.Before(from) {

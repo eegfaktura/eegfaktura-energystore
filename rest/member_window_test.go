@@ -2,6 +2,8 @@ package rest_test
 
 import (
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -114,4 +116,23 @@ func TestMemberCommunityWithoutData(t *testing.T) {
 	admin := send(h, groupToken("/EEG_ADMIN"), "POST", rt[0], rt[1])
 	assert.Equal(t, admin.Code, member.Code, "member %s admin %s", member.Body.String(), admin.Body.String())
 	assert.Equal(t, 200, member.Code, member.Body.String())
+}
+
+// Decided 2026-10-30: without activeSince only status ACTIVE/INACTIVE starts at registeredSince (not a
+// placeholder before 2000); INIT, NEW or an empty status has no window.
+func TestMemberMeterWithoutActiveSince(t *testing.T) {
+	for _, c := range []struct {
+		status, registered string
+		want               int
+	}{{"ACTIVE", "2025-01-01", 200}, {"INACTIVE", "2025-01-01", 200}, {"ACTIVE", "0001-01-01", 403},
+		{"INIT", "2025-01-01", 403}, {"NEW", "2025-01-01", 403}, {"", "2025-01-01", 403}} {
+		backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = fmt.Fprintf(w, `[{"meters":[{"meteringPoint":"%s","status":"%s","registeredSince":"%s",`+
+				`"participantState":{"activeSince":null,"inactiveSince":null}}]}]`, meter, c.status, c.registered)
+		}))
+		h := memberRouter(t, backend.URL)
+		rt := perMeter(meter)["raw"]
+		assert.Equal(t, c.want, send(h, memberAuth, "POST", rt[0], rt[1]).Code, "%s %s", c.status, c.registered)
+		backend.Close()
+	}
 }
