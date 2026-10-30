@@ -24,6 +24,10 @@ RUN apt-get update \
 
 ENV TZ="Europe/Berlin"
 
+# service.version in every log line (internal/logging); the release workflow passes the image version.
+ARG SERVICE_VERSION=dev
+ENV SERVICE_VERSION=${SERVICE_VERSION}
+
 WORKDIR /usr/src/app
 
 COPY --from=builder /usr/local/bin/energystore /usr/local/bin/estore /usr/local/bin/
