@@ -34,17 +34,60 @@ type PlatformClaims struct {
 	jwt.RegisteredClaims
 }
 
-// UnmarshalJSON reads the `tenant` claim with tenantClaim; every other claim as before.
+// UnmarshalJSON reads the `tenant` claim with tenantClaim, `access_groups` with looseStrings and
+// `email_verified` with looseBool; every other claim as before.
 func (c *PlatformClaims) UnmarshalJSON(b []byte) error {
 	type plain PlatformClaims // without this method
 	aux := struct {
 		*plain
-		Tenants tenantClaim `json:"tenant"`
+		Tenants       tenantClaim  `json:"tenant"`
+		AccessGroups  looseStrings `json:"access_groups"`
+		EmailVerified looseBool    `json:"email_verified"`
 	}{plain: (*plain)(c)}
 	if err := json.Unmarshal(b, &aux); err != nil {
 		return err
 	}
 	c.Tenants = aux.Tenants
+	c.AccessGroups = aux.AccessGroups
+	c.EmailVerified = bool(aux.EmailVerified)
+	return nil
+}
+
+// looseBool reads a JSON bool or the strings "true"/"false"; any other value is false and never an error,
+// so an odd mapper cannot refuse the whole token (energystore 261025-ca1).
+type looseBool bool
+
+func (lb *looseBool) UnmarshalJSON(b []byte) error {
+	var v bool
+	if err := json.Unmarshal(b, &v); err == nil {
+		*lb = looseBool(v)
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(b, &s); err == nil {
+		*lb = looseBool(strings.EqualFold(s, "true"))
+		return nil
+	}
+	*lb = false
+	return nil
+}
+
+// looseStrings reads an array of strings or a single string (a one-element list); any other value is an
+// empty list (no group: the token counts as a member) and never an error.
+type looseStrings []string
+
+func (ls *looseStrings) UnmarshalJSON(b []byte) error {
+	var list []string
+	if err := json.Unmarshal(b, &list); err == nil {
+		*ls = list
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(b, &s); err == nil && s != "" {
+		*ls = looseStrings{s}
+		return nil
+	}
+	*ls = nil
 	return nil
 }
 
