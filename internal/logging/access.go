@@ -27,7 +27,7 @@ type ctxKey struct{}
 // requestInfo travels in the request context; the token check and the router fill it in.
 type requestInfo struct {
 	requestID, traceID, spanID string
-	traceparent                string
+	traceFlags                 string // of a valid incoming traceparent
 	route, operation           string
 	tenant, client             string
 }
@@ -73,7 +73,7 @@ func AccessLog(next http.Handler) http.Handler {
 		}
 		if tp := r.Header.Get("traceparent"); tp != "" {
 			if tid, sid, ok := parseTraceparent(tp); ok {
-				ri.traceparent, ri.traceID, ri.spanID = tp, tid, sid
+				ri.traceID, ri.spanID, ri.traceFlags = tid, sid, tp[len(tp)-2:]
 			}
 		}
 		w.Header().Set("X-Request-Id", ri.requestID)
@@ -150,16 +150,17 @@ func GQLOperation(ctx context.Context, next graphql.OperationHandler) graphql.Re
 	return next(ctx)
 }
 
-// Propagate passes X-Request-Id and the incoming traceparent (unchanged: energystore starts no
-// spans) on to an outgoing request.
+// Propagate passes X-Request-Id and, when the request came with a traceparent, a child
+// traceparent on to an outgoing request: the same trace id and flags, a new parent id. So the
+// called service logs its own span.id, not the one energystore logs.
 func Propagate(ctx context.Context, h http.Header) {
 	ri := idsFrom(ctx)
 	if ri == nil {
 		return
 	}
 	h.Set("X-Request-Id", ri.requestID)
-	if ri.traceparent != "" {
-		h.Set("traceparent", ri.traceparent)
+	if ri.traceID != "" {
+		h.Set("traceparent", "00-"+ri.traceID+"-"+newSpanID()+"-"+ri.traceFlags)
 	}
 }
 
@@ -169,6 +170,15 @@ func newRequestID() string {
 	_, _ = rand.Read(b[:])
 	b[6] = b[6]&0x0f | 0x40
 	b[8] = b[8]&0x3f | 0x80
+	return hex.EncodeToString(b[:])
+}
+
+// newSpanID is a random, non-zero 8-byte id as 16 hex characters.
+func newSpanID() string {
+	var b [8]byte
+	for b == [8]byte{} {
+		_, _ = rand.Read(b[:])
+	}
 	return hex.EncodeToString(b[:])
 }
 

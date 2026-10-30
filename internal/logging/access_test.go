@@ -159,7 +159,18 @@ func TestPropagate(t *testing.T) {
 	req.Header.Set("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
 	AccessLog(r).ServeHTTP(httptest.NewRecorder(), req)
 	assert.Equal(t, "req-2", got.Get("X-Request-Id"))
-	assert.Equal(t, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", got.Get("traceparent"))
+	// a child span: same trace id and flags, a new parent id
+	out := got.Get("traceparent")
+	assert.Regexp(t, `^00-4bf92f3577b34da6a3ce929d0e0e4736-[0-9a-f]{16}-01$`, out)
+	assert.NotEqual(t, "00f067aa0ba902b7", out[36:52], "not the incoming span id")
+	_, _, valid := parseTraceparent(out)
+	assert.True(t, valid)
+
+	// without an incoming traceparent: only X-Request-Id
+	req = httptest.NewRequest("GET", "/x", nil)
+	AccessLog(r).ServeHTTP(httptest.NewRecorder(), req)
+	assert.Regexp(t, `^[0-9a-f]{32}$`, got.Get("X-Request-Id"))
+	assert.Empty(t, got.Get("traceparent"))
 
 	h := http.Header{}
 	Propagate(t.Context(), h) // outside a request: nothing
