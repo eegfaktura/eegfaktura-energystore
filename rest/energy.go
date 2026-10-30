@@ -95,7 +95,7 @@ func targetsOf(meters []*protobuf.MeteringPoint) []store.TargetMP {
 }
 
 // queryMetaData lists the meta data of the community's metering points; with restrict a member sees its
-// own metering points only (bearer route; the Basic-auth /query API is not restricted).
+// own metering points only (bearer route; the Basic-auth /query API is admin-only and passes false).
 func queryMetaData(restrict bool) middleware.JWTHandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request, claims *middleware.PlatformClaims, tenant string) {
 		vars := mux.Vars(r)

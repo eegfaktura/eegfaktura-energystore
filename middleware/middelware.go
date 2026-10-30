@@ -149,7 +149,8 @@ func appendTenant(tenants []string, t string) []string {
 
 // IsMember: every token without the group /EEG_ADMIN or /EEG_OWNER and without the realm role superuser —
 // /EEG_USER and a token without any group alike. A member reads per-meter energy only of its own metering
-// points (energystore 261025-ca1). Applied to bearer tokens only; the Basic-auth /query/* API does not use it.
+// points (energystore 261025-ca1); the Basic-auth /query/* API refuses members altogether (noMembers). On
+// that path the realm role superuser is not in the token, so only the two groups count there.
 func (c *PlatformClaims) IsMember() bool {
 	return !slices.Contains(c.AccessGroups, "/EEG_ADMIN") &&
 		!slices.Contains(c.AccessGroups, "/EEG_OWNER") &&
