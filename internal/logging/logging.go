@@ -186,14 +186,28 @@ var allowed = map[string]bool{
 	"error.type": true, "error.message": true, "error.stack_trace": true,
 }
 
+// auditOperator names the person who ran a destructive ops tool. Documented exception to "no persons
+// in logs" (decision 2026-10-30): the superuser-only raw-data deletion keeps the operator for
+// accountability. The field is written only on the events in auditEvents and dropped everywhere else.
+const auditOperator = "audit.operator"
+
+var auditEvents = map[string]bool{"rawdata.delete.done": true, "rawdata.delete.failed": true}
+
 func (h *handler) Handle(ctx context.Context, r slog.Record) error {
 	if r.Level < h.levelFor(r.PC) {
 		return nil
 	}
 	if r.NumAttrs() > 0 {
+		audit := false
+		r.Attrs(func(a slog.Attr) bool {
+			if a.Key == "event.action" && auditEvents[a.Value.String()] {
+				audit = true
+			}
+			return true
+		})
 		kept := slog.NewRecord(r.Time, r.Level, r.Message, r.PC)
 		r.Attrs(func(a slog.Attr) bool {
-			if allowed[a.Key] {
+			if allowed[a.Key] || (audit && a.Key == auditOperator) {
 				kept.AddAttrs(a)
 			}
 			return true
@@ -268,6 +282,16 @@ func Log(ctx context.Context, pc uintptr, l slog.Level, msg string, attrs ...slo
 	r.AddAttrs(attrs...)
 	_ = cur.Handle(ctx, r)
 }
+
+// Event writes one line with event.action = action and the caller as log.origin.
+func Event(ctx context.Context, l slog.Level, action, msg string, attrs ...slog.Attr) {
+	var pcs [1]uintptr
+	runtime.Callers(2, pcs[:]) // Callers, Event
+	Log(ctx, pcs[0], l, msg, append([]slog.Attr{slog.String("event.action", action)}, attrs...)...)
+}
+
+// AuditOperator is the audit.operator field; it is written only on the events allowed for it.
+func AuditOperator(name string) slog.Attr { return slog.String(auditOperator, name) }
 
 // ErrorAttrs are error.type and error.message of err.
 func ErrorAttrs(err error) []slog.Attr {

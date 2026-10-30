@@ -80,6 +80,27 @@ func TestUnknownFieldsAreDropped(t *testing.T) {
 	assert.NotContains(t, m, "user.email")
 }
 
+// audit.operator (decision 2026-10-30) appears on the raw-data deletion events only.
+func TestAuditOperatorOnlyOnAuditEvents(t *testing.T) {
+	out := capture(t)
+	Event(t.Context(), slog.LevelWarn, "rawdata.delete.done", "done", AuditOperator("ops.person"))
+	Event(t.Context(), slog.LevelError, "rawdata.delete.failed", "failed", AuditOperator("ops.person"))
+	Event(t.Context(), slog.LevelInfo, "http.access", "access", AuditOperator("ops.person"))
+	Log(t.Context(), 0, slog.LevelInfo, "no event", AuditOperator("ops.person"))
+	slog.Default().With(AuditOperator("ops.person")).Info("with", "event.action", "rawdata.delete.done")
+	lines := out.lines()
+	require.Len(t, lines, 5)
+	for i, line := range lines {
+		m := decode(t, line)
+		if i < 2 {
+			assert.Equal(t, "ops.person", m["audit.operator"], line)
+			assert.Equal(t, "logging/logging_test.go", m["log.origin.file.name"])
+		} else {
+			assert.NotContains(t, line, "ops.person", "audit.operator only on rawdata.delete.*")
+		}
+	}
+}
+
 func TestTextFormat(t *testing.T) {
 	out := capture(t, "LOG_FORMAT=text")
 	Log(t.Context(), 0, slog.LevelWarn, "careful")

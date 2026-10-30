@@ -3,6 +3,7 @@ package rest
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strconv"
@@ -211,15 +212,23 @@ func deleteRawData() middleware.JWTHandlerFunc {
 		to := time.UnixMilli(request.End)
 
 		affected, sumKwh, err := store.DeleteRawDataForMeteringPoint(tenant, ecid, request.MeteringPoint, from, to, request.DryRun)
+		// Audit line with the operator's user name: documented exception to "no persons in logs"
+		// (decision 2026-10-30) — superuser-only destructive ops tool, accountability over anonymity.
+		// audit.operator is written only on rawdata.delete.done/.failed (internal/logging).
+		if !request.DryRun {
+			action, level := "rawdata.delete.done", slog.LevelWarn
+			attrs := []slog.Attr{logging.AuditOperator(claims.Username), slog.String("tenant.id", tenant)}
+			if err != nil {
+				action, level = "rawdata.delete.failed", slog.LevelError
+				attrs = append(attrs, logging.ErrorAttrs(err)...)
+			}
+			logging.Event(r.Context(), level, action, fmt.Sprintf("RAWDATA-DELETE tenant=%s ec=%s zp=%s from=%s to=%s timesteps=%d",
+				tenant, ecid, request.MeteringPoint,
+				from.UTC().Format(time.RFC3339), to.UTC().Format(time.RFC3339), affected), attrs...)
+		}
 		if err != nil {
 			respondWithQueryError(w, http.StatusBadRequest, tenant, err)
 			return
-		}
-
-		if !request.DryRun {
-			glog.Warningf("RAWDATA-DELETE operator=%q tenant=%s ec=%s zp=%s from=%s to=%s timesteps=%d",
-				claims.Username, tenant, ecid, request.MeteringPoint,
-				from.UTC().Format(time.RFC3339), to.UTC().Format(time.RFC3339), affected)
 		}
 
 		respondWithJSON(w, http.StatusOK, map[string]interface{}{

@@ -47,6 +47,10 @@ this changelog highlights the changes relevant for overview and operations.
   otherwise a UUIDv4 (32 hex) is generated, and it is returned as a response header; `X-Request-Id` and
   `traceparent` are passed on to the backend call for the metering points of a member. energystore had no access
   log before (none with IP or user agent to switch off).
+- **Raw-data deletion audit line** (`POST /eeg/v2/{ecid}/rawdata/delete`, superuser only): now
+  `event.action=rawdata.delete.done` (warn) or `rawdata.delete.failed` (error, newly logged) with `tenant.id` and the
+  operator's user name in `audit.operator`. Documented exception to 'no persons in logs' (decision 2026-10-30):
+  accountability over anonymity for this destructive ops tool; `audit.operator` is written on these two events only.
 
 ### Security
 - **Basic authentication of the `/query` API** (energystore #39): security relevant — details not published.
