@@ -98,9 +98,13 @@ this changelog highlights the changes relevant for overview and operations.
   GHSA-r7x5-4969-99p7, GHSA-jw42-f3rr-4cc3, GHSA-mx22-3794-2vpv): panics, hangs and unbounded allocations on
   malformed workbooks, reachable through the Excel upload. Indirect modules follow: `richardlehane/mscfb` 1.0.7 →
   1.0.8 (2026-08-19), `xuri/efp` 0.0.1 → 0.0.2 (2026-09-21); `go.sum` also records `golang.org/x/image` 0.44.0
-  (2026-07-08). Return to a release tag once v2.12.0 is out. One visible side effect in the Excel export: numbers
-  are now written with at most 15 significant digits (as Excel stores them), e.g. `0.3333333333333333` →
-  `0.333333333333333`; the displayed values (7 decimals) are unchanged.
+  (2026-07-08). Return to a release tag once v2.12.0 is out. The new excelize writes numbers with at most 15
+  significant digits and cuts off the rest. So that the export does not change because of this, the five totals of the
+  summary sheet (B5–B9: Gesamtverbrauch, Anteil, Eigendeckung, Überschuss, Gesamte Erzeugung) are now rounded to
+  6 decimals, like the per-meter cells. The stored value is what Excel displayed before (e.g. `21547.977599`
+  instead of the float noise `21547.977598999998`), and the displayed values are unchanged. The balance in B10 is
+  computed from these rounded totals, matching its formula `ROUND(B9-B8-B7,3)`. The energy sheet and the per-meter
+  rows were already rounded to 6 decimals and are unaffected.
 
 ### Fixed
 - **No personal data or payloads in the log** (logging concept, never-log list): the request body of
