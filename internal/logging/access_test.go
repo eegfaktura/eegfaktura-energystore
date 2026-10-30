@@ -220,3 +220,47 @@ func TestGQLRecover(t *testing.T) {
 	assert.Equal(t, "nil map", m["error.message"])
 	assert.Contains(t, m["error.stack_trace"], "GQLRecover")
 }
+
+// A handler panic: one error line with error.* (no remote address), an access line with 500, and
+// the client gets 500.
+func TestAccessLineHandlerPanic(t *testing.T) {
+	out := capture(t)
+	r := mux.NewRouter()
+	r.Use(MuxRoute)
+	r.HandleFunc("/eeg/{ecid}/thing", func(w http.ResponseWriter, r *http.Request) { panic("boom") })
+	req := httptest.NewRequest("GET", "/eeg/RC1/thing", nil)
+	req.RemoteAddr = "198.51.100.9:4711"
+	rec := httptest.NewRecorder()
+	AccessLog(r).ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	lines := out.lines()
+	require.Len(t, lines, 2)
+	e := decode(t, lines[0])
+	assert.Equal(t, "error", e["log.level"])
+	assert.Equal(t, "http.panic", e["event.action"])
+	assert.Equal(t, "boom", e["error.message"])
+	assert.Contains(t, e["error.stack_trace"], "TestAccessLineHandlerPanic")
+	a := decode(t, lines[1])
+	assert.Equal(t, e["request.id"], a["request.id"])
+	assert.EqualValues(t, 500, a["http.response.status_code"])
+	assert.Equal(t, "failure", a["event.outcome"])
+	assert.Equal(t, "GET /eeg/{ecid}/thing 500", a["message"])
+	assert.NotContains(t, lines[0]+lines[1], "198.51.100.9")
+}
+
+// After the response has begun, the connection is aborted with http.ErrAbortHandler.
+func TestAccessLineHandlerPanicAfterWrite(t *testing.T) {
+	out := capture(t)
+	h := AccessLog(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("partial"))
+		panic("late")
+	}))
+	assert.PanicsWithValue(t, http.ErrAbortHandler, func() {
+		h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/x", nil))
+	})
+	lines := out.lines()
+	require.Len(t, lines, 2)
+	assert.Equal(t, "late", decode(t, lines[0])["error.message"])
+	assert.EqualValues(t, 500, decode(t, lines[1])["http.response.status_code"])
+}

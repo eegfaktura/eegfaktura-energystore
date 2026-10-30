@@ -83,7 +83,26 @@ func AccessLog(next http.Handler) http.Handler {
 		w.Header().Set("X-Request-Id", ri.requestID)
 		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 		ctx := context.WithValue(r.Context(), ctxKey{}, ri)
-		next.ServeHTTP(sw, r.WithContext(ctx))
+		p, stack := serveRecovered(next, sw, r.WithContext(ctx))
+		// A handler panic: one error line through the module instead of net/http's
+		// "http: panic serving <ip>" with a plain stack, then 500. If the response had begun (or
+		// the handler aborted on purpose), the connection is aborted with http.ErrAbortHandler,
+		// which net/http does not log.
+		abort := false
+		if p != nil {
+			abort = sw.wroteHeader || p == http.ErrAbortHandler
+			if p != http.ErrAbortHandler {
+				Log(ctx, 0, slog.LevelError, "HTTP handler panicked",
+					slog.String("event.action", "http.panic"),
+					slog.String("error.type", fmt.Sprintf("%T", p)),
+					slog.String("error.message", fmt.Sprint(p)),
+					slog.String("error.stack_trace", string(stack)))
+			}
+			if !abort {
+				sw.WriteHeader(http.StatusInternalServerError)
+			}
+			sw.status = http.StatusInternalServerError
+		}
 
 		outcome, level := "success", slog.LevelInfo
 		switch {
@@ -114,7 +133,21 @@ func AccessLog(next http.Handler) http.Handler {
 			attrs = append(attrs, slog.String("client.id", ri.client))
 		}
 		Log(ctx, 0, level, r.Method+" "+route+" "+strconv.Itoa(sw.status), attrs...)
+		if abort {
+			panic(http.ErrAbortHandler)
+		}
 	})
+}
+
+// serveRecovered runs the handler and returns a panic value and its stack.
+func serveRecovered(next http.Handler, w http.ResponseWriter, r *http.Request) (p any, stack []byte) {
+	defer func() {
+		if p = recover(); p != nil {
+			stack = debug.Stack()
+		}
+	}()
+	next.ServeHTTP(w, r)
+	return nil, nil
 }
 
 // MuxRoute is a gorilla/mux middleware that records the route template ("/eeg/v2/{ecid}/meta")
