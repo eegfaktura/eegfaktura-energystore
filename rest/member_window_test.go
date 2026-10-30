@@ -14,8 +14,7 @@ import (
 
 func TestMemberOutsideWindowIs403(t *testing.T) {
 	// the stored day is 01.06.2026
-	// the last one: never activated (activeSince null) - no window at all
-	for _, window := range [][2]string{{`"2026-06-02"`, "null"}, {`"2026-01-01"`, `"2026-05-31"`}, {"null", "null"}} {
+	for _, window := range [][2]string{{`"2026-06-02"`, "null"}, {`"2026-01-01"`, `"2026-05-31"`}} {
 		b := startBackendWindow(t, window[0], window[1])
 		h := memberRouter(t, b.URL)
 		for name, rt := range perMeter(meter) {

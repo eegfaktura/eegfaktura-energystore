@@ -102,9 +102,9 @@ func dayOf(ms int64) time.Time {
 
 // backendMeter is the part of a metering point in the backend's answer that is used.
 type backendMeter struct {
-	MeteringPoint string `json:"meteringPoint"`
-	ProcessState  string `json:"processState"`
-	State         *struct {
+	MeteringPoint   string `json:"meteringPoint"`
+	RegisteredSince string `json:"registeredSince"`
+	State           *struct {
 		ActiveSince   *string `json:"activeSince"`
 		InactiveSince *string `json:"inactiveSince"`
 	} `json:"participantState"`
@@ -112,18 +112,23 @@ type backendMeter struct {
 
 var openEnd = time.Date(2999, 12, 31, 0, 0, 0, 0, time.Local)
 
-// windows reads the participation's window: from activeSince until inactiveSince, open without an end
-// date. Only an activated participation has a window: none without a valid activeSince (never activated)
-// and none for a rejected registration.
+// windows reads the participation's window with the backend's defaults (meteringPointDao): activeSince,
+// else registeredSince; inactiveSince, else open. Without a valid start date there is no window.
+//
+// Open point (held 2026-10-30): a meter without activeSince gets registeredSince → open end. In prod about
+// 2600 meters have activeSince NULL (mostly status INIT) and may still deliver data, so "no window until
+// activated" could cut members off their own data; decided separately. Rejected registrations likewise.
 func (bm backendMeter) windows() []Window {
-	if bm.State == nil || bm.State.ActiveSince == nil || strings.EqualFold(bm.ProcessState, "REJECTED") {
-		return nil
-	}
-	from, ok := day(*bm.State.ActiveSince)
+	from, ok := day(bm.RegisteredSince)
 	until := openEnd
-	if bm.State.InactiveSince != nil {
-		if d, valid := day(*bm.State.InactiveSince); valid {
-			until = d
+	if bm.State != nil {
+		if bm.State.ActiveSince != nil {
+			from, ok = day(*bm.State.ActiveSince)
+		}
+		if bm.State.InactiveSince != nil {
+			if d, valid := day(*bm.State.InactiveSince); valid {
+				until = d
+			}
 		}
 	}
 	if !ok || until.Before(from) {

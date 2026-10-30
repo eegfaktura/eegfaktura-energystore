@@ -60,10 +60,10 @@ func TestMetersAndWindows(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, Meters{
 		"AT001": {{From: date("2026-02-01"), Until: date("2026-03-31")}, {From: date("2026-06-01"), Until: openEnd}}, // sorted by start
-		"AT002": nil, // never activated (activeSince null): no window, registeredSince does not count
-		"AT003": nil, // no valid start date
-		"AT004": nil, // rejected registration
-		"AT005": nil, // no participantState
+		"AT002": {{From: date("2025-01-01"), Until: openEnd}},                                                        // activeSince null: registeredSince, open end (open point)
+		"AT003": nil,                                                                                                 // no valid start date
+		"AT004": {{From: date("2026-01-01"), Until: openEnd}},                                                        // rejected: not excluded yet (open point)
+		"AT005": {{From: date("2025-01-01"), Until: openEnd}},                                                        // no participantState: registeredSince
 	}, m)
 	assert.True(t, m.Owns("at003"))
 	assert.False(t, m.Owns("AT009"))
