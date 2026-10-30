@@ -22,6 +22,22 @@ type caller struct {
 // ErrTenantMismatch wird geliefert, wenn das tenant-Argument nicht zum geprueften Mandanten passt.
 var ErrTenantMismatch = errors.New("tenant not permitted")
 
+// ErrMember: the field is not permitted for a member token (energystore 261025-ca1).
+var ErrMember = errors.New("not permitted for members")
+
+type memberKey struct{}
+
+// WithMember marks the caller as a member token (middleware.PlatformClaims.IsMember).
+func WithMember(ctx context.Context) context.Context {
+	return context.WithValue(ctx, memberKey{}, true)
+}
+
+// IsMember reports whether WithMember marked the caller.
+func IsMember(ctx context.Context) bool {
+	m, _ := ctx.Value(memberKey{}).(bool)
+	return m
+}
+
 // WithCaller legt den geprueften Mandanten (aus dem Header) und die superuser-Rolle in den Kontext.
 func WithCaller(ctx context.Context, tenant string, superuser bool) context.Context {
 	return context.WithValue(ctx, callerKey{}, caller{tenant: tenant, superuser: superuser})

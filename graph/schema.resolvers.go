@@ -21,6 +21,9 @@ func (r *mutationResolver) SingleUpload(ctx context.Context, tenant string, ecID
 		glog.Warningf("singleUpload refused: tenant argument %s does not match the checked tenant", tenant)
 		return false, err
 	}
+	if tenantctx.IsMember(ctx) {
+		return false, tenantctx.ErrMember
+	}
 	glog.Infof("START UPLOAD: %+v %+v", tenant, sheet)
 	err := excel.ImportFile(tenant, ecID, file.Filename, sheet, file.File)
 	return err == nil, err

@@ -30,6 +30,13 @@ func fetchBillingCheck() middleware.JWTHandlerFunc {
 			respondWithError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		meters := make([]string, len(request.Cps))
+		for i, cp := range request.Cps {
+			meters[i] = cp.MeteringPoint
+		}
+		if _, ok := allowMeters(w, r, claims, tenant, meters); !ok {
+			return
+		}
 
 		resp, err := store.QueryBillingCheck(tenant, ecid, &request)
 		if err != nil {

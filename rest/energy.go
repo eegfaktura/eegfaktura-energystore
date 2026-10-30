@@ -23,8 +23,8 @@ import (
 func InitQueryApiRouter(r *mux.Router) *mux.Router {
 	s := r.PathPrefix("/query").Subrouter()
 
-	s.HandleFunc("/rawdata", middleware.ProtectApi(queryRawData())).Methods("POST")
-	s.HandleFunc("/{ecid}/metadata", middleware.ProtectApi(queryMetaData())).Methods("POST")
+	s.HandleFunc("/rawdata", middleware.ProtectApi(noMembers(queryRawData()))).Methods("POST")
+	s.HandleFunc("/{ecid}/metadata", middleware.ProtectApi(noMembers(queryMetaData()))).Methods("POST")
 	return r
 }
 
@@ -94,10 +94,22 @@ func targetsOf(meters []*protobuf.MeteringPoint) []store.TargetMP {
 func queryMetaData() middleware.JWTHandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request, claims *middleware.PlatformClaims, tenant string) {
 		vars := mux.Vars(r)
+		own, ok := ownMeters(w, r, claims, tenant)
+		if !ok {
+			return
+		}
 		resp, err := store.QueryMetaData(tenant, vars["ecid"])
 		if err != nil {
 			respondWithError(w, http.StatusBadRequest, err.Error())
 			return
+		}
+		if own != nil {
+			// a member sees the meta data of its own metering points only
+			for k := range resp {
+				if !own[strings.ToUpper(k)] {
+					delete(resp, k)
+				}
+			}
 		}
 
 		respondWithJSON(w, http.StatusOK, &resp)

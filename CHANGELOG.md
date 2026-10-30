@@ -14,6 +14,11 @@ this changelog highlights the changes relevant for overview and operations.
   encoded them URL-safe (`-`/`_`) to match the old server behaviour now gets 403.
 - **Reading of the `tenant` token claim** (energystore #14): security relevant — details not published.
 - **Sample `keycloak.json`** (energystore #15): security relevant — details not published.
+- **Energy routes for member tokens** (energystore 261025-ca1): security relevant — details not published.
+  Operations: new setting `services.backend-api` (the backend's HTTP address, e.g.
+  `http://eegfaktura-backend-service.eegfaktura:8080`); energystore now calls the backend's `GET /participant`
+  (contract: `meters[].meteringPoint`) and needs network access to the backend on port 8080. Without the setting
+  energystore logs a warning at start and members get 503 on per-meter requests; admins are unaffected.
 
 ### Fixed
 - **Gap filling: no phantom quarter hours on the summer-time day, fill rows in their own slot** (energystore #22).
