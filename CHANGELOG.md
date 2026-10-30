@@ -24,6 +24,8 @@ this changelog highlights the changes relevant for overview and operations.
   token (e.g. 401 for a login without any group, which the backend does not accept); admin and owner logins never
   call the backend.
 - **Member access by metering point status** (energystore 261025-ca1): security relevant — details not published.
+  Member logins get 403 for metering points whose participation has no usable start or end date in the backend;
+  admin and owner logins are unchanged.
 
 ### Fixed
 - **Gap filling: no phantom quarter hours on the summer-time day, fill rows in their own slot** (energystore #22).
