@@ -38,6 +38,12 @@ func ownMeters(w http.ResponseWriter, r *http.Request, claims *middleware.Platfo
 	if !claims.IsMember() {
 		return nil, true
 	}
+	if strings.TrimSpace(claims.Email) == "" {
+		// the backend finds the member by the token's email; without one there is nothing to match
+		glog.Warningf("member token without email claim: own metering points not available tenant=%s", tenant)
+		respondWithError(w, http.StatusServiceUnavailable, "metering points of the member not available")
+		return nil, false
+	}
 	all, err := memberMeters.Meters(r.Context(), r.Header.Get("Authorization"), claims.Subject, tenant, claims.Tenants)
 	if err == nil {
 		own, err = inCommunity(all, tenant, mux.Vars(r)["ecid"])
