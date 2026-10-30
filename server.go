@@ -56,6 +56,10 @@ func main() {
 
 	glog.V(3).Info("-> Read Config")
 	config.ReadConfig(*configPath)
+	// Ein frisches Volume hat persistence.path noch nicht; ohne das Verzeichnis meldet /readyz 503.
+	if err := ebow.EnsurePersistencePath(); err != nil {
+		glog.Errorf("persistence.path cannot be created, /readyz stays unavailable: %v", err)
+	}
 	quit := captureOsInterrupt()
 
 	ctx, cancel := context.WithCancel(context.Background())

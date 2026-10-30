@@ -41,8 +41,8 @@ func NewRestServer() *mux.Router {
 	r.HandleFunc("/eeg/{ecid}/excel/export/{year}/{month}", middleware.ProtectApp(exportMeteringData())).Methods("POST")
 	r.HandleFunc("/eeg/{ecid}/excel/report/download", middleware.ProtectApp(exportReport())).Methods("POST")
 	// Kubernetes probes, unauthenticated (rest/health.go)
-	r.HandleFunc("/healthz", healthz).Methods("GET")
-	r.HandleFunc("/readyz", readyz).Methods("GET")
+	r.HandleFunc("/healthz", healthz).Methods("GET", "HEAD")
+	r.HandleFunc("/readyz", readyz).Methods("GET", "HEAD")
 
 	r = InitQueryApiRouter(r)
 	return r

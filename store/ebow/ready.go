@@ -10,8 +10,11 @@ import (
 	"github.com/spf13/viper"
 )
 
-// readyTimeout begrenzt die Pruefung des Speicherverzeichnisses (z.B. ein haengendes Volume).
-const readyTimeout = 2 * time.Second
+// Fuer Tests austauschbar: die Pruefung des Verzeichnisses und ihre Frist (z.B. haengendes Volume).
+var (
+	readyProbe   = probeDir
+	readyTimeout = 2 * time.Second
+)
 
 // readyCheck ist eine laufende Pruefung; gleichzeitige Aufrufe von Ready teilen ihr Ergebnis.
 type readyCheck struct {
@@ -22,14 +25,22 @@ type readyCheck struct {
 var (
 	readyMu      sync.Mutex
 	readyRunning *readyCheck
-	statPending  chan error // Stat eines frueheren Laufs, der in den Timeout lief und noch haengt
+	probeHanging chan error // Pruefung eines frueheren Laufs, die in die Frist lief und noch nicht fertig ist
 )
 
-// Ready meldet, ob der Speicher Anfragen bedienen kann (GET /readyz): der Pool ist nicht
-// heruntergefahren und persistence.path ist ein Verzeichnis. Es nimmt kein Handle aus dem Pool und
-// oeffnet keine Mandanten-DB -- ein Probe soll den Pool weder belegen noch eine DB anlegen oder
-// sperren. Es laeuft hoechstens eine Pruefung zugleich; wer waehrenddessen fragt, bekommt deren
-// Ergebnis, damit oeffentliche Aufrufe die Last nicht vervielfachen.
+// EnsurePersistencePath legt persistence.path an (beim Start). Auf einem frischen Volume entsteht
+// das Verzeichnis sonst erst mit der ersten Mandanten-DB -- und /readyz meldete bis dahin 503.
+// 0700 wie Badger fuer die DB-Verzeichnisse.
+func EnsurePersistencePath() error {
+	return os.MkdirAll(viper.GetString("persistence.path"), 0o700)
+}
+
+// Ready meldet, ob der Speicher Anfragen bedienen kann (GET /readyz): in persistence.path laesst
+// sich eine Datei schreiben und loeschen (erkennt fehlendes Verzeichnis, schreibgeschuetztes
+// Volume, volle Platte). Es nimmt kein Handle aus dem Pool und oeffnet keine Mandanten-DB -- ein
+// Probe soll den Pool weder belegen noch eine DB anlegen oder sperren. Es laeuft hoechstens eine
+// Pruefung zugleich; wer waehrenddessen fragt, bekommt deren Ergebnis, damit oeffentliche Aufrufe
+// die Last nicht vervielfachen.
 func Ready() error {
 	readyMu.Lock()
 	if c := readyRunning; c != nil {
@@ -50,7 +61,9 @@ func Ready() error {
 	return c.err
 }
 
+// checkReady laeuft nie parallel zu sich selbst (Ready), daher braucht probeHanging keine Sperre.
 func checkReady() error {
+	// Nur nach dem Herunterfahren gesetzt.
 	connectionPool.mu.Lock()
 	closed := connectionPool.closed
 	connectionPool.mu.Unlock()
@@ -58,27 +71,37 @@ func checkReady() error {
 		return errors.New("connection pool closed")
 	}
 
-	// Haengt ein frueheres Stat noch, kein weiteres starten (sonst sammeln sich Goroutinen an).
-	if statPending == nil {
-		statPending = make(chan error, 1)
-		go func(ch chan error, path string) { ch <- statDir(path) }(statPending, viper.GetString("persistence.path"))
+	if probeHanging != nil {
+		select {
+		case <-probeHanging: // spaetes Ergebnis einer abgelaufenen Pruefung: verwerfen, neu pruefen
+			probeHanging = nil
+		default:
+			return errors.New("persistence path check still hanging")
+		}
 	}
+	ch := make(chan error, 1)
+	go func(path string) { ch <- readyProbe(path) }(viper.GetString("persistence.path"))
 	select {
-	case err := <-statPending:
-		statPending = nil
+	case err := <-ch:
 		return err
 	case <-time.After(readyTimeout):
+		probeHanging = ch
 		return errors.New("persistence path check timed out")
 	}
 }
 
-func statDir(path string) error {
-	info, err := os.Stat(path)
+// probeDir schreibt eine kleine Datei in path und loescht sie wieder.
+func probeDir(path string) error {
+	f, err := os.CreateTemp(path, ".readyz-*")
 	if err != nil {
 		return fmt.Errorf("persistence path: %w", err)
 	}
-	if !info.IsDir() {
-		return errors.New("persistence path is not a directory")
+	name := f.Name()
+	_, werr := f.Write([]byte("ok"))
+	cerr := f.Close()
+	rerr := os.Remove(name)
+	if err := errors.Join(werr, cerr, rerr); err != nil {
+		return fmt.Errorf("persistence path: %w", err)
 	}
 	return nil
 }

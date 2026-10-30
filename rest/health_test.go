@@ -14,7 +14,7 @@ import (
 
 // publicRoutes are the only entry points without a token (Kubernetes probes); TestRouteWalkGuard
 // accepts them outside the auth matrix of routes().
-var publicRoutes = []string{"GET /healthz", "GET /readyz"}
+var publicRoutes = []string{"GET /healthz", "HEAD /healthz", "GET /readyz", "HEAD /readyz"}
 
 func probe(t *testing.T, path string) (int, string, string) {
 	t.Helper()
@@ -81,7 +81,15 @@ func TestReadyzClosedPool(t *testing.T) {
 	assert.Equal(t, "unavailable", body)
 }
 
-func TestProbesOnlyGet(t *testing.T) {
+func TestProbesHead(t *testing.T) {
+	testsupport.UseTempPersistence(t)
+	for _, p := range []string{"/healthz", "/readyz"} {
+		rec := apitest.Do(apitest.Router(), apitest.Request{Method: "HEAD", Path: p})
+		assert.Equal(t, 200, rec.Code, p)
+	}
+}
+
+func TestProbesOnlyGetAndHead(t *testing.T) {
 	for _, p := range []string{"/healthz", "/readyz"} {
 		rec := apitest.Do(apitest.Router(), apitest.Request{Method: "POST", Path: p})
 		assert.Equal(t, 405, rec.Code, p)

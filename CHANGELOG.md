@@ -9,12 +9,14 @@ this changelog highlights the changes relevant for overview and operations.
 ## [Unreleased]
 
 ### Added
-- **Health endpoints `GET /healthz` and `GET /readyz`** for Kubernetes probes, on the HTTP port (8080), without a
-  token (the only unauthenticated endpoints). `/healthz` (liveness) always answers 200 `ok` and checks nothing.
-  `/readyz` (readiness) answers 200 `ok` while the Badger store can serve requests — the connection pool is not shut
-  down and `persistence.path` is a directory — otherwise 503 `unavailable`; the reason is logged as a warning, never
-  returned. `/readyz` takes no handle from the connection pool and opens no tenant database; the directory
-  check has a 2 s timeout, and concurrent calls share one running check. Behind the public ingress they are reachable as
+- **Health endpoints `GET /healthz` and `GET /readyz`** (also `HEAD`) for Kubernetes probes, on the HTTP port
+  (8080), without a token (the only unauthenticated endpoints). `/healthz` (liveness) always answers 200 `ok` and
+  checks nothing. `/readyz` (readiness) answers 200 `ok` while a small file can be written to and removed from
+  `persistence.path` (catches a missing directory, a read-only volume and a full disk), otherwise 503 `unavailable`;
+  the reason is logged as a warning, never returned. The check has a 2 s timeout, concurrent calls share one running
+  check, and a hanging check is not started twice. `/readyz` takes no handle from the connection pool and opens no
+  tenant database. At start energystore now creates `persistence.path` if it is missing (mode 0700, as Badger does;
+  an error is logged), so a fresh volume reports ready. Behind the public ingress the endpoints are reachable as
   `/energystore/healthz` and `/energystore/readyz`.
 
 ### Security

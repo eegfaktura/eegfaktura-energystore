@@ -235,5 +235,5 @@ func TestRouteWalkGuard(t *testing.T) {
 	require.NoError(t, err)
 	sort.Strings(unlisted)
 	assert.Empty(t, unlisted, "routes without the auth matrix")
-	assert.Len(t, seen, 19, "16 REST routes, /query (two GraphQL fields) and the two health probes")
+	assert.Len(t, seen, 21, "16 REST routes, /query (two GraphQL fields) and the two health probes (GET, HEAD)")
 }
