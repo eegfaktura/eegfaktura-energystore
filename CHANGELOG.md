@@ -33,8 +33,10 @@ this changelog highlights the changes relevant for overview and operations.
 - **The glog flags no longer set anything.** `-v`, `-vmodule`, `-logtostderr`, `-stderrthreshold` and the other
   glog flags are still accepted (the deployment passes them), `-v`/`-vmodule` with a warning at start. The former
   `V(1..3)` lines are now `debug`, `V(4)` and above `trace`. **Operations:** prod runs with `-v=3` today, so the
-  `V(3)` lines (start-up steps, import counts, among them the row-id conversion error of 261008-ca1) disappear at
-  the default `info`; set `LOG_LEVEL=debug` to keep them.
+  `V(3)` diagnostics (start-up steps, import counts, timings) disappear at the default `info`; set `LOG_LEVEL=debug`
+  to keep them. The former `V(3)` lines that report a failure are now `warn` and stay visible: the row-id
+  conversion error of the energy calculation (261008-ca1) and the skipped Excel import rows (these now name the
+  column count and the first cell instead of the whole row).
 - **Access line per HTTP request** (`event.action=http.access`, info), written after the token check of the REST
   routes, `/query` (GraphQL) and the Basic-auth `/query/*` API: `http.request.method`, `http.route` (the route
   template, no ids; missing for unmatched paths), `http.response.status_code`, `event.duration` (ns),
