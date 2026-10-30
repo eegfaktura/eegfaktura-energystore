@@ -17,6 +17,7 @@ import (
 var ErrMetaRecord = errors.New("meta record cpmeta/0")
 
 func StoreEnergyV2(db *ebow.BowStorage, meteringPoint string, data *model.MqttEnergy) error {
+	defer db.LockWrites()() // cpmeta/0 and the rows are read, changed and written back (#33)
 
 	defaultDirection := utils.ExamineDirection(data.Data)
 

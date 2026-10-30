@@ -94,3 +94,15 @@ func TestStringToTimeFallsBackOnGarbage(t *testing.T) {
 	assert.Equal(t, fallback, StringToTime("", fallback))
 	assert.Equal(t, fallback, StringToTime("30.12.2023", fallback))
 }
+
+// Row ids are local wall time read in UTC; only the hour skipped when summer time starts does not exist
+// in time.Local (known-errors #22). The doubled autumn hour exists.
+func TestWallTimeExists(t *testing.T) {
+	assert.True(t, WallTimeExists(time.Date(2026, 3, 29, 1, 45, 0, 0, time.UTC)))
+	for _, m := range []int{0, 15, 30, 45} {
+		assert.False(t, WallTimeExists(time.Date(2026, 3, 29, 2, m, 0, 0, time.UTC)), "02:%.2d", m)
+	}
+	assert.True(t, WallTimeExists(time.Date(2026, 3, 29, 3, 0, 0, 0, time.UTC)))
+	assert.True(t, WallTimeExists(time.Date(2026, 10, 25, 2, 30, 0, 0, time.UTC)))
+	assert.True(t, WallTimeExists(time.Date(2026, 6, 1, 10, 0, 0, 0, time.UTC)))
+}

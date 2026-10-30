@@ -28,8 +28,13 @@ func ProtectApi(handler JWTHandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		uDec, _ := base64.URLEncoding.DecodeString(basicAuth)
-		creds := strings.Split(string(uDec), ":")
+		uDec, err := base64.StdEncoding.DecodeString(basicAuth)
+		if err != nil {
+			glog.Info("Authorization: Basic credentials are not valid base64")
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		creds := strings.SplitN(string(uDec), ":", 2)
 
 		if len(creds) < 2 {
 			glog.Info("No User:Password in request!")

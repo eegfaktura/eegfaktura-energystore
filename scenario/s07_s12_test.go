@@ -76,7 +76,6 @@ func reportData(e interface{}) []*store.ReportData {
 // S8 — an export that names a metering point without stored data must not panic
 // (known-errors #24, F9): an error or an empty column.
 func TestS08_ExportForAMeterWithoutData(t *testing.T) {
-	t.Skip("known-errors #24")
 	community(t)
 	importMQTT(t, consumerMsg(june1, 96, "L1"))
 	cps := &excel.ExportParticipantEnergy{Start: june1.UnixMilli(), End: june1.UnixMilli(), CommunityId: ecId,

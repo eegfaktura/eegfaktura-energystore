@@ -66,7 +66,6 @@ func TestDispatcherCloseRightAfterStart(t *testing.T) {
 // the same time must give them different SourceIdx and keep both. Today one meter is lost from
 // cpmeta/0 in most runs (read-modify-write without a lock).
 func TestConcurrentNewMeteringPoints(t *testing.T) {
-	t.Skip("known-errors #33")
 	testsupport.UseTempPersistence(t)
 	meters := []string{"AT0030000000000000000000000000011", "AT0030000000000000000000000000012"}
 	var wg sync.WaitGroup
@@ -101,7 +100,6 @@ func TestConcurrentNewMeteringPoints(t *testing.T) {
 // the same day at the same time: A outside the range and every value of B survive. Today the delete
 // writes back the lines it read before the import: B's new values in the range are lost.
 func TestDeleteDuringImport(t *testing.T) {
-	t.Skip("known-errors #34")
 	testsupport.UseTempPersistence(t)
 	a, b := "AT0030000000000000000000000000021", "AT0030000000000000000000000000022"
 	imp := NewTenantEnergyImporter(m5Tenant, &MQTTStreamer{client: testsupport.NewFakeClient()})

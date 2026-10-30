@@ -64,7 +64,6 @@ func TestGraphQLLastEnergyDate(t *testing.T) {
 // An upload without energy data must be refused; today it imports zero meters and reports success
 // (known-errors #28, F13: "a sheet without the Metercode header imports zero meters as success").
 func TestGraphQLUploadOfAnEmptyWorkbook(t *testing.T) {
-	t.Skip("known-errors #28")
 	seed(t)
 	h := apitest.Router()
 	body, ct := uploadBody(t, tenant)

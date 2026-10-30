@@ -3,6 +3,7 @@ package scenario_test
 import (
 	"strconv"
 	"testing"
+	"time"
 
 	"at.ourproject/energystore/calculation"
 	"at.ourproject/energystore/excel"
@@ -57,6 +58,51 @@ func TestS01_ExportWorkbook(t *testing.T) {
 		testsupport.InDelta(t, prod(i), num(t, data[i][4]), "production row %d", i)
 		testsupport.InDelta(t, surp(i), num(t, data[i][5]), "surplus row %d", i)
 	}
+}
+
+// exportConsumerDay exports one day of the consumer and returns the energy sheet's data rows and the
+// participant (with the quality counters the summary sheet filled in).
+func exportConsumerDay(t *testing.T, day time.Time) ([][]string, excel.ParticipantCp) {
+	t.Helper()
+	cps := &excel.ExportParticipantEnergy{Start: day.UnixMilli(), End: day.UnixMilli(), CommunityId: ecId,
+		Cps: []excel.ParticipantCp{{MeteringPoint: consumer, Direction: model.CONSUMER_DIRECTION,
+			ActiveSince: day.AddDate(0, -1, 0).UnixMilli(), InactiveSince: day.AddDate(1, 0, 0).UnixMilli()}}}
+	b, err := excel.ExportEnergyToExcel(tenant, ecId, day, day, cps)
+	require.NoError(t, err)
+	f, err := excelize.OpenReader(b)
+	require.NoError(t, err)
+	rows, err := f.GetRows("Energiedaten")
+	require.NoError(t, err)
+	return rows[10:], cps.Cps[0]
+}
+
+// S2 (export) — the spring day exports its 92 quarter hours: the 01:45 → 03:00 jump is no gap, no
+// phantom rows for 02:00–02:45 and no L0 in the summary (known-errors #22).
+func TestS02_SpringDayExportWithoutPhantomSlots(t *testing.T) {
+	community(t)
+	day := testsupportSpring()
+	importMQTT(t, consumerMsg(day, 92, "L1"))
+
+	data, p := exportConsumerDay(t, day)
+	require.Len(t, data, 92)
+	for i, ts := range testsupport.QuarterHours(day) {
+		assert.Equal(t, ts.Format("02.01.2006 15:04:05"), data[i][0], "row %d", i)
+	}
+	assert.Equal(t, 0, p.QoVCount[0], "no L0 slots")
+}
+
+// S4 (export) — a missing hour is filled in place in the export: four rows 10:00–10:45 with L0.
+func TestS04_MissingHourExportFilledInPlace(t *testing.T) {
+	community(t)
+	day := time.Date(2026, 6, 1, 0, 0, 0, 0, vienna)
+	importMQTT(t, consumerMsg(day, 40, "L1"), consumerMsg(day.Add(11*time.Hour), 52, "L1"))
+
+	data, p := exportConsumerDay(t, day)
+	require.Len(t, data, 96)
+	for i, ts := range testsupport.QuarterHours(day) {
+		assert.Equal(t, ts.Format("02.01.2006 15:04:05"), data[i][0], "row %d", i)
+	}
+	assert.Equal(t, 4, p.QoVCount[0], "the four fill rows are L0")
 }
 
 // S5 (periods) — quarter, half year and year add up the stored days. The number and the borders of

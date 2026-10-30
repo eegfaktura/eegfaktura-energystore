@@ -100,7 +100,13 @@ func ImportExcelEnergyFileNew(f *excelize.File, sheet string, db ebow.IBowStorag
 						if err != nil {
 							return err
 						}
+						if len(excelCpMeta) == 0 {
+							return fmt.Errorf("no metering point with 'MeteringpointID' and 'Metercode' header found in sheet %s", sheet)
+						}
 						excelHeaderInitialized = true
+					}
+					if err := checkMeterValues(cols, excelCpMeta); err != nil {
+						return err
 					}
 
 					//
@@ -177,6 +183,10 @@ func ImportExcelEnergyFileNew(f *excelize.File, sheet string, db ebow.IBowStorag
 				}
 			}
 		}
+	}
+
+	if !excelHeaderInitialized {
+		return fmt.Errorf("no energy data found in sheet %s", sheet)
 	}
 
 	for _, v := range rowIdVisited {

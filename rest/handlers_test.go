@@ -166,16 +166,15 @@ func TestLastRecordDate(t *testing.T) {
 	assert.JSONEq(t, `{"periodEnd":"01.06.2026 23:45:00"}`, rec.Body.String())
 }
 
-// The monthly export by mail always hands nil participants to the export and panics
-// (known-errors #53); expected: one mail with the workbook to the token's address.
+// The monthly export by mail hands nil participants to the export and panicked (known-errors #53).
+// The route has no participant list to export, so it answers 400 and sends no mail; sending the
+// whole store by mail instead would be a new mail behaviour (no caller uses the route today).
 func TestExcelExportByMail(t *testing.T) {
-	t.Skip("known-errors #53")
 	fakes := seed(t)
 	rec := apitest.Do(apitest.Router(), apitest.Request{Method: "POST", Path: "/eeg/" + ecId + "/excel/export/2026/6", Header: appHeader()})
-	require.Equal(t, 200, rec.Code, rec.Body.String())
-	require.Equal(t, 1, fakes.MailCount())
-	assert.Equal(t, "member@example.org", fakes.Mails[0].Recipient)
-	assert.NotEmpty(t, fakes.Mails[0].Content)
+	require.Equal(t, 400, rec.Code, rec.Body.String())
+	assert.Contains(t, rec.Body.String(), "no metering points given")
+	assert.Equal(t, 0, fakes.MailCount())
 }
 
 func TestExcelReportDownload(t *testing.T) {
@@ -233,10 +232,9 @@ func keys(m map[string]*store.RawDataResult) []string {
 	return k
 }
 
-// Basic credentials are decoded with URLEncoding and split at every ':' (known-errors #39, F24):
-// standard base64 with '+' or '/' and a password containing ':' are refused today.
+// Basic credentials were decoded with URLEncoding and split at every ':' (known-errors #39, F24):
+// standard base64 with '+' or '/' and a password containing ':' must be accepted.
 func TestBasicCredentialsStandardEncoding(t *testing.T) {
-	t.Skip("known-errors #39")
 	seed(t)
 	h := apitest.Router()
 	for _, pass := range []string{"a~~?", "pa??w0rd", "sec:ret?>"} {
@@ -247,6 +245,19 @@ func TestBasicCredentialsStandardEncoding(t *testing.T) {
 			Header: map[string]string{"Authorization": auth, "X-Tenant": tenant}})
 		assert.Equal(t, 200, rec.Code, "password %q", pass)
 	}
+}
+
+// Basic credentials that are not valid standard base64 are refused without a password grant (#39).
+func TestBasicCredentialsInvalidBase64(t *testing.T) {
+	seed(t)
+	h := apitest.Router()
+	before := fakeoidc.Grants()
+	for _, enc := range []string{"!!!", "dXNlcjpwYXNz_-", "dXNlcjpwYXNz"[:5]} {
+		rec := apitest.Do(h, apitest.Request{Method: "POST", Path: "/query/" + ecId + "/metadata",
+			Header: map[string]string{"Authorization": "Basic " + enc, "X-Tenant": tenant}})
+		assert.Equal(t, 403, rec.Code, "%q", enc)
+	}
+	assert.Equal(t, before, fakeoidc.Grants())
 }
 
 // Every /query request makes a password grant at Keycloak, also for repeated credentials

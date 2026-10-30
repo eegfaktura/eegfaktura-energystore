@@ -22,8 +22,32 @@ func TestReturnFloat(t *testing.T) {
 // A cell the import cannot read becomes 0 without an error (known-errors #28, F13). EDA exports
 // with a decimal comma ("1,5") lose the value silently; the expected value is 1.5.
 func TestReturnFloatDecimalComma(t *testing.T) {
-	t.Skip("known-errors #28")
 	assert.Equal(t, 1.5, returnFloat("1,5"))
+}
+
+// A value cell the import cannot read is an error, not 0 (known-errors #28).
+func TestCheckMeterValuesRefusesText(t *testing.T) {
+	meta := map[int]*excelCounterPointMeta{0: {CounterPointMeta: &model.CounterPointMeta{Name: "AT0030000000000000000000000000001"},
+		Idx: 0, IdxG2: 1, IdxG3: -1, IdxG1TF: -1, IdxG2TF: -1, IdxG3TF: -1}}
+	assert.NoError(t, checkMeterValues([]string{"01.06.2026 00:00:00", "1,5", ""}, meta))
+	for _, bad := range []string{"n/a", "1.234,5", "1,2,3"} {
+		assert.Error(t, checkMeterValues([]string{"01.06.2026 00:00:00", "1", bad}, meta), "%q", bad)
+	}
+}
+
+// Surrounding whitespace (also a non-breaking space) is ignored; NaN and infinities are refused (#28).
+func TestParseExcelFloat(t *testing.T) {
+	for in, want := range map[string]float64{" 1,5": 1.5, "1,5 ": 1.5, "1.5 ": 1.5, " 1.5 ": 1.5,
+		"\t2\n": 2, " ": 0, " ": 0, "1,234": 1.234, "-0.5": -0.5, "1e-3": 0.001} {
+		got, err := parseExcelFloat(in)
+		require.NoError(t, err, "%q", in)
+		assert.Equal(t, want, got, "%q", in)
+	}
+	for _, bad := range []string{"NaN", "nan", "Inf", "+Inf", "-Inf", "infinity", "-", "n/a", "#DIV/0!", "#N/A",
+		"#VALUE!", "1.234,5", "1,234.5", "1 234", "1'234", "1,2,3"} {
+		_, err := parseExcelFloat(bad)
+		assert.Error(t, err, "%q", bad)
+	}
 }
 
 func TestReturnMeterValue(t *testing.T) {
@@ -68,7 +92,6 @@ func TestExcelDates(t *testing.T) {
 // A new metering point whose "Energy direction" is missing or unknown is never added to the stored
 // meta and is dereferenced as nil (known-errors #27, F12): the import must refuse it with an error.
 func TestBuildMatrixMetaStructMissingDirection(t *testing.T) {
-	t.Skip("known-errors #27")
 	for _, dir := range []model.MeterDirection{"", "SIDEWAYS"} {
 		t.Run(string(dir), func(t *testing.T) { // one store per subtest: OpenStorageTest locks the tenant
 			db, _ := testsupport.TestDriverStore(t, "te100001", "ecid")

@@ -10,6 +10,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/xuri/excelize/v2"
 	"io"
+	"math"
 	"os"
 	"regexp"
 	"sort"
@@ -452,6 +453,8 @@ func buildMatrixMetaStruct(db ebow.IBowStorage, excelHeader excelHeader) (map[in
 					PeriodStart: kv.begin,
 					PeriodEnd:   kv.end,
 				}
+			default:
+				return nil, nil, fmt.Errorf("'Energy direction' missing or unknown for metering point %s: %q", meterpoint, kv.dir)
 			}
 		}
 		storedMeta := storedCpMeta[kv.key]
@@ -516,15 +519,48 @@ func returnInt(c string) int {
 	return i
 }
 
-func returnFloat(c string) float64 {
+// parseExcelFloat reads a value cell: surrounding whitespace (also a non-breaking space) is ignored, empty
+// is 0, a decimal comma ("1,5") is accepted. NaN and infinities are refused.
+func parseExcelFloat(c string) (float64, error) {
+	c = strings.TrimSpace(c) // unicode.IsSpace: includes U+00A0
 	if len(c) == 0 {
-		return 0
+		return 0, nil
+	}
+	if strings.Contains(c, ",") && !strings.Contains(c, ".") {
+		c = strings.Replace(c, ",", ".", 1)
 	}
 	f, err := strconv.ParseFloat(c, 64)
+	if err != nil {
+		return 0, err
+	}
+	if math.IsNaN(f) || math.IsInf(f, 0) {
+		return 0, fmt.Errorf("not a finite number: %q", c)
+	}
+	return f, nil
+}
+
+func returnFloat(c string) float64 {
+	f, err := parseExcelFloat(c)
 	if err != nil {
 		return 0
 	}
 	return f
+}
+
+// checkMeterValues refuses a data row with a value cell that is not a number; returnMeterValue
+// would read it as 0.
+func checkMeterValues(cols []string, excelCpMeta map[int]*excelCounterPointMeta) error {
+	for _, v := range excelCpMeta {
+		for _, idx := range []int{v.Idx, v.IdxG2, v.IdxG3, v.IdxG1TF, v.IdxG2TF, v.IdxG3TF} {
+			if idx < 0 || len(cols) <= (idx+1) {
+				continue
+			}
+			if _, err := parseExcelFloat(cols[idx+1]); err != nil {
+				return fmt.Errorf("row %s, metering point %s: value %q is not a number", cols[0], v.Name, cols[idx+1])
+			}
+		}
+	}
+	return nil
 }
 
 func returnMeterValue(cols []string, idx int) float64 {

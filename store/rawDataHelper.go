@@ -86,7 +86,9 @@ func PrepareMetaInfoMap(db *ebow.BowStorage, meterpoint string, direction model.
 
 	modified = registerMeteringPoint(meta, info, meterpoint, direction)
 	if modified {
-		_ = db.SetMeta(rawMetaOf(meta))
+		if err := db.SetMeta(rawMetaOf(meta)); err != nil {
+			return nil, nil, err
+		}
 	}
 	return meta, info, nil
 }

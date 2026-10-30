@@ -8,6 +8,65 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Security
+- **Basic authentication of the `/query` API** (energystore #39): security relevant — details not published.
+  Compatibility: clients that send Basic credentials as standard base64 (RFC 7617) are unaffected; a client that
+  encoded them URL-safe (`-`/`_`) to match the old server behaviour now gets 403.
+- **Reading of the `tenant` token claim** (energystore #14): security relevant — details not published.
+- **Sample `keycloak.json`** (energystore #15): security relevant — details not published.
+
+### Fixed
+- **Gap filling: no phantom quarter hours on the summer-time day, fill rows in their own slot** (energystore #22).
+  **This changes values in reports, raw-data queries and Excel exports.** Where the store has no row for a
+  quarter hour, the reports insert an empty row (0 kWh, quality L0). Two errors are fixed:
+  - On the day summer time starts (e.g. 29.03.2026) the clock jumps from 01:45 to 03:00. This jump was taken
+    for a missing hour: reports, raw-data queries and the Excel export showed **four extra quarter hours
+    (02:00–02:45) with 0 kWh and quality L0**, and the summary sheet counted them as L0. They are gone: the day
+    has its 92 quarter hours, and the L0 count of that day drops by four per metering point.
+  - In reports and raw-data queries (not the Excel export) the empty row for a real gap was placed one or two
+    hours **later** than the gap (winter/summer time), on top of a real quarter hour, and the gap itself had no
+    row. It now sits in the missing quarter hour.
+  kWh sums are unchanged (the inserted rows are 0 kWh). What changes: the number of rows, their timestamps, the
+  L0 counts and the quality shown for the hour or day such a row falls into. **No data repair is needed:** the
+  fill rows were never stored — both gap fills (reports/raw-data queries and the Excel export) build them in
+  memory while reading — so the correction applies to already stored data as well. One possible exception, not
+  touched by this change: an Excel file from a grid operator portal that contains rows 02:00–02:45 on the
+  summer-time day would have stored real rows for those times when it was uploaded.
+- **Tests: the export test for a metering point without stored data runs again** (energystore #24): the defect
+  was fixed in 1.8.0; the stale skip of `TestS08_ExportForAMeterWithoutData` is removed.
+- **Excel import: a new metering point with a missing or unknown "Energy direction" is refused with an error**
+  (energystore #27) naming the metering point, instead of a nil-pointer panic that the upload showed as an opaque
+  error. Nothing is stored for such a file.
+- **Excel import: decimal comma and unreadable values** (energystore #28). A value with a decimal comma (`1,5`)
+  is read as 1.5; before, it was stored as 0. Spaces around a value (also a non-breaking space) are ignored
+  (` 1,5`, `1.5 `). Note: `1,234` is read as 1.234 (decimal comma), not as one thousand two hundred thirty-four.
+  An empty or blank cell is still 0. **These cell contents now refuse the upload** with an error naming the row
+  (its timestamp) and the metering point — before, they were stored as 0 without notice: text (`n/a`, `-`, `x`),
+  Excel error values (`#N/A`, `#DIV/0!`, `#VALUE!`), numbers with thousands separators (`1.234,5`, `1,234.5`,
+  `1 234`, `1'234`) or more than one comma (`1,2,3`), and `NaN`/`Inf`/`Infinity` (any sign; these were stored
+  as such before, not as 0). Only the value cells of the recognised metering points are checked. A sheet
+  without energy rows (e.g. an empty workbook) or without the `MeteringpointID`/`Metercode` header is refused
+  with an error instead of reporting success; before, an empty sheet also rewrote the stored metering-point
+  meta without any metering point. Not changed: the quality row is still not read and every imported slot keeps
+  quality 1; negative values are still accepted.
+- **No lost metering points when the MQTT import and an Excel upload write the same community at once**
+  (energystore #33). Both read the metering-point record (`cpmeta/0`) and the rows, change them and write them
+  back; run at the same time, one import's new metering point (or values) could be overwritten by the other.
+  The imports of one store now take turns (a lock per tenant/ecId inside the service); an Excel upload holds it
+  for the whole file, so MQTT imports of that community wait until it is done. During a long upload the
+  community's MQTT messages wait unacknowledged; if the service restarts meanwhile, mosquitto delivers them again
+  and the import is idempotent, so no data is lost. A graceful shutdown waits for a running upload to finish.
+  A failed write of the record is now reported instead of being ignored.
+- **Deleting raw data no longer loses values an MQTT import writes at the same time** (energystore #34). The
+  delete (`/eeg/v2/{ecid}/rawdata/delete`) reads the rows of the range and writes them back with the metering
+  point's slots zeroed; an import of the same community in between was overwritten (values of other metering
+  points in that range lost). A real delete now takes the same per-community lock as the imports (#33); a dry run
+  only reads and does not wait.
+- **`POST /eeg/{ecid}/excel/export/{year}/{month}` answers 400 instead of crashing** (energystore #53). The route
+  passes no participant list to the export, so every call panicked and the client saw a dropped connection; no
+  mail was ever sent. It now answers `400 {"error":"no metering points given for the export"}` and still sends no
+  mail. No caller is known (web and v3 do not use it); the Excel download (`/excel/report/download`) is unchanged.
+
 ## [1.8.1] – 2026-10-28
 
 ### Security
