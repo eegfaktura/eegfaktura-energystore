@@ -18,13 +18,13 @@ var tenants = []string{"TE100001"}
 
 const answer = `[
  {"id":"P1","meters":[
-  {"meteringPoint":"at001","registeredSince":"2025-01-01","participantState":{"activeSince":"2026-02-01","inactiveSince":"2026-03-31"}},
+  {"meteringPoint":"at001","registeredSince":"2025-01-01","participantState":{"activeSince":"2026-06-01","inactiveSince":null}},
   {"meteringPoint":"AT002","registeredSince":"2025-01-01","participantState":{"activeSince":null,"inactiveSince":null}},
   {"meteringPoint":"AT003","registeredSince":"0000-01-01","participantState":{"activeSince":"0000-01-01","inactiveSince":null}},
   {"meteringPoint":"AT004","registeredSince":"2025-01-01","processState":"REJECTED","participantState":{"activeSince":"2026-01-01","inactiveSince":null}},
   {"meteringPoint":"AT005","registeredSince":"2025-01-01"}]},
  {"id":"P2","meters":[
-  {"meteringPoint":"AT001","registeredSince":"2025-01-01","participantState":{"activeSince":"2026-06-01","inactiveSince":null}}]}]`
+  {"meteringPoint":"AT001","registeredSince":"2025-01-01","participantState":{"activeSince":"2026-02-01","inactiveSince":"2026-03-31"}}]}]`
 
 func backend(t *testing.T, status int, body string) (*httptest.Server, *atomic.Int32) {
 	t.Helper()
@@ -59,7 +59,7 @@ func TestMetersAndWindows(t *testing.T) {
 	m, err := New(s.URL+"/").Meters(context.Background(), "Bearer tok", "sub", "TE100001", tenants)
 	require.NoError(t, err)
 	assert.Equal(t, Meters{
-		"AT001": {{From: date("2026-02-01"), Until: date("2026-03-31")}, {From: date("2026-06-01"), Until: openEnd}},
+		"AT001": {{From: date("2026-02-01"), Until: date("2026-03-31")}, {From: date("2026-06-01"), Until: openEnd}}, // sorted by start
 		"AT002": nil, // never activated (activeSince null): no window, registeredSince does not count
 		"AT003": nil, // no valid start date
 		"AT004": nil, // rejected registration
@@ -140,9 +140,11 @@ func TestClampDays(t *testing.T) {
 		{"inside unchanged", utcMidnight, ms("2026-03-31"), utcMidnight, ms("2026-03-31"), true},
 		{"partly before", ms("2026-01-01"), ms("2026-02-15"), ms("2026-02-01"), ms("2026-02-15"), true},
 		{"partly after", ms("2026-03-01"), ms("2026-04-30"), ms("2026-03-01"), ms("2026-03-31"), true},
-		{"open until", ms("2026-02-10"), 0, ms("2026-02-10"), ms("2026-03-31"), true},
+		{"open until overlaps the open window most", ms("2026-02-10"), 0, ms("2026-06-01"), 0, true},
 		{"second window", ms("2026-05-01"), ms("2026-07-01"), ms("2026-06-01"), ms("2026-07-01"), true},
 		{"gap between", ms("2026-04-01"), ms("2026-05-31"), 0, 0, false},
+		{"both, first overlaps more", ms("2026-03-01"), ms("2026-06-10"), ms("2026-03-01"), ms("2026-03-31"), true},
+		{"both, second overlaps more", ms("2026-03-25"), ms("2026-12-31"), ms("2026-06-01"), ms("2026-12-31"), true},
 		{"before all", ms("2025-01-01"), ms("2026-01-31"), 0, 0, false},
 	}
 	for _, c := range cases {
@@ -151,7 +153,12 @@ func TestClampDays(t *testing.T) {
 		assert.Equal(t, c.wantFrom, f, c.name)
 		assert.Equal(t, c.wantTil, u, c.name)
 	}
-	_, _, ok := m.ClampDays("AT009", ms("2026-02-10"), ms("2026-02-11"))
+	tie := Meters{"AT001": {{From: date("2026-01-01"), Until: date("2026-01-10")}, {From: date("2026-01-21"), Until: date("2026-01-30")}}}
+	f, u, ok := tie.ClampDays("AT001", ms("2026-01-06"), ms("2026-01-25"))
+	assert.True(t, ok)
+	assert.Equal(t, [2]int64{ms("2026-01-21"), ms("2026-01-25")}, [2]int64{f, u}, "tie: the latest window")
+
+	_, _, ok = m.ClampDays("AT009", ms("2026-02-10"), ms("2026-02-11"))
 	assert.False(t, ok, "foreign meter")
 	_, _, ok = Meters{"AT003": nil}.ClampDays("AT003", ms("2026-02-10"), ms("2026-02-11"))
 	assert.False(t, ok, "own meter without a window")

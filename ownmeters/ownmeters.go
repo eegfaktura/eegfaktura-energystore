@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -109,6 +110,9 @@ func (r *Resolver) fetchAll(ctx context.Context, authorization string, tenants [
 		if err := r.fetch(ctx, authorization, t, meters); err != nil {
 			return nil, err
 		}
+	}
+	for _, ws := range meters {
+		sort.Slice(ws, func(i, j int) bool { return ws[i].From.Before(ws[j].From) })
 	}
 	return meters, nil
 }

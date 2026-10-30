@@ -12,7 +12,8 @@ type Window struct {
 	From, Until time.Time
 }
 
-// Meters maps a member's metering points (upper case) to the windows of its participations. A meter
+// Meters maps a member's metering points (upper case) to the windows of its participations, sorted by
+// start. A meter
 // without a window (no start date in the backend) is the member's, but no time of it is readable.
 type Meters map[string][]Window
 
@@ -22,27 +23,57 @@ func (m Meters) Owns(meter string) bool {
 	return ok
 }
 
-// ClampDays limits a day-based window (epoch ms; until <= 0 means open) of meter to the first of the
-// member's windows it overlaps; ok is false when it overlaps none.
+// ClampDays limits a day-based window (epoch ms; until <= 0 means open) of meter to the member's window
+// it overlaps most (ties: the latest); ok is false when it overlaps none.
+//
+// Limitation: one request window is cut to one participation. The time between two participations of the
+// same member is never readable, and a request spanning both returns only the larger part.
 func (m Meters) ClampDays(meter string, from, until int64) (int64, int64, bool) {
-	for _, w := range m[strings.ToUpper(meter)] {
-		f, u := from, until
-		if dayOf(f).Before(w.From) {
-			f = w.From.UnixMilli()
-		}
-		if u <= 0 || dayOf(u).After(w.Until) {
-			u = w.Until.UnixMilli()
-		}
-		if !dayOf(f).After(dayOf(u)) {
-			return f, u, true
+	reqFrom, reqUntil := dayOf(from), openEnd
+	if until > 0 {
+		reqUntil = dayOf(until)
+	}
+	best, bestDays := -1, 0
+	windows := m[strings.ToUpper(meter)]
+	for i, w := range windows {
+		days := overlapDays(reqFrom, reqUntil, w)
+		if days > 0 && days >= bestDays { // windows are sorted by start: on a tie the later one wins
+			best, bestDays = i, days
 		}
 	}
-	return 0, 0, false
+	if best < 0 {
+		return 0, 0, false
+	}
+	w := windows[best]
+	f, u := from, until
+	if reqFrom.Before(w.From) {
+		f = w.From.UnixMilli()
+	}
+	if reqUntil.After(w.Until) {
+		u = w.Until.UnixMilli()
+	}
+	return f, u, true
+}
+
+// overlapDays counts the days of [from, until] inside w (both inclusive, local days).
+func overlapDays(from, until time.Time, w Window) int {
+	f, u := from, until
+	if w.From.After(f) {
+		f = w.From
+	}
+	if w.Until.Before(u) {
+		u = w.Until
+	}
+	if f.After(u) {
+		return 0
+	}
+	return int(u.Sub(f).Round(24*time.Hour)/(24*time.Hour)) + 1
 }
 
 // ClampRange limits the time range [start, end] (epoch ms) of a query over several meters to the
-// member's windows: per meter the first window it overlaps, the range is cut to all of them. ok is false
-// when a meter has no overlapping window or nothing is left.
+// member's windows: per meter the first window (sorted by start) it overlaps, the range is cut to all of
+// them. ok is false when a meter has no overlapping window or nothing is left. Same limitation as
+// ClampDays.
 func (m Meters) ClampRange(meters []string, start, end int64) (int64, int64, bool) {
 	s, e := start, end
 	for _, meter := range meters {
