@@ -202,3 +202,18 @@ func TestAccessLogKeepsHijack(t *testing.T) {
 	_, _, err = sw.Hijack()
 	assert.Error(t, err)
 }
+
+// A resolver panic is one JSON line through the module (not a plain stack on stderr); the client
+// gets a generic error.
+func TestGQLRecover(t *testing.T) {
+	out := capture(t)
+	err := GQLRecover(t.Context(), "nil map")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "internal system error")
+	m := decode(t, out.lines()[0])
+	assert.Equal(t, "error", m["log.level"])
+	assert.Equal(t, "graphql.panic", m["event.action"])
+	assert.Equal(t, "string", m["error.type"])
+	assert.Equal(t, "nil map", m["error.message"])
+	assert.Contains(t, m["error.stack_trace"], "GQLRecover")
+}

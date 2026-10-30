@@ -34,6 +34,7 @@ import (
 func Router() *mux.Router {
 	r := rest.NewRestServer()
 	srv := handler.NewDefaultServer(generated.NewExecutableSchema(generated.Config{Resolvers: &graph.Resolver{}}))
+	srv.SetRecoverFunc(logging.GQLRecover)
 	srv.AroundOperations(logging.GQLOperation)
 	r.Handle("/query", middleware.GQLProtect(srv))
 	return r

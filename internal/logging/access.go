@@ -6,15 +6,18 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
 	"regexp"
+	"runtime/debug"
 	"strings"
 	"time"
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/gorilla/mux"
+	"github.com/vektah/gqlparser/v2/gqlerror"
 )
 
 // The access line (logging concept point 6, logging-api-alt stage 2): one line per HTTP request,
@@ -148,6 +151,18 @@ func GQLOperation(ctx context.Context, next graphql.OperationHandler) graphql.Re
 		}
 	}
 	return next(ctx)
+}
+
+// GQLRecover is the gqlgen recover function (handler.Server.SetRecoverFunc): a panic in a
+// resolver is one error line through this module instead of gqlgen's plain-text stack on stderr.
+// The client gets the same generic error as before.
+func GQLRecover(ctx context.Context, err any) error {
+	Log(ctx, 0, slog.LevelError, "GraphQL resolver panicked",
+		slog.String("event.action", "graphql.panic"),
+		slog.String("error.type", fmt.Sprintf("%T", err)),
+		slog.String("error.message", fmt.Sprint(err)),
+		slog.String("error.stack_trace", string(debug.Stack())))
+	return gqlerror.Errorf("internal system error")
 }
 
 // Propagate passes X-Request-Id and, when the request came with a traceparent, a child

@@ -83,6 +83,7 @@ func main() {
 	r := rest.NewRestServer()
 	//r.Use(middleware.GQLMiddleware(viper.GetString("jwt.pubKeyFile")))
 	srv := handler.NewDefaultServer(generated.NewExecutableSchema(generated.Config{Resolvers: &graph.Resolver{}}))
+	srv.SetRecoverFunc(logging.GQLRecover)
 	srv.AroundOperations(logging.GQLOperation)
 	//r.Handle("/", playground.Handler("GraphQL playground", "/query"))
 	r.Handle("/query", middleware.GQLProtect(srv))
