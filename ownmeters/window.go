@@ -24,7 +24,9 @@ func (m Meters) Owns(meter string) bool {
 }
 
 // ClampDays limits a day-based window (epoch ms; until <= 0 means open) of meter to the member's window
-// it overlaps most (ties: the latest); ok is false when it overlaps none.
+// it overlaps most (ties: the latest); ok is false when it overlaps none. An open until stays as given
+// (0) when that window has no end either, so a member's request keeps the shape of an admin's (billing
+// check: 0 = active without end); only an ended window sets it to its last day.
 //
 // Limitation: one request window is cut to one participation. The time between two participations of the
 // same member is never readable, and a request spanning both returns only the larger part.

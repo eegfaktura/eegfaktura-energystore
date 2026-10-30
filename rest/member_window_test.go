@@ -45,6 +45,21 @@ func TestMemberPartlyOutsideWindowIsClamped(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), meter, "the own day is in the clamped range")
 }
 
+// An open end (inactiveSince 0) stays 0 for a member whose participation has no end: the billing check
+// answers the member exactly as an admin.
+func TestMemberBillingCheckOpenEndAsAdmin(t *testing.T) {
+	b := startBackend(t) // active since 01.01.2026, no end
+	h := memberRouter(t, b.URL)
+	start, end := ms(day), ms(day.Add(23*time.Hour+45*time.Minute))
+	body := fmt.Sprintf(`{"start":%d,"end":%d,"cps":[{"meteringPoint":"%s","direction":"CONSUMPTION","activeSince":%d,"inactiveSince":0}]}`,
+		start, end, meter, start)
+	path := "/eeg/v2/" + ecId + "/billing-check"
+	member := send(h, memberAuth, "POST", path, body)
+	admin := send(h, groupToken("/EEG_ADMIN"), "POST", path, body)
+	assert.Equal(t, 200, member.Code, member.Body.String())
+	assert.JSONEq(t, admin.Body.String(), member.Body.String())
+}
+
 func TestMemberNamingNoMeterAsksNoBackend(t *testing.T) {
 	h := memberRouter(t, "") // not configured: any backend lookup would answer 503
 	start, end := ms(day), ms(day.Add(23*time.Hour+45*time.Minute))

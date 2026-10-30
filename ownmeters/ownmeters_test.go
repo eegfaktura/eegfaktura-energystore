@@ -157,6 +157,9 @@ func TestClampDays(t *testing.T) {
 	f, u, ok := tie.ClampDays("AT001", ms("2026-01-06"), ms("2026-01-25"))
 	assert.True(t, ok)
 	assert.Equal(t, [2]int64{ms("2026-01-21"), ms("2026-01-25")}, [2]int64{f, u}, "tie: the latest window")
+	f, u, ok = tie.ClampDays("AT001", ms("2026-01-25"), 0)
+	assert.True(t, ok)
+	assert.Equal(t, [2]int64{ms("2026-01-25"), ms("2026-01-30")}, [2]int64{f, u}, "open until, ended window: its last day")
 
 	_, _, ok = m.ClampDays("AT009", ms("2026-02-10"), ms("2026-02-11"))
 	assert.False(t, ok, "foreign meter")
