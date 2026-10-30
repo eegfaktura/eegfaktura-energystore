@@ -25,6 +25,8 @@ const (
 	maxEntries = 1000
 	timeout    = 5 * time.Second
 	maxBody    = 4 << 20
+	// maxTenants caps the backend calls per lookup (one per tenant of the token; usually 1-2).
+	maxTenants = 10
 )
 
 // ErrNotConfigured: no backend URL is set; member requests must then be refused.
@@ -55,15 +57,18 @@ func New(baseURL string) *Resolver {
 	}
 }
 
-// Meters returns the caller's own metering points. authorization is the caller's Authorization header,
-// forwarded unchanged; subject and tenant key the cache, and parallel misses of one key share one
-// backend call. The result must not be changed. A nil Resolver counts as not configured.
-func (r *Resolver) Meters(ctx context.Context, authorization, subject, tenant string) (Meters, error) {
+// Meters returns the caller's own metering points: the union over every tenant of the token
+// (claimTenants, at most maxTenants), because the backend keys participants by tenant and a GEA
+// community's tenant (GCxxxxxx-00n) differs from the RC number the request names. The caller must keep
+// only the meters of the requested community. authorization is the caller's Authorization header,
+// forwarded unchanged; subject and the requested tenant key the cache, and parallel misses of one key
+// share one lookup. The result must not be changed. A nil Resolver counts as not configured.
+func (r *Resolver) Meters(ctx context.Context, authorization, subject, tenant string, claimTenants []string) (Meters, error) {
 	if r == nil || r.baseURL == "" {
 		return nil, ErrNotConfigured
 	}
 	if subject == "" {
-		return r.fetch(ctx, authorization, tenant)
+		return r.fetchAll(ctx, authorization, claimTenants)
 	}
 	key := subject + "\x00" + strings.ToUpper(tenant)
 	r.mu.Lock()
@@ -75,7 +80,7 @@ func (r *Resolver) Meters(ctx context.Context, authorization, subject, tenant st
 
 	v, err, _ := r.group.Do(key, func() (any, error) {
 		// shared by every caller of the key: not cancelled with the first caller's request
-		meters, err := r.fetch(context.WithoutCancel(ctx), authorization, tenant)
+		meters, err := r.fetchAll(context.WithoutCancel(ctx), authorization, claimTenants)
 		if err == nil {
 			r.store(key, meters)
 		}
@@ -87,10 +92,31 @@ func (r *Resolver) Meters(ctx context.Context, authorization, subject, tenant st
 	return v.(Meters), nil
 }
 
-func (r *Resolver) fetch(ctx context.Context, authorization, tenant string) (Meters, error) {
+// fetchAll asks the backend once per distinct tenant (case-insensitive, at most maxTenants) and unites
+// the answers; any failed call fails the lookup.
+func (r *Resolver) fetchAll(ctx context.Context, authorization string, tenants []string) (Meters, error) {
+	meters := Meters{}
+	seen := map[string]bool{}
+	for _, t := range tenants {
+		t = strings.ToUpper(t)
+		if t == "" || seen[t] {
+			continue
+		}
+		if len(seen) == maxTenants {
+			break
+		}
+		seen[t] = true
+		if err := r.fetch(ctx, authorization, t, meters); err != nil {
+			return nil, err
+		}
+	}
+	return meters, nil
+}
+
+func (r *Resolver) fetch(ctx context.Context, authorization, tenant string, meters Meters) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.baseURL+"/participant", nil)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	req.Header.Set("Authorization", authorization)
 	req.Header.Set("tenant", tenant)
@@ -98,20 +124,19 @@ func (r *Resolver) fetch(ctx context.Context, authorization, tenant string) (Met
 
 	resp, err := r.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("backend participant: %w", err)
+		return fmt.Errorf("backend participant: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("backend participant: status %d", resp.StatusCode)
+		return fmt.Errorf("backend participant: status %d", resp.StatusCode)
 	}
 
 	var participants []struct {
 		Meters []backendMeter `json:"meters"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBody)).Decode(&participants); err != nil {
-		return nil, fmt.Errorf("backend participant: %w", err)
+		return fmt.Errorf("backend participant: %w", err)
 	}
-	meters := Meters{}
 	for _, p := range participants {
 		for _, m := range p.Meters {
 			if m.MeteringPoint == "" {
@@ -121,7 +146,7 @@ func (r *Resolver) fetch(ctx context.Context, authorization, tenant string) (Met
 			meters[id] = append(meters[id], m.windows()...)
 		}
 	}
-	return meters, nil
+	return nil
 }
 
 func (r *Resolver) store(key string, meters Meters) {

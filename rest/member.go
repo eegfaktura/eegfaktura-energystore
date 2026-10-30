@@ -3,10 +3,14 @@ package rest
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"at.ourproject/energystore/middleware"
 	"at.ourproject/energystore/ownmeters"
+	"at.ourproject/energystore/store"
+	"at.ourproject/energystore/store/ebow"
 	"github.com/golang/glog"
+	"github.com/gorilla/mux"
 	"github.com/spf13/viper"
 )
 
@@ -28,13 +32,16 @@ func initMemberMeters() {
 	memberMeters = ownmeters.New(url)
 }
 
-// ownMeters returns the caller's own metering points if the caller is a member, nil otherwise. ok is
-// false when the response is written (503: the backend could not name them).
+// ownMeters returns the caller's own metering points in the requested community if the caller is a
+// member, nil otherwise. ok is false when the response is written (503: the backend could not name them).
 func ownMeters(w http.ResponseWriter, r *http.Request, claims *middleware.PlatformClaims, tenant string) (own ownmeters.Meters, ok bool) {
 	if !claims.IsMember() {
 		return nil, true
 	}
-	own, err := memberMeters.Meters(r.Context(), r.Header.Get("Authorization"), claims.Subject, tenant)
+	all, err := memberMeters.Meters(r.Context(), r.Header.Get("Authorization"), claims.Subject, tenant, claims.Tenants)
+	if err == nil {
+		own, err = inCommunity(all, tenant, mux.Vars(r)["ecid"])
+	}
 	if err != nil {
 		if !errors.Is(err, ownmeters.ErrNotConfigured) {
 			glog.Errorf("own metering points of a member: %v tenant=%s", err, tenant)
@@ -43,6 +50,27 @@ func ownMeters(w http.ResponseWriter, r *http.Request, claims *middleware.Platfo
 		return nil, false
 	}
 	return own, true
+}
+
+// inCommunity keeps the meters that the requested community (tenant and ecid, already checked against
+// the token) has in this store: the backend lookup spans every tenant of the token (GEA), so a meter of
+// another community is never readable here. A community without meta data has no energy to read; its
+// set stays as it is.
+func inCommunity(all ownmeters.Meters, tenant, ecid string) (ownmeters.Meters, error) {
+	meta, err := store.QueryMetaData(tenant, ecid)
+	if errors.Is(err, ebow.ErrNotFound) {
+		return all, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	own := ownmeters.Meters{}
+	for name := range meta {
+		if w, ok := all[strings.ToUpper(name)]; ok {
+			own[strings.ToUpper(name)] = w
+		}
+	}
+	return own, nil
 }
 
 // allowMeters answers 403 (same answer for unknown and foreign meters) or 503 when a member names a

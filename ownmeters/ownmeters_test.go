@@ -14,6 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var tenants = []string{"TE100001"}
+
 const answer = `[
  {"id":"P1","meters":[
   {"meteringPoint":"at001","registeredSince":"2025-01-01","participantState":{"activeSince":"2026-02-01","inactiveSince":"2026-03-31"}},
@@ -44,15 +46,15 @@ func date(s string) time.Time {
 
 func TestNotConfigured(t *testing.T) {
 	var nilResolver *Resolver
-	_, err := nilResolver.Meters(context.Background(), "Bearer tok", "sub", "TE100001")
+	_, err := nilResolver.Meters(context.Background(), "Bearer tok", "sub", "TE100001", tenants)
 	assert.ErrorIs(t, err, ErrNotConfigured)
-	_, err = New("").Meters(context.Background(), "Bearer tok", "sub", "TE100001")
+	_, err = New("").Meters(context.Background(), "Bearer tok", "sub", "TE100001", tenants)
 	assert.ErrorIs(t, err, ErrNotConfigured)
 }
 
 func TestMetersAndWindows(t *testing.T) {
 	s, _ := backend(t, 200, answer)
-	m, err := New(s.URL+"/").Meters(context.Background(), "Bearer tok", "sub", "TE100001")
+	m, err := New(s.URL+"/").Meters(context.Background(), "Bearer tok", "sub", "TE100001", tenants)
 	require.NoError(t, err)
 	assert.Equal(t, Meters{
 		"AT001": {{From: date("2026-02-01"), Until: date("2026-03-31")}, {From: date("2026-06-01"), Until: openEnd}},
@@ -69,11 +71,11 @@ func TestBackendErrors(t *testing.T) {
 		body   string
 	}{{401, ""}, {500, "[]"}, {200, "{not json"}} {
 		s, _ := backend(t, c.status, c.body)
-		_, err := New(s.URL).Meters(context.Background(), "Bearer tok", "sub", "TE100001")
+		_, err := New(s.URL).Meters(context.Background(), "Bearer tok", "sub", "TE100001", tenants)
 		assert.Error(t, err, "%d %s", c.status, c.body)
 	}
 	s, _ := backend(t, 200, "null")
-	m, err := New(s.URL).Meters(context.Background(), "Bearer tok", "sub", "TE100001")
+	m, err := New(s.URL).Meters(context.Background(), "Bearer tok", "sub", "TE100001", tenants)
 	require.NoError(t, err)
 	assert.Empty(t, m, "no participant for the token's email")
 }
@@ -82,16 +84,16 @@ func TestCachePerSubjectAndTenant(t *testing.T) {
 	s, calls := backend(t, 200, answer)
 	r := New(s.URL)
 	for i := 0; i < 3; i++ {
-		_, err := r.Meters(context.Background(), "Bearer tok", "sub", "TE100001")
+		_, err := r.Meters(context.Background(), "Bearer tok", "sub", "TE100001", tenants)
 		require.NoError(t, err)
 	}
 	assert.Equal(t, int32(1), calls.Load())
-	_, _ = r.Meters(context.Background(), "Bearer tok", "sub", "te100001")
+	_, _ = r.Meters(context.Background(), "Bearer tok", "sub", "te100001", tenants)
 	assert.Equal(t, int32(1), calls.Load(), "tenant case does not matter")
-	_, _ = r.Meters(context.Background(), "Bearer tok", "other", "TE100001")
+	_, _ = r.Meters(context.Background(), "Bearer tok", "other", "TE100001", tenants)
 	assert.Equal(t, int32(2), calls.Load(), "another subject")
-	_, _ = r.Meters(context.Background(), "Bearer tok", "", "TE100001")
-	_, _ = r.Meters(context.Background(), "Bearer tok", "", "TE100001")
+	_, _ = r.Meters(context.Background(), "Bearer tok", "", "TE100001", tenants)
+	_, _ = r.Meters(context.Background(), "Bearer tok", "", "TE100001", tenants)
 	assert.Equal(t, int32(4), calls.Load(), "no subject: not cached")
 }
 
@@ -110,7 +112,7 @@ func TestParallelMissesShareOneCall(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := r.Meters(context.Background(), "Bearer tok", "sub", "TE100001")
+			_, err := r.Meters(context.Background(), "Bearer tok", "sub", "TE100001", tenants)
 			assert.NoError(t, err)
 		}()
 	}
@@ -173,4 +175,43 @@ func TestClampRange(t *testing.T) {
 	assert.False(t, ok, "outside")
 	_, _, ok = m.ClampRange([]string{"AT001", "AT002"}, ms("2026-02-01"), endOf("2026-02-10"))
 	assert.False(t, ok, "AT002 not yet the member's")
+}
+
+// GEA: the backend keys participants by tenant; the lookup unites every tenant of the token (distinct,
+// case-insensitive, at most maxTenants) and fails when one call fails.
+func TestEveryTenantOfTheToken(t *testing.T) {
+	var asked []string
+	var mu sync.Mutex
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		asked = append(asked, r.Header.Get("tenant"))
+		mu.Unlock()
+		switch r.Header.Get("tenant") {
+		case "GC123456-001":
+			_, _ = fmt.Fprint(w, `[{"meters":[{"meteringPoint":"AT001","participantState":{"activeSince":"2026-01-01","inactiveSince":null}}]}]`)
+		case "BROKEN":
+			w.WriteHeader(http.StatusUnauthorized)
+		default:
+			_, _ = fmt.Fprint(w, `[]`)
+		}
+	}))
+	t.Cleanup(s.Close)
+
+	m, err := New(s.URL).Meters(context.Background(), "Bearer tok", "sub", "RC123456",
+		[]string{"RC123456", "GC123456-001", "gc123456-001", ""})
+	require.NoError(t, err)
+	assert.True(t, m.Owns("AT001"))
+	assert.Equal(t, []string{"RC123456", "GC123456-001"}, asked)
+
+	_, err = New(s.URL).Meters(context.Background(), "Bearer tok", "sub", "RC123456", []string{"RC123456", "BROKEN"})
+	assert.Error(t, err)
+
+	asked = nil
+	many := make([]string, 15)
+	for i := range many {
+		many[i] = fmt.Sprintf("T%02d", i)
+	}
+	_, err = New(s.URL).Meters(context.Background(), "Bearer tok", "sub", "T00", many)
+	require.NoError(t, err)
+	assert.Len(t, asked, maxTenants)
 }
