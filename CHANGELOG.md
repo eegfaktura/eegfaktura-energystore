@@ -19,6 +19,33 @@ this changelog highlights the changes relevant for overview and operations.
   an error is logged), so a fresh volume reports ready. The public ingress blocks `/energystore/healthz` and
   `/energystore/readyz` (vfeeg-development/eegfaktura-gitops#159); kubelet probes reach the pods directly.
 
+### Changed
+- **Log output is now JSON on stdout** (logging concept W-261008-ca2, ES-5) — this changes what operators,
+  `kubectl logs` and Dynatrace receive. Every line (the former glog calls, the standard `log` package, the MQTT
+  publish error) goes through one module, `internal/logging`: one JSON object per line on **stdout** (glog wrote
+  text to stderr) with the ECS fields `@timestamp` (UTC, ms), `log.level`, `message`, `service.name`
+  (`eegfaktura-energystore`), `service.version`, `log.origin.file.name`/`.line` and, for errors, `error.type`/
+  `error.message`. Only whitelisted fields are written. New environment variables:
+  - `LOG_FORMAT` = `json` (default) or `text` (key=value, for local reading);
+  - `LOG_LEVEL` = `trace`, `debug`, `info` (default), `warn` or `error`; an unknown value stops the start;
+  - `LOG_LEVEL_<PKG>` (optional) for one package, e.g. `LOG_LEVEL_MQTTCLIENT=debug`, `LOG_LEVEL_EBOW=trace`;
+  - `SERVICE_VERSION` — set by the image build (release workflow), default `dev`.
+- **The glog flags no longer set anything.** `-v`, `-vmodule`, `-logtostderr`, `-stderrthreshold` and the other
+  glog flags are still accepted (the deployment passes them), `-v`/`-vmodule` with a warning at start. The former
+  `V(1..3)` lines are now `debug`, `V(4)` and above `trace`. **Operations:** prod runs with `-v=3` today, so the
+  `V(3)` lines (start-up steps, import counts, among them the row-id conversion error of 261008-ca1) disappear at
+  the default `info`; set `LOG_LEVEL=debug` to keep them.
+- **Access line per HTTP request** (`event.action=http.access`, info), written after the token check of the REST
+  routes, `/query` (GraphQL) and the Basic-auth `/query/*` API: `http.request.method`, `http.route` (the route
+  template, no ids; missing for unmatched paths), `http.response.status_code`, `event.duration` (ns),
+  `event.outcome` (`success`, `refused` for 401/403, `failure`), `request.id`, `trace.id`/`span.id` (from a valid W3C
+  `traceparent`), `tenant.id` (the tenant the check accepted), `client.id` (the token's `azp`; for Basic auth the API
+  client id) and `graphql.operation.name`. No user, e-mail, name, IP, user agent, query value or body (DSGVO).
+  `/healthz` and `/readyz` are not logged. `X-Request-Id` is taken when it matches `[A-Za-z0-9._:-]{1,128}`,
+  otherwise a UUIDv4 (32 hex) is generated, and it is returned as a response header; `X-Request-Id` and
+  `traceparent` are passed on to the backend call for the metering points of a member. energystore had no access
+  log before (none with IP or user agent to switch off).
+
 ### Security
 - **Basic authentication of the `/query` API** (energystore #39): security relevant — details not published.
   Compatibility: clients that send Basic credentials as standard base64 (RFC 7617) are unaffected; a client that
@@ -39,6 +66,10 @@ this changelog highlights the changes relevant for overview and operations.
   admin and owner logins are unchanged.
 
 ### Fixed
+- **No personal data or payloads in the log** (logging concept, never-log list): the request body of
+  `POST /query/rawdata` (energystore #38), MQTT message payloads, the energy values when GraphQL marshalling fails,
+  the recipient e-mail address of the mail export and the backend's metering-point list (with addresses) are no
+  longer logged — sizes, counts or the tenant instead.
 - **Gap filling: no phantom quarter hours on the summer-time day, fill rows in their own slot** (energystore #22).
   **This changes values in reports, raw-data queries and Excel exports.** Where the store has no row for a
   quarter hour, the reports insert an empty row (0 kWh, quality L0). Two errors are fixed:
