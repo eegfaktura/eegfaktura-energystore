@@ -165,3 +165,29 @@ func TestPropagate(t *testing.T) {
 	Propagate(t.Context(), h) // outside a request: nothing
 	assert.Empty(t, h)
 }
+
+// The GraphQL websocket transport hijacks the connection; the access wrapper must pass Hijack on.
+func TestAccessLogKeepsHijack(t *testing.T) {
+	capture(t)
+	var hijacked bool
+	h := AccessLog(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hj, ok := w.(http.Hijacker)
+		require.True(t, ok, "statusWriter implements http.Hijacker")
+		conn, _, err := hj.Hijack()
+		require.NoError(t, err)
+		hijacked = true
+		_ = conn.Close()
+	}))
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+	res, err := http.Get(srv.URL + "/x")
+	if err == nil {
+		_ = res.Body.Close()
+	}
+	assert.True(t, hijacked)
+
+	// a writer that cannot hijack reports an error instead of panicking
+	sw := &statusWriter{ResponseWriter: httptest.NewRecorder()}
+	_, _, err = sw.Hijack()
+	assert.Error(t, err)
+}

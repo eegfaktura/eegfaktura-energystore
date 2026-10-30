@@ -1,10 +1,13 @@
 package logging
 
 import (
+	"bufio"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"regexp"
 	"strings"
@@ -169,7 +172,8 @@ func newRequestID() string {
 	return hex.EncodeToString(b[:])
 }
 
-// statusWriter records the status code; Unwrap lets http.ResponseController reach the original.
+// statusWriter records the status code. It keeps Flush and Hijack (the GraphQL websocket transport
+// needs Hijack); Unwrap lets http.ResponseController reach the original.
 type statusWriter struct {
 	http.ResponseWriter
 	status      int
@@ -192,6 +196,13 @@ func (s *statusWriter) Flush() {
 	if f, ok := s.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
+}
+
+func (s *statusWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if h, ok := s.ResponseWriter.(http.Hijacker); ok {
+		return h.Hijack()
+	}
+	return nil, nil, errors.New("hijack not supported")
 }
 
 func (s *statusWriter) Unwrap() http.ResponseWriter { return s.ResponseWriter }
