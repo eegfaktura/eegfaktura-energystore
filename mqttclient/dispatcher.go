@@ -39,7 +39,7 @@ type Subscriber struct {
 func NewSubscriber(ctx context.Context, streamer *MQTTStreamer, topic string, worker Executor) *Subscriber {
 	sub := &Subscriber{}
 	sub.receiver = func(client mqtt.Client, msg mqtt.Message) {
-		glog.V(5).Infof("Receive msg from topic %s - %v", msg.Topic(), string(msg.Payload()))
+		glog.V(5).Infof("Receive msg from topic %s - %d bytes", msg.Topic(), len(msg.Payload()))
 		defer msg.Ack() // auto-ack is off (#19)
 		worker.Execute(msg)
 	}
@@ -162,7 +162,7 @@ func NewTopicDispatcher(ctx context.Context, topic string, streamer *MQTTStreame
 
 	sub := &TenantSubscriber{}
 	sub.receiver = func(client mqtt.Client, msg mqtt.Message) {
-		glog.V(5).Infof("Receive msg from topic %s - %v", msg.Topic(), string(msg.Payload()))
+		glog.V(5).Infof("Receive msg from topic %s - %d bytes", msg.Topic(), len(msg.Payload()))
 		dispatcher.Submit(msg)
 	}
 	streamer.AddRoutes(MqttRoutes{
