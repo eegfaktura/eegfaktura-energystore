@@ -72,6 +72,10 @@ func TestAccessLineThroughTheRouter(t *testing.T) {
 			Header: map[string]string{"Authorization": "Bearer " + token, "tenant": tenant},
 			Body:   fmt.Sprintf(`{"operationName":"Last","query":"query Last { lastEnergyDate(tenant: \"%s\", ecId: \"%s\") }"}`, tenant, ecId)},
 			200, "/query", "at.ourproject.vfeeg.app", "Last"},
+		{"graphql anonymous", "t-gql-anon", apitest.Request{Method: "POST", Path: "/query",
+			Header: map[string]string{"Authorization": "Bearer " + token, "tenant": tenant},
+			Body:   fmt.Sprintf(`{"query":"{ lastEnergyDate(tenant: \"%s\", ecId: \"%s\") }"}`, tenant, ecId)},
+			200, "/query", "at.ourproject.vfeeg.app", ""},
 		{"basic api", "t-api", apitest.Request{Method: "POST", Path: "/query/" + ecId + "/metadata",
 			Header: map[string]string{"Authorization": apitest.Basic(apiUser, apiPass), "X-Tenant": tenant}},
 			200, "/query/{ecid}/metadata", fakeoidc.APIClientID, ""},
@@ -87,6 +91,8 @@ func TestAccessLineThroughTheRouter(t *testing.T) {
 		assert.Equal(t, c.client, m["client.id"], c.name)
 		if c.op != "" {
 			assert.Equal(t, c.op, m["graphql.operation.name"], c.name)
+		} else {
+			assert.NotContains(t, m, "graphql.operation.name", c.name+": unset when anonymous")
 		}
 		for _, s := range []string{"person@example.org", "person.name", apiUser, apiPass, token, ecId} {
 			assert.NotContains(t, line, s, c.name)

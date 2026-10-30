@@ -93,11 +93,14 @@ func TestAccessLineRefusedAndUnmatched(t *testing.T) {
 	require.Len(t, lines, 2)
 	refused := decode(t, lines[0])
 	assert.Equal(t, "refused", refused["event.outcome"])
+	assert.Equal(t, "warn", refused["log.level"], "401/403 at warn, as in the backend")
+	assert.Equal(t, "GET /eeg/{ecid}/thing 403", refused["message"])
 	assert.NotContains(t, refused, "tenant.id", "no tenant before the token check passed")
 	unmatched := decode(t, lines[1])
 	assert.NotContains(t, unmatched, "http.route")
-	assert.Equal(t, "GET - Not Found", unmatched["message"])
+	assert.Equal(t, "GET - 404", unmatched["message"])
 	assert.Equal(t, "failure", unmatched["event.outcome"])
+	assert.Equal(t, "info", unmatched["log.level"])
 	assert.NotContains(t, lines[1], "nowhere")
 }
 

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"regexp"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
 
@@ -84,10 +85,10 @@ func AccessLog(next http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), ctxKey{}, ri)
 		next.ServeHTTP(sw, r.WithContext(ctx))
 
-		outcome := "success"
+		outcome, level := "success", slog.LevelInfo
 		switch {
 		case sw.status == http.StatusUnauthorized || sw.status == http.StatusForbidden:
-			outcome = "refused"
+			outcome, level = "refused", slog.LevelWarn
 		case sw.status >= 400:
 			outcome = "failure"
 		}
@@ -112,7 +113,7 @@ func AccessLog(next http.Handler) http.Handler {
 		if ri.client != "" {
 			attrs = append(attrs, slog.String("client.id", ri.client))
 		}
-		Log(ctx, 0, slog.LevelInfo, r.Method+" "+route+" "+http.StatusText(sw.status), attrs...)
+		Log(ctx, 0, level, r.Method+" "+route+" "+strconv.Itoa(sw.status), attrs...)
 	})
 }
 
@@ -138,16 +139,14 @@ func SetCaller(ctx context.Context, tenant, client string) {
 }
 
 // GQLOperation is a gqlgen operation middleware (AroundOperations) that records the GraphQL
-// operation name; without it every GraphQL call is just "/query".
+// operation name; without it every GraphQL call is just "/query". An anonymous operation leaves
+// it unset (as in the backend).
 func GQLOperation(ctx context.Context, next graphql.OperationHandler) graphql.ResponseHandler {
 	if ri := idsFrom(ctx); ri != nil && graphql.HasOperationContext(ctx) {
 		oc := graphql.GetOperationContext(ctx)
 		ri.operation = oc.OperationName
 		if ri.operation == "" && oc.Operation != nil {
 			ri.operation = oc.Operation.Name
-		}
-		if ri.operation == "" && oc.Operation != nil {
-			ri.operation = string(oc.Operation.Operation) // anonymous: "query" / "mutation"
 		}
 	}
 	return next(ctx)
