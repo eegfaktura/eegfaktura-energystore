@@ -10,11 +10,16 @@ import (
 	"at.ourproject/energystore/model"
 )
 
-// idPattern begrenzt Mandant und ecId auf Buchstaben und Ziffern. Beide fliessen in den
+// idPattern begrenzt den Mandanten auf Buchstaben und Ziffern (ecId: ecIdPattern). Beide fliessen in den
 // Dateipfad basePath/<tenant>/<ecId> ein; ohne Pruefung koennte ein Wert mit "/" oder ".."
 // aus dem vorgesehenen Verzeichnis ausbrechen. Die echten Werte (z.B. "TE100200",
 // "AT00999900000TC100200000000000002") sind rein alphanumerisch und bleiben gueltig.
 var idPattern = regexp.MustCompile(`^[A-Za-z0-9]+$`)
+
+// ecIdPattern also allows single dashes inside an ecId ("AT00300000000GC90001000000000-001"): no EDA message
+// carries one (ECID is [0-9A-Za-z]{1,33}), but a refused ecId means the message's energy is not stored at all
+// (261016-ca1), and a dash cannot leave the directory.
+var ecIdPattern = regexp.MustCompile(`^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$`)
 
 var (
 	connectionPool = NewPool(20)
@@ -109,16 +114,19 @@ var turns = newTurns()
 //	return
 //}
 
+// ErrTenantNotSupported refuses a tenant longer than 8 characters, e.g. a sub-community with a suffix (261008-ca3).
+var ErrTenantNotSupported = errors.New("tenant not supported by the energy store")
+
 func OpenStorage(tenant, ecId string) (*BowStorage, error) {
 	if len(tenant) > 8 {
 		glog.Errorf("tenant %s is too long", tenant)
-		return nil, fmt.Errorf("tenant is too long (%s)", tenant)
+		return nil, ErrTenantNotSupported
 	}
 	if !idPattern.MatchString(tenant) {
 		glog.Errorf("invalid tenant %q", tenant)
 		return nil, fmt.Errorf("invalid tenant")
 	}
-	if !idPattern.MatchString(ecId) {
+	if !ecIdPattern.MatchString(ecId) {
 		glog.Errorf("invalid ecId %q for tenant %s", ecId, tenant)
 		return nil, fmt.Errorf("invalid ecId")
 	}

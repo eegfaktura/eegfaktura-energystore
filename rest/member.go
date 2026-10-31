@@ -48,6 +48,9 @@ func ownMeters(w http.ResponseWriter, r *http.Request, claims *middleware.Platfo
 		own, err = inCommunity(all, tenant, mux.Vars(r)["ecid"])
 	}
 	if err != nil {
+		if refuseTenant(w, err) {
+			return nil, false
+		}
 		if !errors.Is(err, ownmeters.ErrNotConfigured) {
 			glog.Errorf("own metering points of a member: %v tenant=%s", err, tenant)
 		}

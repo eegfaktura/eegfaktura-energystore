@@ -46,6 +46,9 @@ func fetchBillingCheck() middleware.JWTHandlerFunc {
 
 		resp, err := store.QueryBillingCheck(tenant, ecid, &request)
 		if err != nil {
+			if refuseTenant(w, err) {
+				return
+			}
 			glog.Errorf("billing check failed: %v tenant=%s", err, tenant)
 			respondWithError(w, http.StatusInternalServerError, "billing check failed")
 			return

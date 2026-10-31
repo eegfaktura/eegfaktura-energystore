@@ -1,6 +1,7 @@
 package scenario_test
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -144,10 +145,8 @@ func TestS12_IntraDayAndLoadCurveSumToTheDay(t *testing.T) {
 	testsupport.InDelta(t, sum(values(cons, 96)), total, "load curve")
 }
 
-// Hour key h of the intra-day report holds the slots h:00 – h:45 (known-errors #26, F11: today
-// 00:00 – 01:00 lands in hour 23).
+// Hour key h of the intra-day report holds the slots h:00 – h:45 (known-errors #26, F11).
 func TestS12_IntraDayHourKeys(t *testing.T) {
-	t.Skip("known-errors #26")
 	community(t)
 	importMQTT(t, consumerMsg(june1, 96, "L1"))
 	hours, err := store.QueryIntraDayReport(tenant, ecId, june1, june1.Add(23*time.Hour+45*time.Minute))
@@ -155,6 +154,99 @@ func TestS12_IntraDayHourKeys(t *testing.T) {
 	for h := 0; h < 24; h++ {
 		want := cons(4*h) + cons(4*h+1) + cons(4*h+2) + cons(4*h+3)
 		testsupport.InDelta(t, want, hours[h].(*store.ReportData).Consumed, "hour %d", h)
+	}
+}
+
+// The first row of the period lies inside the day (a community's first data): the hours before it stay
+// empty and the rows keep their hour (#26).
+func TestS12_IntraDayFirstRowInsideTheDay(t *testing.T) {
+	community(t)
+	importMQTT(t, consumerMsg(june1.Add(6*time.Hour), 8, "L1"))
+	hours, err := store.QueryIntraDayReport(tenant, ecId, june1, june1.Add(23*time.Hour+45*time.Minute))
+	require.NoError(t, err)
+	for h := 0; h < 24; h++ {
+		var want float64
+		switch h {
+		case 6:
+			want = cons(0) + cons(1) + cons(2) + cons(3)
+		case 7:
+			want = cons(4) + cons(5) + cons(6) + cons(7)
+		}
+		testsupport.InDelta(t, want, hours[h].(*store.ReportData).Consumed, "hour %d", h)
+	}
+}
+
+// The buckets of /raw and the load curve follow the rows over a gap (#26).
+func TestS12_BucketsFollowTheRowsOverAGap(t *testing.T) {
+	community(t)
+	first := june1.Add(6 * time.Hour)
+	importMQTT(t, consumerMsg(first, 8, "L1"))
+
+	resp, err := store.QueryRawData(tenant, ecId, june1, june1.Add(23*time.Hour+45*time.Minute),
+		[]store.TargetMP{{MeteringPoint: consumer}}, map[string][]string{"f": {"agg(1h)"}})
+	require.NoError(t, err)
+	byHour := map[int64]float64{}
+	for _, d := range resp[consumer].Data {
+		byHour[d.Ts] = d.Value[0]
+	}
+	testsupport.InDelta(t, cons(0)+cons(1)+cons(2)+cons(3), byHour[first.UnixMilli()], "06:00")
+	testsupport.InDelta(t, cons(4)+cons(5)+cons(6)+cons(7), byHour[first.Add(time.Hour).UnixMilli()], "07:00")
+	assert.Zero(t, byHour[first.Add(-time.Hour).UnixMilli()], "05:00")
+
+	june3 := june1.AddDate(0, 0, 2)
+	importMQTT(t, consumerMsg(june3, 96, "L1"))
+	curve, err := store.QueryLoadCurveReport(tenant, ecId, june1.AddDate(0, 0, 1), june1.AddDate(0, 0, 9), nil)
+	require.NoError(t, err)
+	byDay := map[string]float64{}
+	for _, e := range curve {
+		byDay[e.(*store.ReportNamedData).Name] = e.(*store.ReportNamedData).Consumed
+	}
+	testsupport.InDelta(t, sum(values(cons, 96)), byDay[fmt.Sprintf("D:06:03:%.2d", (june3.Weekday()+6)%7)], "3 June")
+}
+
+// The bucket search ends on a step of 0, and a step below a quarter hour is refused: each row would take many steps.
+func TestS12_AggregateStepsThatDoNotAdvance(t *testing.T) {
+	community(t)
+	importMQTT(t, consumerMsg(june1.Add(6*time.Hour), 8, "L1"))
+	query := func(f string) error {
+		_, err := store.QueryRawData(tenant, ecId, june1, june1.Add(23*time.Hour+45*time.Minute),
+			[]store.TargetMP{{MeteringPoint: consumer}}, map[string][]string{"f": {f}})
+		return err
+	}
+	assert.NoError(t, query("agg(0d)"))
+	assert.NoError(t, query("agg(0.25h)"))
+	assert.Error(t, query("agg(0h)"))
+	assert.Error(t, query("agg(0.000001h)"))
+	assert.Error(t, query("agg(-1h)"))
+}
+
+// The DST days: the summed second 02:xx hour stays in hour 2 (#25) and 03:00 in hour 3; in spring hour 2 is
+// empty (#26).
+func TestS12_IntraDayHourKeysOnDSTDays(t *testing.T) {
+	slots := func(from, n int) (s float64) {
+		for i := from; i < from+n; i++ {
+			s += cons(i)
+		}
+		return s
+	}
+	for _, tc := range []struct {
+		name         string
+		day          time.Time
+		n            int
+		hour2, hour3 float64
+	}{
+		{"spring", time.Date(2026, 3, 29, 0, 0, 0, 0, testsupport.Vienna), 92, 0, slots(8, 4)},
+		{"autumn", time.Date(2026, 10, 25, 0, 0, 0, 0, testsupport.Vienna), 100, slots(8, 8), slots(16, 4)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			community(t)
+			importMQTT(t, consumerMsg(tc.day, tc.n, "L1"))
+			hours, err := store.QueryIntraDayReport(tenant, ecId, tc.day, tc.day.AddDate(0, 0, 1).Add(-15*time.Minute))
+			require.NoError(t, err)
+			testsupport.InDelta(t, slots(4, 4), hours[1].(*store.ReportData).Consumed, "hour 1")
+			testsupport.InDelta(t, tc.hour2, hours[2].(*store.ReportData).Consumed, "hour 2")
+			testsupport.InDelta(t, tc.hour3, hours[3].(*store.ReportData).Consumed, "hour 3")
+		})
 	}
 }
 

@@ -26,6 +26,9 @@ type stoppingExecutor struct {
 func (s *stoppingExecutor) Execute(msg mqtt.Message) {}
 func (s *stoppingExecutor) Close()                   {}
 func (s *stoppingExecutor) ExecuteBatch(ctx context.Context, msgs []mqtt.Message) []bool {
+	if ctx.Err() != nil { // like the real ExecuteBatch: a batch started after the stop finishes nothing
+		return make([]bool, len(msgs))
+	}
 	s.entered <- len(msgs)
 	if s.batches.Add(1) == 1 {
 		<-s.release

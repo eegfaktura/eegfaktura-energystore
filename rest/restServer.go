@@ -247,7 +247,10 @@ func lastRecordDate() middleware.JWTHandlerFunc {
 
 		lastRecord, err := services.GetLastEnergyEntry(tenant, ecid)
 		if err != nil {
-			respondWithError(w, http.StatusNotFound, "No entry found")
+			if !refuseTenant(w, err) {
+				respondWithError(w, http.StatusNotFound, "No entry found")
+			}
+			return
 		}
 		respondWithJSON(w, http.StatusOK, map[string]interface{}{"periodEnd": lastRecord})
 	}
@@ -317,7 +320,9 @@ func exportReport() middleware.JWTHandlerFunc {
 		//b, err := excel.CreateExcelFile(tenant, time.UnixMilli(cps.Start), time.UnixMilli(cps.End), &cps)
 		b, err := excel.ExportEnergyToExcel(tenant, ecid, time.UnixMilli(cps.Start), time.UnixMilli(cps.End), &cps)
 		if err != nil {
-			respondWith(w, http.StatusInternalServerError, tenant, err)
+			if !refuseTenant(w, err) {
+				respondWith(w, http.StatusInternalServerError, tenant, err)
+			}
 			return
 		}
 		w.Header().Set("Content-type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

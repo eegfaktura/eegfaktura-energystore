@@ -212,3 +212,19 @@ func TestDispatcherAcksOnlyAfterExecute(t *testing.T) {
 	}
 	require.Eventually(t, func() bool { return msg.Acks() == 1 }, 10*time.Second, 10*time.Millisecond)
 }
+
+// 261016-ca1: an ecId with a dash is stored and confirmed like any other.
+func TestDashedEcIdIsStoredAndConfirmed(t *testing.T) {
+	testsupport.UseTempPersistence(t)
+	const ecId = "AT00300000000GC90001000000000-001"
+	client := testsupport.NewFakeClient()
+	imp := NewTenantEnergyImporter(ackTenant, &MQTTStreamer{client: client})
+	defer imp.Close()
+
+	msg := testsupport.CrMsgMessage(ackTenant, ackCrMsg(ecId, ackMeter).Payload(t))
+	executeOne(imp, msg)
+
+	assert.Equal(t, 1, msg.Acks())
+	assert.Len(t, client.PublishedMessages(), 1)
+	assert.Len(t, ackStored(t, ackTenant, ecId, ackMeter), 96)
+}

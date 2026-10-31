@@ -60,13 +60,13 @@ func TestRawDataReturnsTheStoredDay(t *testing.T) {
 	testsupport.InDelta(t, 0.48, data[95].Value[1])
 }
 
-// Invalid ecIds are refused before they reach the file system (rowdata.go idPattern); the status
+// Invalid ecIds are refused before they reach the file system (rowdata.go ecIdPattern); the status
 // is 400 or 500 depending on the route. A path with ".." never reaches a handler (mux redirects).
 func TestInvalidEcIdCreatesNoDirectory(t *testing.T) {
 	seed(t)
 	h := apitest.Router()
 	before := dirs(t)
-	for _, bad := range []string{"a-b", "a.b", "a%20b"} {
+	for _, bad := range []string{"-ab", "a.b", "a%20b"} {
 		for _, path := range []string{"/eeg/v2/" + bad + "/meta", "/eeg/" + bad + "/lastRecordDate"} {
 			rec := apitest.Do(h, apitest.Request{Method: "GET", Path: path, Header: appHeader()})
 			assert.Contains(t, []int{400, 404, 500}, rec.Code, "%s: %s", path, rec.Body.String())
@@ -279,4 +279,27 @@ func TestUnauthorizedBodyHasNoVerifierDetails(t *testing.T) {
 		Header: map[string]string{"Authorization": "Bearer not-a-jwt", "tenant": tenant}})
 	assert.Equal(t, 401, rec.Code)
 	assert.NotContains(t, rec.Body.String(), "oidc")
+}
+
+// 261008-ca3: a tenant with a suffix gets a clear 4xx on the routes that answered 500.
+func TestTenantWithSuffixIsRefusedWith422(t *testing.T) {
+	seed(t)
+	const sub = "GC100403-001"
+	h := apitest.Router()
+	found := 0
+	for _, r := range routes() {
+		switch r.template {
+		case "/eeg/v2/{ecid}/report", "/eeg/{ecid}/excel/report/download", "/eeg/v2/{ecid}/billing-check", "/eeg/{ecid}/lastRecordDate":
+		default:
+			continue
+		}
+		found++
+		rec := apitest.Do(h, apitest.Request{Method: r.method, Path: r.path, Body: r.body,
+			Header: map[string]string{"Authorization": "Bearer " + apitest.AppToken([]string{sub}), "tenant": sub}})
+		assert.Equal(t, 422, rec.Code, r.template)
+		assert.Contains(t, rec.Body.String(), "tenant not supported by the energy store", r.template)
+		assert.NotContains(t, rec.Body.String(), sub, r.template)
+		assert.Equal(t, 1, strings.Count(rec.Body.String(), "{"), "one answer, %s", r.template)
+	}
+	assert.Equal(t, 4, found)
 }

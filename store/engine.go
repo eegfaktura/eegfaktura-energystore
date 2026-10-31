@@ -167,10 +167,6 @@ func (ct CacheTime) SubTs(timeFunc AddCacheTimeFunc) CacheTime {
 	return timeFunc(-1, ct)
 }
 
-func (ct CacheTime) GetDuration(cacheTs AddCacheTimeFunc) time.Duration {
-	return ct.AddTs(cacheTs).Sub(ct.Time)
-}
-
 type Cache struct {
 	cacheTsFn AddCacheTimeFunc
 	initTsFn  InitCacheTimeFunc
@@ -193,7 +189,12 @@ func (ca *Cache) CacheLine(ctx *EngineContext, ts time.Time, line *model.RawSour
 	}
 
 	ca.cache = line.DeepCopy(ctx.countCons, ctx.countProd)
+	// After a gap in the rows the row lies more than one step ahead: the bucket has to be the row's.
+	// A step of 0 from agg(0d) moves nothing, so it ends here too.
 	ca.cacheTime = ca.cacheTime.AddTs(ca.cacheTsFn)
+	for next := ca.cacheTime.AddTs(ca.cacheTsFn); !ts.Before(next.Time) && next.After(ca.cacheTime.Time); next = next.AddTs(ca.cacheTsFn) {
+		ca.cacheTime = next
+	}
 	return nil
 }
 
