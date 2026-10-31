@@ -144,10 +144,8 @@ func TestS12_IntraDayAndLoadCurveSumToTheDay(t *testing.T) {
 	testsupport.InDelta(t, sum(values(cons, 96)), total, "load curve")
 }
 
-// Hour key h of the intra-day report holds the slots h:00 – h:45 (known-errors #26, F11: today
-// 00:00 – 01:00 lands in hour 23).
+// Hour key h of the intra-day report holds the slots h:00 – h:45 (known-errors #26, F11).
 func TestS12_IntraDayHourKeys(t *testing.T) {
-	t.Skip("known-errors #26")
 	community(t)
 	importMQTT(t, consumerMsg(june1, 96, "L1"))
 	hours, err := store.QueryIntraDayReport(tenant, ecId, june1, june1.Add(23*time.Hour+45*time.Minute))

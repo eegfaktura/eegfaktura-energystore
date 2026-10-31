@@ -167,10 +167,6 @@ func (ct CacheTime) SubTs(timeFunc AddCacheTimeFunc) CacheTime {
 	return timeFunc(-1, ct)
 }
 
-func (ct CacheTime) GetDuration(cacheTs AddCacheTimeFunc) time.Duration {
-	return ct.AddTs(cacheTs).Sub(ct.Time)
-}
-
 type Cache struct {
 	cacheTsFn AddCacheTimeFunc
 	initTsFn  InitCacheTimeFunc

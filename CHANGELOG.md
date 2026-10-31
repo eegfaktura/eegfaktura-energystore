@@ -18,6 +18,10 @@ this changelog highlights the changes relevant for overview and operations.
   refused it; a CR_MSG with such an ecId was acked, logged as ERROR, not stored and not confirmed, and is not
   redelivered. EDA's schema allows no dash in an ECID, so this concerns other feeds (eegfaktura-v3's test feed). Leading,
   trailing and double dashes, dots and slashes stay refused.
+- **`intra-day-report` and the `intraday` part of `combined-report`: every hour now holds its own hour** (known-errors
+  #26). The hours were shifted by one: index 0 held 01:00–01:45, index 12 held 13:00–13:45, index 23 held 00:00–00:45.
+  **Reported values change:** the web's "Tagesverlauf" chart labels the index as the hour, so every bar moves one hour
+  later (the midday peak was shown an hour early). The sum of the day, stored data and all other reports stay the same.
 
 ## [1.9.0] – 2026-10-31
 

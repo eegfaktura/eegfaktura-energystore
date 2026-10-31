@@ -46,7 +46,7 @@ func (id *IntraDay) GetResult() []interface{} {
 }
 
 func (id *IntraDay) addToResult(ctx *EngineContext, t time.Time, line *model.RawSourceLine) error {
-	hour := t.Add(-1 * CacheTime{time.Now()}.GetDuration(id.cacheTsFn)).Hour()
+	hour := t.Hour() // t is the start of the cached hour
 
 	if _, ok := id.Result[hour]; !ok {
 		id.Result[hour] = &ReportData{}
