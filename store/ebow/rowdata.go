@@ -16,6 +16,11 @@ import (
 // "AT00999900000TC100200000000000002") sind rein alphanumerisch und bleiben gueltig.
 var idPattern = regexp.MustCompile(`^[A-Za-z0-9]+$`)
 
+// ecIdPattern also allows single dashes inside an ecId ("AT00300000000GC90001000000000-001"): no EDA message
+// carries one (ECID is [0-9A-Za-z]{1,33}), but a refused ecId means the message's energy is not stored at all
+// (261016-ca1), and a dash cannot leave the directory.
+var ecIdPattern = regexp.MustCompile(`^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$`)
+
 // subCommunitySuffix is the sub-number of a GEA tenant ("GC100403-001"). All tenants of a GEA share the
 // RC number and its stores: eda-xp publishes their CR_MSG under the RC number, and the filestore groups
 // them the same way. A tenant without suffix keeps its directory (261008-ca3).
@@ -124,7 +129,7 @@ func OpenStorage(tenant, ecId string) (*BowStorage, error) {
 		glog.Errorf("invalid tenant %q", tenant)
 		return nil, fmt.Errorf("invalid tenant")
 	}
-	if !idPattern.MatchString(ecId) {
+	if !ecIdPattern.MatchString(ecId) {
 		glog.Errorf("invalid ecId %q for tenant %s", ecId, tenant)
 		return nil, fmt.Errorf("invalid ecId")
 	}

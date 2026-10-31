@@ -60,13 +60,13 @@ func TestRawDataReturnsTheStoredDay(t *testing.T) {
 	testsupport.InDelta(t, 0.48, data[95].Value[1])
 }
 
-// Invalid ecIds are refused before they reach the file system (rowdata.go idPattern); the status
+// Invalid ecIds are refused before they reach the file system (rowdata.go ecIdPattern); the status
 // is 400 or 500 depending on the route. A path with ".." never reaches a handler (mux redirects).
 func TestInvalidEcIdCreatesNoDirectory(t *testing.T) {
 	seed(t)
 	h := apitest.Router()
 	before := dirs(t)
-	for _, bad := range []string{"a-b", "a.b", "a%20b"} {
+	for _, bad := range []string{"-ab", "a.b", "a%20b"} {
 		for _, path := range []string{"/eeg/v2/" + bad + "/meta", "/eeg/" + bad + "/lastRecordDate"} {
 			rec := apitest.Do(h, apitest.Request{Method: "GET", Path: path, Header: appHeader()})
 			assert.Contains(t, []int{400, 404, 500}, rec.Code, "%s: %s", path, rec.Body.String())

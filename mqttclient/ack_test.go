@@ -231,3 +231,35 @@ func TestSubCommunityTopicStoresUnderTheStem(t *testing.T) {
 	assert.DirExists(t, filepath.Join(dir, "gc100403", ackEcId))
 	assert.NoDirExists(t, filepath.Join(dir, "gc100403-001"))
 }
+
+// 261016-ca1: an ecId with a dash is stored and confirmed like any other.
+func TestDashedEcIdIsStoredAndConfirmed(t *testing.T) {
+	testsupport.UseTempPersistence(t)
+	const ecId = "AT00300000000GC90001000000000-001"
+	client := testsupport.NewFakeClient()
+	imp := NewTenantEnergyImporter(ackTenant, &MQTTStreamer{client: client})
+	defer imp.Close()
+
+	msg := testsupport.CrMsgMessage(ackTenant, ackCrMsg(ecId, ackMeter).Payload(t))
+	executeOne(imp, msg)
+
+	assert.Equal(t, 1, msg.Acks())
+	assert.Len(t, client.PublishedMessages(), 1)
+	assert.Len(t, ackStored(t, ackTenant, ecId, ackMeter), 96)
+}
+
+// A refused ecId: the message is acked (so never redelivered), not stored and not confirmed. Only the
+// ERROR lines remain.
+func TestRefusedEcIdIsAckedWithoutReply(t *testing.T) {
+	dir := testsupport.UseTempPersistence(t)
+	client := testsupport.NewFakeClient()
+	imp := NewTenantEnergyImporter(ackTenant, &MQTTStreamer{client: client})
+	defer imp.Close()
+
+	msg := testsupport.CrMsgMessage(ackTenant, ackCrMsg("a.b", ackMeter).Payload(t))
+	executeOne(imp, msg)
+
+	assert.Equal(t, 1, msg.Acks())
+	assert.Empty(t, client.PublishedMessages())
+	assert.NoDirExists(t, filepath.Join(dir, strings.ToLower(ackTenant)))
+}

@@ -14,6 +14,10 @@ this changelog highlights the changes relevant for overview and operations.
   its RC number (`gc100403/<ecId>`), where eda-xp's CR_MSG are stored and where the filestore keeps a GEA's documents.
   Directories and stored data do not change; no new directory comes up. The check of the header tenant against the
   token stays exact, but the store is shared: a token holding only `GC100403-001` reaches every ecId under `gc100403`.
+- **An ecId with dashes inside (`AT00300000000GC90001000000000-001`) is accepted again** (261016-ca1). The path check
+  refused it; a CR_MSG with such an ecId was acked, logged as ERROR, not stored and not confirmed, and is not
+  redelivered. EDA's schema allows no dash in an ECID, so this concerns other feeds (eegfaktura-v3's test feed). Leading,
+  trailing and double dashes, dots and slashes stay refused.
 
 ## [1.9.0] – 2026-10-31
 
