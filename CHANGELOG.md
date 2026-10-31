@@ -321,6 +321,10 @@ this changelog highlights the changes relevant for overview and operations.
 - Dependencies: `github.com/klauspost/compress` 1.18.0 → 1.18.7 (platform#181; Trivy CVE-2026-63209, HIGH),
   an indirect dependency of `badger/v4` (`badger/v4/table` uses its `s2`/`snappy` and `zstd` packages for block
   compression; same storage format within 1.18.x). Replaces Dependabot #76.
+- Dependabot (Docker base images): no more major updates (legacy system, replaced by v3 in the medium term; majors
+  only for security reasons, decision 23.10.2026), patch and minor updates come in one weekly grouped PR, new versions
+  only after a 7-day cooldown. `golang` stays on 1.26 (1.27 is a minor for Dependabot). Security updates for the
+  language ecosystems are unaffected.
 
 ### Build and CI
 - **The image job's gate is wider.** Besides the tests it checks that the committed protobuf stubs match a
