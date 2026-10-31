@@ -162,3 +162,26 @@ func TestDecodeMessage(t *testing.T) {
 		})
 	}
 }
+
+// A zone whose DST gap falls at midnight: the split must still end (security review of #107).
+func TestSplitEnergyByDayEndsOnADSTGapAtMidnight(t *testing.T) {
+	havana, err := time.LoadLocation("America/Havana")
+	if err != nil {
+		t.Skip("no time zone data")
+	}
+	old := time.Local
+	time.Local = havana
+	defer func() { time.Local = old }()
+
+	const slots = 192
+	src := block(time.Date(2026, 3, 7, 12, 0, 0, 0, havana), slots)
+	done := make(chan []model.MqttEnergy, 1)
+	go func() { done <- SplitEnergyByDay(src) }()
+	select {
+	case got := <-done:
+		_, sum, _ := splitSummary(got)
+		assert.InDelta(t, gauss(slots), sum, 1e-6, "every value in exactly one block")
+	case <-time.After(3 * time.Second):
+		t.Fatal("SplitEnergyByDay did not end")
+	}
+}

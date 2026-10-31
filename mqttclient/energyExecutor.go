@@ -106,7 +106,11 @@ func dayStart(ts int64) int64 {
 // nextDayStart is the following local midnight. A day has 23, 24 or 25 hours (known-errors #42).
 func nextDayStart(ts int64) int64 {
 	t := time.UnixMilli(ts).In(time.Local)
-	return time.Date(t.Year(), t.Month(), t.Day()+1, 0, 0, 0, 0, t.Location()).UnixMilli()
+	next := time.Date(t.Year(), t.Month(), t.Day()+1, 0, 0, 0, 0, t.Location())
+	if !next.After(t) { // a DST gap at midnight: 00:00 does not exist that day
+		next = next.Add(time.Hour)
+	}
+	return next.UnixMilli()
 }
 
 func SplitEnergyByDay(src model.MqttEnergy) []model.MqttEnergy {
