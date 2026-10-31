@@ -8,6 +8,8 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+## [1.9.0] – 2026-10-31
+
 ### Added
 - **Health endpoints `GET /healthz` and `GET /readyz`** (also `HEAD`) for Kubernetes probes, on the HTTP port
   (8080), without a token (the only unauthenticated endpoints). `/healthz` (liveness) always answers 200 `ok` and
