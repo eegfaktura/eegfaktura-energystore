@@ -32,10 +32,23 @@ func respondWithError(w http.ResponseWriter, code int, message string) {
 // may carry local file paths in its cause: it is logged, the client gets a generic text (#31). Other
 // errors are passed through as before.
 func respondWithQueryError(w http.ResponseWriter, code int, tenant string, err error) {
+	if refuseTenant(w, err) {
+		return
+	}
 	if errors.Is(err, ebow.ErrReadRecord) {
 		glog.Errorf("%v tenant=%s", err, tenant)
 	}
 	respondWithError(w, code, ebow.ClientMessage(err))
+}
+
+// refuseTenant answers a tenant the store cannot open with 422: the request is fine, nothing failed on our side
+// (261008-ca3).
+func refuseTenant(w http.ResponseWriter, err error) bool {
+	if !errors.Is(err, ebow.ErrTenantNotSupported) {
+		return false
+	}
+	respondWithError(w, http.StatusUnprocessableEntity, err.Error())
+	return true
 }
 
 func respondWithStatus(w http.ResponseWriter, code int) {

@@ -280,3 +280,23 @@ func TestUnauthorizedBodyHasNoVerifierDetails(t *testing.T) {
 	assert.Equal(t, 401, rec.Code)
 	assert.NotContains(t, rec.Body.String(), "oidc")
 }
+
+// 261008-ca3: a tenant with a suffix gets a clear 4xx on the routes that answered 500.
+func TestTenantWithSuffixIsRefusedWith422(t *testing.T) {
+	seed(t)
+	const sub = "GC100403-001"
+	h := apitest.Router()
+	found := 0
+	for _, r := range routes() {
+		if r.template != "/eeg/v2/{ecid}/report" && r.template != "/eeg/{ecid}/excel/report/download" {
+			continue
+		}
+		found++
+		rec := apitest.Do(h, apitest.Request{Method: r.method, Path: r.path, Body: r.body,
+			Header: map[string]string{"Authorization": "Bearer " + apitest.AppToken([]string{sub}), "tenant": sub}})
+		assert.Equal(t, 422, rec.Code, r.template)
+		assert.Contains(t, rec.Body.String(), "tenant not supported by the energy store", r.template)
+		assert.NotContains(t, rec.Body.String(), sub, r.template)
+	}
+	assert.Equal(t, 2, found)
+}

@@ -114,10 +114,13 @@ var turns = newTurns()
 //	return
 //}
 
+// ErrTenantNotSupported refuses a tenant longer than 8 characters, e.g. a sub-community with a suffix (261008-ca3).
+var ErrTenantNotSupported = errors.New("tenant not supported by the energy store")
+
 func OpenStorage(tenant, ecId string) (*BowStorage, error) {
 	if len(tenant) > 8 {
 		glog.Errorf("tenant %s is too long", tenant)
-		return nil, fmt.Errorf("tenant is too long (%s)", tenant)
+		return nil, ErrTenantNotSupported
 	}
 	if !idPattern.MatchString(tenant) {
 		glog.Errorf("invalid tenant %q", tenant)

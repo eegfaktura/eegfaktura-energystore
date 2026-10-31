@@ -317,7 +317,9 @@ func exportReport() middleware.JWTHandlerFunc {
 		//b, err := excel.CreateExcelFile(tenant, time.UnixMilli(cps.Start), time.UnixMilli(cps.End), &cps)
 		b, err := excel.ExportEnergyToExcel(tenant, ecid, time.UnixMilli(cps.Start), time.UnixMilli(cps.End), &cps)
 		if err != nil {
-			respondWith(w, http.StatusInternalServerError, tenant, err)
+			if !refuseTenant(w, err) {
+				respondWith(w, http.StatusInternalServerError, tenant, err)
+			}
 			return
 		}
 		w.Header().Set("Content-type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
