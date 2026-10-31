@@ -106,6 +106,9 @@ func queryMetaData(restrict bool) middleware.JWTHandlerFunc {
 		}
 		resp, err := store.QueryMetaData(tenant, vars["ecid"])
 		if err != nil {
+			if refuseTenant(w, err) {
+				return
+			}
 			respondWithError(w, http.StatusBadRequest, err.Error())
 			return
 		}

@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"at.ourproject/energystore/internal/testsupport/apitest"
 	"at.ourproject/energystore/internal/testsupport/fakeoidc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -43,4 +44,23 @@ func TestMemberOfGeaCommunity(t *testing.T) {
 		rt := perMeter(cp)["raw"]
 		assert.Equal(t, 403, send(h, gea, "POST", rt[0], rt[1]).Code, cp)
 	}
+}
+
+// 261008-ca3: the member path reads the store's meta data first; it refuses like the others, not with a 503.
+func TestMemberOfATenantWithSuffixIsRefusedWith422(t *testing.T) {
+	const sub = "GC123456-001"
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprintf(w, `[{"meters":[{"meteringPoint":"%s","participantState":{"activeSince":"2026-01-01","inactiveSince":null}}]}]`, meter)
+	}))
+	t.Cleanup(backend.Close)
+	token := "Bearer " + fakeoidc.Token(map[string]any{
+		"tenant": []string{sub}, "access_groups": []string{"/EEG_USER"}, "sub": "member",
+		"email": "member@example.org", "realm_access": map[string]any{"roles": []string{}},
+	})
+	rt := perMeter(meter)["raw"]
+
+	rec := apitest.Do(memberRouter(t, backend.URL), apitest.Request{Method: "POST", Path: rt[0], Body: rt[1],
+		Header: map[string]string{"Authorization": token, "tenant": sub}})
+
+	assert.Equal(t, 422, rec.Code, rec.Body.String())
 }

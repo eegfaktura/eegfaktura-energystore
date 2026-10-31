@@ -10,8 +10,9 @@ this changelog highlights the changes relevant for overview and operations.
 
 ### Fixed
 - **A tenant with a suffix (`GC100403-001`) gets a clear refusal** (261008-ca3). Every read of the store answered it with
-  an error, `/report` and the Excel download with a 500. All of them now answer **422** with the text `tenant not
-  supported by the energy store`. Nothing else changes: such a tenant still cannot read its data, and an MQTT message
+  an error: `/report`, the Excel download and the billing check with a 500, a member with a 503, `lastRecordDate` with a
+  404 and a second body. All of them now answer **422** with the text `tenant not supported by the energy store`, also
+  the metadata read and the other reports. Nothing else changes: such a tenant still cannot read its data, and an MQTT message
   for it is still not stored. Callers: eegfaktura-web.
 - **An ecId with dashes inside (`AT00300000000GC90001000000000-001`) is accepted again** (261016-ca1). The path check
   refused it; a CR_MSG with such an ecId was acked, logged as ERROR, not stored and not confirmed, and is not

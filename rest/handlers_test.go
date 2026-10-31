@@ -288,7 +288,9 @@ func TestTenantWithSuffixIsRefusedWith422(t *testing.T) {
 	h := apitest.Router()
 	found := 0
 	for _, r := range routes() {
-		if r.template != "/eeg/v2/{ecid}/report" && r.template != "/eeg/{ecid}/excel/report/download" {
+		switch r.template {
+		case "/eeg/v2/{ecid}/report", "/eeg/{ecid}/excel/report/download", "/eeg/v2/{ecid}/billing-check", "/eeg/{ecid}/lastRecordDate":
+		default:
 			continue
 		}
 		found++
@@ -297,6 +299,7 @@ func TestTenantWithSuffixIsRefusedWith422(t *testing.T) {
 		assert.Equal(t, 422, rec.Code, r.template)
 		assert.Contains(t, rec.Body.String(), "tenant not supported by the energy store", r.template)
 		assert.NotContains(t, rec.Body.String(), sub, r.template)
+		assert.Equal(t, 1, strings.Count(rec.Body.String(), "{"), "one answer, %s", r.template)
 	}
-	assert.Equal(t, 2, found)
+	assert.Equal(t, 4, found)
 }

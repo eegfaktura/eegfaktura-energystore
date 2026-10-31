@@ -247,7 +247,10 @@ func lastRecordDate() middleware.JWTHandlerFunc {
 
 		lastRecord, err := services.GetLastEnergyEntry(tenant, ecid)
 		if err != nil {
-			respondWithError(w, http.StatusNotFound, "No entry found")
+			if !refuseTenant(w, err) {
+				respondWithError(w, http.StatusNotFound, "No entry found")
+			}
+			return
 		}
 		respondWithJSON(w, http.StatusOK, map[string]interface{}{"periodEnd": lastRecord})
 	}
