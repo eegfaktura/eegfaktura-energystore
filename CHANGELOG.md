@@ -8,32 +8,6 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
-### Fixed
-- **A tenant with a suffix (`GC100403-001`) gets a clear refusal** (261008-ca3). Every read of the store answered it with
-  an error: `/report`, the Excel download and the billing check with a 500, a member with a 503, `lastRecordDate` with a
-  404 and a second body. All of them now answer **422** with the text `tenant not supported by the energy store`, also
-  the metadata read and the other reports. Nothing else changes: such a tenant still cannot read its data, and an MQTT message
-  for it is still not stored. Callers: eegfaktura-web.
-- **An ecId with dashes inside (`AT00300000000GC90001000000000-001`) is accepted again** (261016-ca1). The path check
-  refused it; a CR_MSG with such an ecId was acked, logged as ERROR, not stored and not confirmed, and is not
-  redelivered. EDA's schema allows no dash in an ECID, so this concerns other feeds (eegfaktura-v3's test feed). Leading,
-  trailing and double dashes, dots and slashes stay refused.
-- **`intra-day-report` and the `intraday` part of `combined-report`: every hour now holds its own hour** (known-errors
-  #26). The hours were shifted by one: index 0 held 01:00–01:45, index 12 held 13:00–13:45, index 23 held 00:00–00:45. If the
-  first stored row lay inside the period (a community's first day), rows also landed in the night hours before it.
-  **Reported values change:** the web's "Tagesverlauf" chart labels the index as the hour, so every bar moves one hour
-  later (the midday peak was shown an hour early). The sum of the day, stored data and all other reports stay the same.
-- **`/raw` with aggregation and the load curve keep a row in its own bucket after a gap in the rows** (#26). The bucket
-  moved one step per bucket, so after a gap all following values were reported too early, e.g. the values of 3 June under
-  2 June. **Reported values change** only for periods with such a gap; totals stay the same. An hour step below 15 minutes
-  in `agg(...)` (also 0 and negative) is now refused. Callers: eegfaktura-web, eegfaktura-v3 (`/raw`).
-- **MQTT import: a message over a DST switch is cut at local midnight, and no value is lost** (known-errors #42).
-  `SplitEnergyByDay` stepped by a fixed 24 h, so the blocks after the switch started at 01:00 (spring) or 23:00 (autumn).
-  If such a message did not end at midnight, the last slots were dropped silently: `30.03. 00:00–02:00` lost
-  `01:00–02:00` (4 slots), `26.10. 23:00–23:30` lost its 2 slots, and the message was still confirmed. These slots are now
-  stored. Rows and keys do not change; data already stored is not touched, a lost slot comes in when the day is requested
-  again. Messages of quarter-hour values that end at midnight store the same values as before.
-
 ## [1.9.0] – 2026-10-31
 
 ### Added
@@ -139,6 +113,30 @@ this changelog highlights the changes relevant for overview and operations.
 - `github.com/go-jose/go-jose/v4` 4.1.4 → 4.1.6 (indirect, Dependabot).
 
 ### Fixed
+- **A tenant with a suffix (`GC100403-001`) gets a clear refusal** (261008-ca3). Every read of the store answered it with
+  an error: `/report`, the Excel download and the billing check with a 500, a member with a 503, `lastRecordDate` with a
+  404 and a second body. All of them now answer **422** with the text `tenant not supported by the energy store`, also
+  the metadata read and the other reports. Nothing else changes: such a tenant still cannot read its data, and an MQTT message
+  for it is still not stored. Callers: eegfaktura-web.
+- **An ecId with dashes inside (`AT00300000000GC90001000000000-001`) is accepted again** (261016-ca1). The path check
+  refused it; a CR_MSG with such an ecId was acked, logged as ERROR, not stored and not confirmed, and is not
+  redelivered. EDA's schema allows no dash in an ECID, so this concerns other feeds (eegfaktura-v3's test feed). Leading,
+  trailing and double dashes, dots and slashes stay refused.
+- **`intra-day-report` and the `intraday` part of `combined-report`: every hour now holds its own hour** (known-errors
+  #26). The hours were shifted by one: index 0 held 01:00–01:45, index 12 held 13:00–13:45, index 23 held 00:00–00:45. If the
+  first stored row lay inside the period (a community's first day), rows also landed in the night hours before it.
+  **Reported values change:** the web's "Tagesverlauf" chart labels the index as the hour, so every bar moves one hour
+  later (the midday peak was shown an hour early). The sum of the day, stored data and all other reports stay the same.
+- **`/raw` with aggregation and the load curve keep a row in its own bucket after a gap in the rows** (#26). The bucket
+  moved one step per bucket, so after a gap all following values were reported too early, e.g. the values of 3 June under
+  2 June. **Reported values change** only for periods with such a gap; totals stay the same. An hour step below 15 minutes
+  in `agg(...)` (also 0 and negative) is now refused. Callers: eegfaktura-web, eegfaktura-v3 (`/raw`).
+- **MQTT import: a message over a DST switch is cut at local midnight, and no value is lost** (known-errors #42).
+  `SplitEnergyByDay` stepped by a fixed 24 h, so the blocks after the switch started at 01:00 (spring) or 23:00 (autumn).
+  If such a message did not end at midnight, the last slots were dropped silently: `30.03. 00:00–02:00` lost
+  `01:00–02:00` (4 slots), `26.10. 23:00–23:30` lost its 2 slots, and the message was still confirmed. These slots are now
+  stored. Rows and keys do not change; data already stored is not touched, a lost slot comes in when the day is requested
+  again. Messages of quarter-hour values that end at midnight store the same values as before.
 - **`service.version` in the log names the build.** Images built from a branch carried the branch name (`main`), which
   cannot tell builds apart, and a promoted prod/pilot image keeps what was set at build time. It is now the commit, or
   the version without `v` for a `v*` tag build; same as billing.
