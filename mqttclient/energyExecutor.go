@@ -94,8 +94,6 @@ func (tmw *TenantEnergyImporter) Execute(msg mqtt.Message) {
 	tmw.ExecuteBatch(context.Background(), []mqtt.Message{msg})
 }
 
-const daySeconds = int64(24 * 60 * 60 * 1000)
-
 func dayStart(ts int64) int64 {
 	t := time.UnixMilli(ts).In(time.Local)
 	return time.Date(
@@ -105,15 +103,21 @@ func dayStart(ts int64) int64 {
 	).UnixMilli()
 }
 
+// nextDayStart is the following local midnight. A day has 23, 24 or 25 hours (known-errors #42).
+func nextDayStart(ts int64) int64 {
+	t := time.UnixMilli(ts).In(time.Local)
+	return time.Date(t.Year(), t.Month(), t.Day()+1, 0, 0, 0, 0, t.Location()).UnixMilli()
+}
+
 func SplitEnergyByDay(src model.MqttEnergy) []model.MqttEnergy {
 	var result []model.MqttEnergy
 
 	startDay := dayStart(src.Start)
 	endDay := dayStart(src.End)
 
-	for day := startDay; day <= endDay; day += daySeconds {
+	for day := startDay; day <= endDay; day = nextDayStart(day) {
 		dayStartTs := max(day, src.Start)
-		dayEndTs := min(day+daySeconds, src.End)
+		dayEndTs := min(nextDayStart(day), src.End)
 
 		var dayData []model.MqttEnergyData
 

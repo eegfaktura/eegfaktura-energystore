@@ -22,6 +22,12 @@ this changelog highlights the changes relevant for overview and operations.
   #26). The hours were shifted by one: index 0 held 01:00–01:45, index 12 held 13:00–13:45, index 23 held 00:00–00:45.
   **Reported values change:** the web's "Tagesverlauf" chart labels the index as the hour, so every bar moves one hour
   later (the midday peak was shown an hour early). The sum of the day, stored data and all other reports stay the same.
+- **MQTT import: a message over a DST switch is cut at local midnight, and no value is lost** (known-errors #42).
+  `SplitEnergyByDay` stepped by a fixed 24 h, so the blocks after the switch started at 01:00 (spring) or 23:00 (autumn).
+  If such a message did not end at midnight, the last slots were dropped silently: `30.03. 00:00–02:00` lost
+  `01:00–02:00` (4 slots), `26.10. 23:00–23:30` lost its 2 slots, and the message was still confirmed. These slots are now
+  stored. Rows and keys do not change; data already stored is not touched, a lost slot comes in when the day is requested
+  again. Messages that end at midnight store the same values as before.
 
 ## [1.9.0] – 2026-10-31
 
