@@ -16,6 +16,11 @@ import (
 // "AT00999900000TC100200000000000002") sind rein alphanumerisch und bleiben gueltig.
 var idPattern = regexp.MustCompile(`^[A-Za-z0-9]+$`)
 
+// subCommunitySuffix is the sub-number of a GEA tenant ("GC100403-001"). All tenants of a GEA share the
+// RC number and its stores: eda-xp publishes their CR_MSG under the RC number, and the filestore groups
+// them the same way. A tenant without suffix keeps its directory (261008-ca3).
+var subCommunitySuffix = regexp.MustCompile(`-[0-9]{3}$`)
+
 var (
 	connectionPool = NewPool(20)
 )
@@ -110,6 +115,7 @@ var turns = newTurns()
 //}
 
 func OpenStorage(tenant, ecId string) (*BowStorage, error) {
+	tenant = subCommunitySuffix.ReplaceAllString(tenant, "")
 	if len(tenant) > 8 {
 		glog.Errorf("tenant %s is too long", tenant)
 		return nil, fmt.Errorf("tenant is too long (%s)", tenant)

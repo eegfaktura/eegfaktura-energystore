@@ -212,3 +212,22 @@ func TestDispatcherAcksOnlyAfterExecute(t *testing.T) {
 	}
 	require.Eventually(t, func() bool { return msg.Acks() == 1 }, 10*time.Second, 10*time.Millisecond)
 }
+
+// A message for a sub-community tenant lands in the store of its RC number, the reply keeps the tenant
+// of the topic (261008-ca3; eda-xp itself publishes under the RC number).
+func TestSubCommunityTopicStoresUnderTheStem(t *testing.T) {
+	dir := testsupport.UseTempPersistence(t)
+	const sub, stem = "GC100403-001", "GC100403"
+	client := testsupport.NewFakeClient()
+	imp := NewTenantEnergyImporter(sub, &MQTTStreamer{client: client})
+	defer imp.Close()
+
+	msg := testsupport.CrMsgMessage(sub, ackCrMsg(ackEcId, ackMeter).Payload(t))
+	executeOne(imp, msg)
+
+	assert.Equal(t, 1, msg.Acks())
+	require.Len(t, client.PublishedMessages(), 1)
+	assert.Len(t, ackStored(t, stem, ackEcId, ackMeter), 96)
+	assert.DirExists(t, filepath.Join(dir, "gc100403", ackEcId))
+	assert.NoDirExists(t, filepath.Join(dir, "gc100403-001"))
+}
