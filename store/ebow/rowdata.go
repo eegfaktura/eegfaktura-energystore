@@ -10,7 +10,7 @@ import (
 	"at.ourproject/energystore/model"
 )
 
-// idPattern begrenzt Mandant und ecId auf Buchstaben und Ziffern. Beide fliessen in den
+// idPattern begrenzt den Mandanten auf Buchstaben und Ziffern (ecId: ecIdPattern). Beide fliessen in den
 // Dateipfad basePath/<tenant>/<ecId> ein; ohne Pruefung koennte ein Wert mit "/" oder ".."
 // aus dem vorgesehenen Verzeichnis ausbrechen. Die echten Werte (z.B. "TE100200",
 // "AT00999900000TC100200000000000002") sind rein alphanumerisch und bleiben gueltig.
