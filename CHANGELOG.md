@@ -31,7 +31,8 @@ this changelog highlights the changes relevant for overview and operations.
     `LOG_LEVEL`/`LOG_FORMAT` is the default (same rule as the backend);
   - `LOG_LEVEL_<PKG>` (optional) for one package, e.g. `LOG_LEVEL_MQTTCLIENT=debug`, `LOG_LEVEL_EBOW=trace`; an empty
     value is no override;
-  - `SERVICE_VERSION` — set by the image build (release workflow), default `dev`.
+  - `SERVICE_VERSION` — set by the image build (release workflow: the commit, or the version for a `v*` tag build),
+    default `dev`. A promoted prod/pilot image keeps its commit: the release version is the image tag.
   The operator CLI `estore` writes its log lines to **stderr**, so its tables on stdout stay clean, and stops with
   exit code 2 on an invalid `LOG_*` value.
 - **The glog flags no longer set anything.** `-v`, `-vmodule`, `-logtostderr`, `-stderrthreshold` and the other
@@ -107,6 +108,9 @@ this changelog highlights the changes relevant for overview and operations.
   rows were already rounded to 6 decimals and are unaffected.
 
 ### Fixed
+- **`service.version` in the log names the build.** Images built from a branch carried the branch name (`main`), which
+  cannot tell builds apart, and a promoted prod/pilot image keeps what was set at build time. It is now the commit, or
+  the version without `v` for a `v*` tag build; same as billing.
 - **Image build blocked by data races in the logging tests** (since energystore#102): the race detector in the
   image CI reported two races. The handler of the logging module is now swapped atomically, so reconfiguring it
   while other goroutines log is safe (in the service it is only configured at start, before any goroutine runs);
