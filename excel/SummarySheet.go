@@ -460,7 +460,8 @@ func sumMeterResult(s []SummaryMeterResult, elem func(e *SummaryMeterResult) flo
 	for _, e := range s {
 		sum = sum + elem(&e)
 	}
-	//return utils.RoundFloat(sum, 6)
 	//fmt.Printf("Calc: SUM: %v\n", sum)
-	return sum
+	// Rounded like the per-meter cells: excelize writes at most 15 significant digits and cuts off the rest, so
+	// float noise of the sum (21547.977598999998) would otherwise land in the cell as 21547.9775989999.
+	return utils.RoundToFixed(sum, 6)
 }

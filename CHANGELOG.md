@@ -90,6 +90,21 @@ this changelog highlights the changes relevant for overview and operations.
 - **Member access by metering point status** (energystore 261025-ca1): security relevant — details not published.
   Member logins get 403 for metering points whose participation has no usable start or end date in the backend;
   admin and owner logins are unchanged.
+- **excelize pinned to a pseudo-version until v2.12.0**: `github.com/xuri/excelize/v2` v2.11.0 →
+  `v2.11.1-0.20261003002531-6258dcebc4e2` (commit `6258dceb`, published 2026-10-03; the latest release v2.11.0 of
+  2026-07-06 lacks the fixes). Closes Dependabot alerts #21–#35 (GHSA-5h23-36rv-pm65, GHSA-fw94-4wwp-w8pw,
+  GHSA-fq3v-74gv-27gm, GHSA-rxcj-4pj5-74gr, GHSA-8mcq-6wmr-jrjv, GHSA-g27h-8qhm-6pff, GHSA-jrfj-fhj2-jjvm,
+  GHSA-8jjq-8j9w-m2v6, GHSA-c85p-xxjj-2r75, GHSA-wp2g-vpjj-g53r, GHSA-x2q3-8cjh-766f, GHSA-2j4c-ffch-9f23,
+  GHSA-r7x5-4969-99p7, GHSA-jw42-f3rr-4cc3, GHSA-mx22-3794-2vpv): panics, hangs and unbounded allocations on
+  malformed workbooks, reachable through the Excel upload. Indirect modules follow: `richardlehane/mscfb` 1.0.7 →
+  1.0.8 (2026-08-19), `xuri/efp` 0.0.1 → 0.0.2 (2026-09-21); `go.sum` also records `golang.org/x/image` 0.44.0
+  (2026-07-08). Return to a release tag once v2.12.0 is out. The new excelize writes numbers with at most 15
+  significant digits and cuts off the rest. So that the export does not change because of this, the five totals of the
+  summary sheet (B5–B9: Gesamtverbrauch, Anteil, Eigendeckung, Überschuss, Gesamte Erzeugung) are now rounded to
+  6 decimals, like the per-meter cells. The stored value is what Excel displayed before (e.g. `21547.977599`
+  instead of the float noise `21547.977598999998`), and the displayed values are unchanged. The balance in B10 is
+  computed from these rounded totals, matching its formula `ROUND(B9-B8-B7,3)`. The energy sheet and the per-meter
+  rows were already rounded to 6 decimals and are unaffected.
 
 ### Fixed
 - **Image build blocked by data races in the logging tests** (since energystore#102): the race detector in the
