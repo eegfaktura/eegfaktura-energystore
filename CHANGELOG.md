@@ -23,7 +23,7 @@ this changelog highlights the changes relevant for overview and operations.
   If such a message did not end at midnight, the last slots were dropped silently: `30.03. 00:00–02:00` lost
   `01:00–02:00` (4 slots), `26.10. 23:00–23:30` lost its 2 slots, and the message was still confirmed. These slots are now
   stored. Rows and keys do not change; data already stored is not touched, a lost slot comes in when the day is requested
-  again. Messages that end at midnight store the same values as before.
+  again. Messages of quarter-hour values that end at midnight store the same values as before.
 
 ## [1.9.0] – 2026-10-31
 

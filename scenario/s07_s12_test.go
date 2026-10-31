@@ -175,6 +175,36 @@ func TestS12_IntraDayFirstRowInsideTheDay(t *testing.T) {
 	}
 }
 
+// The DST days: the summed second 02:xx hour stays in hour 2 (#25) and 03:00 in hour 3; in spring hour 2 is
+// empty (#26).
+func TestS12_IntraDayHourKeysOnDSTDays(t *testing.T) {
+	slots := func(from, n int) (s float64) {
+		for i := from; i < from+n; i++ {
+			s += cons(i)
+		}
+		return s
+	}
+	for _, tc := range []struct {
+		name         string
+		day          time.Time
+		n            int
+		hour2, hour3 float64
+	}{
+		{"spring", time.Date(2026, 3, 29, 0, 0, 0, 0, testsupport.Vienna), 92, 0, slots(8, 4)},
+		{"autumn", time.Date(2026, 10, 25, 0, 0, 0, 0, testsupport.Vienna), 100, slots(8, 8), slots(16, 4)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			community(t)
+			importMQTT(t, consumerMsg(tc.day, tc.n, "L1"))
+			hours, err := store.QueryIntraDayReport(tenant, ecId, tc.day, tc.day.AddDate(0, 0, 1).Add(-15*time.Minute))
+			require.NoError(t, err)
+			testsupport.InDelta(t, slots(4, 4), hours[1].(*store.ReportData).Consumed, "hour 1")
+			testsupport.InDelta(t, tc.hour2, hours[2].(*store.ReportData).Consumed, "hour 2")
+			testsupport.InDelta(t, tc.hour3, hours[3].(*store.ReportData).Consumed, "hour 3")
+		})
+	}
+}
+
 // F28 (known-errors #43, reproduced in M3): a meta record whose consumer indices have a gap (0 and 2)
 // and a stored line of three consumers; the hourly aggregation of /raw must not panic.
 func TestS12_AggregateWithIndexGap(t *testing.T) {
