@@ -115,9 +115,9 @@ func SplitEnergyByDay(src model.MqttEnergy) []model.MqttEnergy {
 	startDay := dayStart(src.Start)
 	endDay := dayStart(src.End)
 
-	for day := startDay; day <= endDay; day = nextDayStart(day) {
+	for day, next := startDay, nextDayStart(startDay); day <= endDay; day, next = next, nextDayStart(next) {
 		dayStartTs := max(day, src.Start)
-		dayEndTs := min(nextDayStart(day), src.End)
+		dayEndTs := min(next, src.End)
 
 		var dayData []model.MqttEnergyData
 
