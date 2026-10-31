@@ -23,10 +23,10 @@ this changelog highlights the changes relevant for overview and operations.
   first stored row lay inside the period (a community's first day), rows also landed in the night hours before it.
   **Reported values change:** the web's "Tagesverlauf" chart labels the index as the hour, so every bar moves one hour
   later (the midday peak was shown an hour early). The sum of the day, stored data and all other reports stay the same.
-- **`/raw` with aggregation and the load curve put a row into its own bucket when rows are missing before it** (#26). The
-  bucket moved one step per row, so when the first row lay inside the period, or after a gap, all following values were
-  reported too early, e.g. the values of 3 June under 2 June. **Reported values change** only for such periods; totals stay
-  the same. Callers: eegfaktura-web, eegfaktura-v3 (`/raw`).
+- **`/raw` with aggregation and the load curve keep a row in its own bucket after a gap in the rows** (#26). The bucket
+  moved one step per bucket, so after a gap all following values were reported too early, e.g. the values of 3 June under
+  2 June. **Reported values change** only for periods with such a gap; totals stay the same. An hour step below 15 minutes
+  in `agg(...)` (also 0 and negative) is now refused. Callers: eegfaktura-web, eegfaktura-v3 (`/raw`).
 - **MQTT import: a message over a DST switch is cut at local midnight, and no value is lost** (known-errors #42).
   `SplitEnergyByDay` stepped by a fixed 24 h, so the blocks after the switch started at 01:00 (spring) or 23:00 (autumn).
   If such a message did not end at midnight, the last slots were dropped silently: `30.03. 00:00–02:00` lost

@@ -176,8 +176,8 @@ func TestS12_IntraDayFirstRowInsideTheDay(t *testing.T) {
 	}
 }
 
-// The buckets of /raw and the load curve follow the rows when the first row lies inside the period (#26).
-func TestS12_BucketsFollowAFirstRowInsideThePeriod(t *testing.T) {
+// The buckets of /raw and the load curve follow the rows over a gap (#26).
+func TestS12_BucketsFollowTheRowsOverAGap(t *testing.T) {
 	community(t)
 	first := june1.Add(6 * time.Hour)
 	importMQTT(t, consumerMsg(first, 8, "L1"))
@@ -204,13 +204,20 @@ func TestS12_BucketsFollowAFirstRowInsideThePeriod(t *testing.T) {
 	testsupport.InDelta(t, sum(values(cons, 96)), byDay[fmt.Sprintf("D:06:03:%.2d", (june3.Weekday()+6)%7)], "3 June")
 }
 
-// agg(0h) reaches the bucket search: it must end.
-func TestS12_AggregateWithAStepOfZeroEnds(t *testing.T) {
+// The bucket search ends on a step of 0, and a step below a quarter hour is refused: each row would take many steps.
+func TestS12_AggregateStepsThatDoNotAdvance(t *testing.T) {
 	community(t)
 	importMQTT(t, consumerMsg(june1.Add(6*time.Hour), 8, "L1"))
-	_, err := store.QueryRawData(tenant, ecId, june1, june1.Add(23*time.Hour+45*time.Minute),
-		[]store.TargetMP{{MeteringPoint: consumer}}, map[string][]string{"f": {"agg(0h)"}})
-	assert.NoError(t, err)
+	query := func(f string) error {
+		_, err := store.QueryRawData(tenant, ecId, june1, june1.Add(23*time.Hour+45*time.Minute),
+			[]store.TargetMP{{MeteringPoint: consumer}}, map[string][]string{"f": {f}})
+		return err
+	}
+	assert.NoError(t, query("agg(0d)"))
+	assert.NoError(t, query("agg(0.25h)"))
+	assert.Error(t, query("agg(0h)"))
+	assert.Error(t, query("agg(0.000001h)"))
+	assert.Error(t, query("agg(-1h)"))
 }
 
 // The DST days: the summed second 02:xx hour stays in hour 2 (#25) and 03:00 in hour 3; in spring hour 2 is
