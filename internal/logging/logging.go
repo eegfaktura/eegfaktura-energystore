@@ -24,6 +24,7 @@ import (
 	"path"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -39,7 +40,8 @@ const LevelTrace = slog.Level(-8)
 
 var (
 	startErr error
-	cur      *handler
+	// cur is the handler in use; atomic, so Configure may run while other goroutines log.
+	cur atomic.Pointer[handler]
 )
 
 func init() {
@@ -105,8 +107,9 @@ func Configure(env []string, out io.Writer) error {
 	for _, l := range overrides {
 		lowest = min(lowest, l)
 	}
-	cur = &handler{inner: inner, global: global, min: lowest, overrides: overrides}
-	slog.SetDefault(slog.New(cur))
+	h := &handler{inner: inner, global: global, min: lowest, overrides: overrides}
+	cur.Store(h)
+	slog.SetDefault(slog.New(h))
 	if len(errs) > 0 {
 		return fmt.Errorf("logging: %s", strings.Join(errs, "; "))
 	}
@@ -162,15 +165,15 @@ func replaceAttr(groups []string, a slog.Attr) slog.Attr {
 
 // Enabled reports whether a line at level l from the caller pc would be written (pc 0: the
 // global level only).
-func Enabled(pc uintptr, l slog.Level) bool { return cur.levelFor(pc) <= l }
+func Enabled(pc uintptr, l slog.Level) bool { return cur.Load().levelFor(pc) <= l }
 
 // EnabledAnywhere reports whether level l reaches the global level or any package override; it
 // needs no caller pc.
-func EnabledAnywhere(l slog.Level) bool { return l >= cur.min }
+func EnabledAnywhere(l slog.Level) bool { return l >= cur.Load().min }
 
 // HasOverrides reports whether a LOG_LEVEL_<PKG> override is set (only then the caller's package
 // matters).
-func HasOverrides() bool { return len(cur.overrides) > 0 }
+func HasOverrides() bool { return len(cur.Load().overrides) > 0 }
 
 // handler applies LOG_LEVEL and the per-package overrides, and adds log.origin and the request
 // ids carried in the context.
@@ -283,12 +286,13 @@ func packageOf(pc uintptr) string {
 
 // Log writes one line through the module with the caller pc (0: none).
 func Log(ctx context.Context, pc uintptr, l slog.Level, msg string, attrs ...slog.Attr) {
-	if !cur.Enabled(ctx, l) {
+	h := cur.Load()
+	if !h.Enabled(ctx, l) {
 		return
 	}
 	r := slog.NewRecord(time.Now(), l, msg, pc)
 	r.AddAttrs(attrs...)
-	_ = cur.Handle(ctx, r)
+	_ = h.Handle(ctx, r)
 }
 
 // Event writes one line with event.action = action and the caller as log.origin.

@@ -107,6 +107,10 @@ this changelog highlights the changes relevant for overview and operations.
   rows were already rounded to 6 decimals and are unaffected.
 
 ### Fixed
+- **Image build blocked by data races in the logging tests** (since energystore#102): the race detector in the
+  image CI reported two races. The handler of the logging module is now swapped atomically, so reconfiguring it
+  while other goroutines log is safe (in the service it is only configured at start, before any goroutine runs);
+  the Hijack test waits for its server handler over a channel. No change to the log output.
 - **No personal data or payloads in the log** (logging concept, never-log list): the request body of
   `POST /query/rawdata` (energystore #38), MQTT message payloads (261008-ca2), the energy values when GraphQL
   marshalling fails (261030-mm3), the recipient e-mail address of the mail export (261030-mm4) and the backend's

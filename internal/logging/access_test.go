@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -183,14 +184,19 @@ func TestPropagate(t *testing.T) {
 // The GraphQL websocket transport hijacks the connection; the access wrapper must pass Hijack on.
 func TestAccessLogKeepsHijack(t *testing.T) {
 	capture(t)
-	var hijacked bool
+	// the handler runs on the server's goroutine: report back over a channel, no require there
+	hijackErr := make(chan error, 1)
 	h := AccessLog(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hj, ok := w.(http.Hijacker)
-		require.True(t, ok, "statusWriter implements http.Hijacker")
+		if !ok {
+			hijackErr <- errors.New("statusWriter does not implement http.Hijacker")
+			return
+		}
 		conn, _, err := hj.Hijack()
-		require.NoError(t, err)
-		hijacked = true
-		_ = conn.Close()
+		if err == nil {
+			_ = conn.Close()
+		}
+		hijackErr <- err
 	}))
 	srv := httptest.NewServer(h)
 	defer srv.Close()
@@ -198,7 +204,7 @@ func TestAccessLogKeepsHijack(t *testing.T) {
 	if err == nil {
 		_ = res.Body.Close()
 	}
-	assert.True(t, hijacked)
+	assert.NoError(t, <-hijackErr, "the handler hijacked the connection")
 
 	// a writer that cannot hijack reports an error instead of panicking
 	sw := &statusWriter{ResponseWriter: httptest.NewRecorder()}
