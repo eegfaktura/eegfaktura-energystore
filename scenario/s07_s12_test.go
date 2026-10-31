@@ -156,6 +156,25 @@ func TestS12_IntraDayHourKeys(t *testing.T) {
 	}
 }
 
+// The first row of the period lies inside the day (a community's first data): the hours before it stay
+// empty and the rows keep their hour (#26).
+func TestS12_IntraDayFirstRowInsideTheDay(t *testing.T) {
+	community(t)
+	importMQTT(t, consumerMsg(june1.Add(6*time.Hour), 8, "L1"))
+	hours, err := store.QueryIntraDayReport(tenant, ecId, june1, june1.Add(23*time.Hour+45*time.Minute))
+	require.NoError(t, err)
+	for h := 0; h < 24; h++ {
+		var want float64
+		switch h {
+		case 6:
+			want = cons(0) + cons(1) + cons(2) + cons(3)
+		case 7:
+			want = cons(4) + cons(5) + cons(6) + cons(7)
+		}
+		testsupport.InDelta(t, want, hours[h].(*store.ReportData).Consumed, "hour %d", h)
+	}
+}
+
 // F28 (known-errors #43, reproduced in M3): a meta record whose consumer indices have a gap (0 and 2)
 // and a stored line of three consumers; the hourly aggregation of /raw must not panic.
 func TestS12_AggregateWithIndexGap(t *testing.T) {

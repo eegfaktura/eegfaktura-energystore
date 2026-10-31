@@ -9,7 +9,8 @@ import (
 
 type IntraDay struct {
 	Cache
-	Result map[int]*ReportData
+	Result  map[int]*ReportData
+	aligned bool
 }
 
 func NewIntraDayFunction() (EnergyConsumer, error) {
@@ -26,6 +27,12 @@ func (id *IntraDay) HandleLine(ctx *EngineContext, line *model.RawSourceLine) er
 		return err
 	}
 
+	if !id.aligned {
+		// The rows begin at the first stored one, which can lie after the period's start; the cache moves
+		// one hour per row after a finished hour, so it has to start in the hour of the first row.
+		id.aligned = true
+		id.cacheTime = CacheTime{ts.Truncate(time.Hour)}
+	}
 	return id.CacheLine(ctx, ts, line, id.addToResult)
 }
 
