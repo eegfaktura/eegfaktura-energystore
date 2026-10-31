@@ -1,6 +1,7 @@
 package scenario_test
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -173,6 +174,43 @@ func TestS12_IntraDayFirstRowInsideTheDay(t *testing.T) {
 		}
 		testsupport.InDelta(t, want, hours[h].(*store.ReportData).Consumed, "hour %d", h)
 	}
+}
+
+// The buckets of /raw and the load curve follow the rows when the first row lies inside the period (#26).
+func TestS12_BucketsFollowAFirstRowInsideThePeriod(t *testing.T) {
+	community(t)
+	first := june1.Add(6 * time.Hour)
+	importMQTT(t, consumerMsg(first, 8, "L1"))
+
+	resp, err := store.QueryRawData(tenant, ecId, june1, june1.Add(23*time.Hour+45*time.Minute),
+		[]store.TargetMP{{MeteringPoint: consumer}}, map[string][]string{"f": {"agg(1h)"}})
+	require.NoError(t, err)
+	byHour := map[int64]float64{}
+	for _, d := range resp[consumer].Data {
+		byHour[d.Ts] = d.Value[0]
+	}
+	testsupport.InDelta(t, cons(0)+cons(1)+cons(2)+cons(3), byHour[first.UnixMilli()], "06:00")
+	testsupport.InDelta(t, cons(4)+cons(5)+cons(6)+cons(7), byHour[first.Add(time.Hour).UnixMilli()], "07:00")
+	assert.Zero(t, byHour[first.Add(-time.Hour).UnixMilli()], "05:00")
+
+	june3 := june1.AddDate(0, 0, 2)
+	importMQTT(t, consumerMsg(june3, 96, "L1"))
+	curve, err := store.QueryLoadCurveReport(tenant, ecId, june1.AddDate(0, 0, 1), june1.AddDate(0, 0, 9), nil)
+	require.NoError(t, err)
+	byDay := map[string]float64{}
+	for _, e := range curve {
+		byDay[e.(*store.ReportNamedData).Name] = e.(*store.ReportNamedData).Consumed
+	}
+	testsupport.InDelta(t, sum(values(cons, 96)), byDay[fmt.Sprintf("D:06:03:%.2d", (june3.Weekday()+6)%7)], "3 June")
+}
+
+// agg(0h) reaches the bucket search: it must end.
+func TestS12_AggregateWithAStepOfZeroEnds(t *testing.T) {
+	community(t)
+	importMQTT(t, consumerMsg(june1.Add(6*time.Hour), 8, "L1"))
+	_, err := store.QueryRawData(tenant, ecId, june1, june1.Add(23*time.Hour+45*time.Minute),
+		[]store.TargetMP{{MeteringPoint: consumer}}, map[string][]string{"f": {"agg(0h)"}})
+	assert.NoError(t, err)
 }
 
 // The DST days: the summed second 02:xx hour stays in hour 2 (#25) and 03:00 in hour 3; in spring hour 2 is
