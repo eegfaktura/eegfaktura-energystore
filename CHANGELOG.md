@@ -36,7 +36,8 @@ this changelog highlights the changes relevant for overview and operations.
   The operator CLI `estore` writes its log lines to **stderr**, so its tables on stdout stay clean, and stops with
   exit code 2 on an invalid `LOG_*` value.
 - **The glog flags no longer set anything.** `-v`, `-vmodule`, `-logtostderr`, `-stderrthreshold` and the other
-  glog flags are still accepted (the deployment passes them), `-v`/`-vmodule` with a warning at start. The former
+  glog flags are still accepted (the prod deployment still passes them, pilot no longer does), `-v`/`-vmodule` with a
+  warning at start. The former
   `V(1..3)` lines are now `debug`, `V(4)` and above `trace`. **Operations:** prod runs with `-v=3` today, so the
   `V(3)` diagnostics (start-up steps, import counts, timings) disappear at the default `info`; set `LOG_LEVEL=debug`
   to keep them. The former `V(3)` lines that report a failure are now `warn` and stay visible: the row-id
@@ -81,7 +82,8 @@ this changelog highlights the changes relevant for overview and operations.
 - **Sample `keycloak.json`** (energystore #15): security relevant — details not published.
 - **Energy routes for member tokens** (energystore 261025-ca1): security relevant — details not published.
   Operations: new setting `services.backend-api` (the backend's HTTP address, e.g.
-  `http://eegfaktura-backend-service.eegfaktura:8080`); set it before rolling out this version. energystore now
+  `http://eegfaktura-backend-service.eegfaktura:8080`); set it before rolling out this version, and roll out backend
+  1.14.0 first (an older backend refuses tokens with `aud` as a list with 401, which reads as 503 here). energystore now
   calls the backend's `GET /participant` (contract: `meters[].meteringPoint`, `meters[].status`, `meters[].registeredSince`,
   `meters[].participantState.activeSince`/`inactiveSince`) and needs network access to the backend on port 8080.
   Without the setting energystore logs a warning at start. Logins without admin or owner rights get 503 on
@@ -106,6 +108,7 @@ this changelog highlights the changes relevant for overview and operations.
   instead of the float noise `21547.977598999998`), and the displayed values are unchanged. The balance in B10 is
   computed from these rounded totals, matching its formula `ROUND(B9-B8-B7,3)`. The energy sheet and the per-meter
   rows were already rounded to 6 decimals and are unaffected.
+- `github.com/go-jose/go-jose/v4` 4.1.4 → 4.1.6 (indirect, Dependabot).
 
 ### Fixed
 - **`service.version` in the log names the build.** Images built from a branch carried the branch name (`main`), which
