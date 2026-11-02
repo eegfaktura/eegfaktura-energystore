@@ -183,7 +183,7 @@ func ImportExcelEnergyFileNew(ctx context.Context, f *excelize.File, sheet strin
 						cell, _ := excelize.CoordinatesToCellName(1, totalRowCols)
 						s, e := f.GetCellStyle(sheet, cell)
 						if e != nil {
-							glog.ErrorContextf(ctx, "Error get cell format %+v", e)
+							glog.ErrorContextf(ctx, "Error get cell format %v", e)
 						}
 						firstSkippedStyle = s
 					}

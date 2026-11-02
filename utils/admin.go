@@ -38,7 +38,7 @@ func SendMail(tenant, to, subject string, body *bytes.Buffer, fileName *string, 
 	}
 
 	r, err := c.SendExcel(ctx, request)
-	glog.Infof("Response from MAIL-SERVER: %v", r)
+	glog.Infof("Response from MAIL-SERVER: %s", r.GetStatus())
 	if r == nil {
 		return errors.New("error Send Mail")
 	}

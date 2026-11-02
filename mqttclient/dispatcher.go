@@ -60,7 +60,7 @@ func NewDispatcher(ctx context.Context, streamer *MQTTStreamer, worker map[strin
 	quitChan := make(chan struct{})
 	disp := &Dispatcher{quitChan: quitChan}
 	disp.subscriber = make(map[string]*Subscriber, len(worker))
-	glog.Infof("Start Dispatcher with %d worker(s): %+v\n", len(worker), worker)
+	glog.Infof("Start Dispatcher with %d worker(s)\n", len(worker))
 
 	for topic, worker := range worker {
 		glog.Infof("Start Worker %s\n", topic)

@@ -73,9 +73,9 @@ func StoreEnergyV2(db *ebow.BowStorage, meteringPoint string, data *model.MqttEn
 		time.UnixMilli(data.End).Format(time.RFC822))
 
 	// Store updated RawDataStructure
-	glog.V(5).Infof("Update/Override CP %s (%+v) energy values (%d) from %s to %s",
+	glog.V(5).Infof("Update/Override CP %s (%d meter codes) energy values (%d) from %s to %s",
 		meteringPoint,
-		metaMeter,
+		len(metaMeter),
 		len(*resources),
 		time.UnixMilli(data.Start).Format(time.RFC822),
 		time.UnixMilli(data.End).Format(time.RFC822))
@@ -86,7 +86,7 @@ func StoreEnergyV2(db *ebow.BowStorage, meteringPoint string, data *model.MqttEn
 		updated[i] = v
 		i += 1
 
-		glog.V(4).Infof("Update Source Line %+v", v)
+		glog.V(4).Infof("Update Source Line %s", v.Id)
 	}
 
 	sort.Slice(updated, func(i, j int) bool {
@@ -170,7 +170,7 @@ func importEnergyValuesV2(
 				rowIdVisited[id] = true
 			}
 		} else {
-			glog.Errorf("Energie Values %+v different %+v", mc, metaCP)
+			glog.Errorf("Energie Values %s: source %d not in the %d data blocks", mc.Code, mc.SourceInData, len(data.Data))
 		}
 	}
 	return resources, nil

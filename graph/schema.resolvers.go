@@ -24,7 +24,7 @@ func (r *mutationResolver) SingleUpload(ctx context.Context, tenant string, ecID
 	if tenantctx.IsMember(ctx) {
 		return false, tenantctx.ErrMember
 	}
-	glog.Infof("START UPLOAD: %+v %+v", tenant, sheet)
+	glog.Infof("START UPLOAD: %s %s", tenant, sheet)
 	err := excel.ImportFile(ctx, tenant, ecID, file.Filename, sheet, file.File)
 	return err == nil, err
 }

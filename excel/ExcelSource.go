@@ -83,7 +83,7 @@ func OpenReader(r io.Reader, filename string) (*excelize.File, func(), error) {
 	f.Path = filename
 
 	if glog.V(3).Enabled() {
-		glog.Infof("Read Excel File with Sheets %+v", f.GetSheetList())
+		glog.Infof("Read Excel File with Sheets %v", f.GetSheetList())
 	}
 	keepTmpDir = true
 	return f, func() {
@@ -136,7 +136,7 @@ func ImportExcelEnergyFile(f *excelize.File, sheet string, db *ebow.BowStorage) 
 		glog.Error(err)
 		return []int{}, err
 	}
-	glog.Infof("Rows Error: %+v", rows.Error())
+	glog.Infof("Rows Error: %v", rows.Error())
 
 	var rIdx int = 1
 	var rawDatas []*model.RawSourceLine = []*model.RawSourceLine{}
@@ -269,7 +269,7 @@ func ImportExcelEnergyFile(f *excelize.File, sheet string, db *ebow.BowStorage) 
 						cell, _ := excelize.CoordinatesToCellName(1, totalRowCols)
 						s, e := f.GetCellStyle(sheet, cell)
 						if e != nil {
-							glog.Errorf("Error get cell format %+v", e)
+							glog.Errorf("Error get cell format %v", e)
 						}
 						firstSkippedStyle = s
 					}
@@ -299,7 +299,7 @@ func ImportExcelEnergyFile(f *excelize.File, sheet string, db *ebow.BowStorage) 
 	rawMeta := &model.RawSourceMeta{Id: fmt.Sprintf("cpmeta/%d", 0), CounterPoints: updatedCpMeta, NumberOfMetering: rIdx}
 	err = db.SetMeta(rawMeta)
 
-	glog.V(3).Infof("Update Metadata: %+v", rawMeta)
+	glog.V(3).Infof("Update Metadata: %s (%d counter points)", rawMeta.Id, len(rawMeta.CounterPoints))
 
 	if err != nil {
 		glog.Error(err.Error())
@@ -509,11 +509,11 @@ func buildMatrixMetaStruct(db ebow.IBowStorage, excelHeader excelHeader) (map[in
 	})
 	glog.V(4).Info("ExcelMeta:")
 	for k, v := range excelCpMeta {
-		glog.V(4).Infof("Key: %+v Value: %+v\n", k, *v.CounterPointMeta)
+		glog.V(4).Infof("Key: %d Value: %s %s\n", k, v.CounterPointMeta.ID, v.CounterPointMeta.Dir)
 	}
 	glog.V(4).Info("UpdateMeta:")
 	for i, v := range updateCpMeta {
-		glog.V(4).Infof("Idx: %+v Value: %+v\n", i, v)
+		glog.V(4).Infof("Idx: %d Value: %s %s\n", i, v.ID, v.Dir)
 	}
 	return excelCpMeta, updateCpMeta, nil
 }

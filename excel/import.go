@@ -27,7 +27,7 @@ func ImportEEG(ctx context.Context, db *ebow.BowStorage, r io.Reader, filename, 
 		Sheet: "ConsumptionDataReport"
 	*/
 	ext := filepath.Ext(filename)
-	glog.Infof("Import Raw-Data: %+v Ext: %s", filename, ext)
+	glog.Infof("Import Raw-Data: %s Ext: %s", filename, ext)
 	if ext == ".xlsx" || ext == ".xls" {
 		f, closeFile, err := OpenReader(r, filename)
 		if err != nil {
