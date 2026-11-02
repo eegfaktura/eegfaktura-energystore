@@ -59,7 +59,7 @@ func ProtectApi(handler JWTHandlerFunc) http.HandlerFunc {
 
 		tenant := r.Header.Get("X-Tenant")
 		if contains(claims.Tenants, tenant) == false {
-			glog.ErrorContextf(r.Context(), "Unauthorized access with tenant %s", tenant)
+			glog.ErrorContext(r.Context(), "Unauthorized access: tenant check failed")
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}

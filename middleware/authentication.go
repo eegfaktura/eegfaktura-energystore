@@ -210,7 +210,7 @@ func GQLProtect(next http.Handler) http.Handler {
 		superuser := hasRole(claims.RealmAccess.Roles, "superuser")
 		if !superuser {
 			if contains(claims.Tenants, tenant) == false {
-				glog.WarningContextf(r.Context(), "Unauthorized access with tenant %s", tenant)
+				glog.WarningContext(r.Context(), "Unauthorized access: tenant check failed")
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
@@ -253,7 +253,7 @@ func verifyRequest(handler JWTHandlerFunc) func(w http.ResponseWriter, r *http.R
 		superuser := hasRole(claims.RealmAccess.Roles, "superuser")
 		if !superuser {
 			if contains(claims.Tenants, tenant) == false {
-				glog.WarningContextf(r.Context(), "Unauthorized access with tenant %s", tenant)
+				glog.WarningContext(r.Context(), "Unauthorized access: tenant check failed")
 				w.WriteHeader(http.StatusForbidden)
 				return
 			}
