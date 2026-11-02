@@ -304,3 +304,23 @@ func TestLineOutsideARequestHasNoIds(t *testing.T) {
 	assert.NotContains(t, m, "request.id")
 	assert.NotContains(t, m, "tenant.id")
 }
+
+// tenant.id only for a value of the agreed form, upper-cased; the client stays either way.
+func TestSetCallerValidatesTheTenant(t *testing.T) {
+	for in, want := range map[string]string{
+		"RC100123": "RC100123", "rc100123": "RC100123", "GC123456-001": "GC123456-001", "gc123456_002": "GC123456_002",
+		strings.Repeat("A", 64): strings.Repeat("A", 64),
+		strings.Repeat("A", 65): "", "": "", "-RC1": "", "_RC1": "", "RC 1": "", "RC1\n": "", `RC1"x`: "", "RC.1": "", "RC/1": "",
+	} {
+		out := capture(t)
+		h := AccessLog(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { SetCaller(r.Context(), in, "client") }))
+		h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/x", nil))
+		m := decode(t, out.lines()[0])
+		assert.Equal(t, "client", m["client.id"], in)
+		if want == "" {
+			assert.NotContains(t, m, "tenant.id", in)
+		} else {
+			assert.Equal(t, want, m["tenant.id"], in)
+		}
+	}
+}

@@ -166,4 +166,15 @@ func TestApplicationLinesOfARequest(t *testing.T) {
 	require.Len(t, rs, 2, "the audit line and the access line")
 	assert.Equal(t, "rawdata.delete.done", rs[0]["event.action"])
 	assert.Equal(t, tenant, rs[0]["tenant.id"])
+
+	// a superuser's tenant is the unchecked header: a GEA tenant passes, anything else gives no tenant.id
+	superuser := "Bearer " + apitest.AppToken([]string{tenant}, "superuser")
+	apitest.Do(h, apitest.Request{Method: "GET", Path: "/eeg/" + ecId + "/lastRecordDate",
+		Header: map[string]string{"Authorization": superuser, "tenant": "gc123456-001", "X-Request-Id": "t-gea"}})
+	_, m := out.accessLine(t, "t-gea")
+	assert.Equal(t, "GC123456-001", m["tenant.id"])
+	apitest.Do(h, apitest.Request{Method: "GET", Path: "/eeg/" + ecId + "/lastRecordDate",
+		Header: map[string]string{"Authorization": superuser, "tenant": "not a tenant", "X-Request-Id": "t-junk"}})
+	_, m = out.accessLine(t, "t-junk")
+	assert.NotContains(t, m, "tenant.id")
 }

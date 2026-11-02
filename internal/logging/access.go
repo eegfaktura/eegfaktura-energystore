@@ -50,6 +50,7 @@ var probes = map[string]bool{"/healthz": true, "/readyz": true}
 var (
 	requestIDPattern   = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,128}$`)
 	traceparentPattern = regexp.MustCompile(`^([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-[0-9a-f]{2}$`)
+	tenantPattern      = regexp.MustCompile(`^[A-Z0-9][A-Z0-9_-]{0,63}$`)
 )
 
 // parseTraceparent accepts a W3C traceparent; version ff and all-zero ids are invalid.
@@ -160,11 +161,15 @@ func MuxRoute(next http.Handler) http.Handler {
 	})
 }
 
-// SetCaller records what the token check decided: the tenant it checked and the Keycloak client
-// (token azp, or the API client of the Basic-auth /query API). Never a user.
+// SetCaller records what the token check decided: the tenant and the Keycloak client (token azp, or
+// the API client of the Basic-auth /query API). Never a user. A superuser's tenant is the unchecked
+// header: tenant.id is written only for a value of the form agreed for all services, upper-cased.
 func SetCaller(ctx context.Context, tenant, client string) {
 	if ri := idsFrom(ctx); ri != nil {
-		ri.tenant, ri.client = tenant, client
+		ri.client = client
+		if t := strings.ToUpper(tenant); tenantPattern.MatchString(t) {
+			ri.tenant = t
+		}
 	}
 }
 

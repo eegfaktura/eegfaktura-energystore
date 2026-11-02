@@ -22,8 +22,10 @@ this changelog highlights the changes relevant for overview and operations.
 
 ### Changed
 - **`request.id` and `tenant.id` on the warn and error lines of an HTTP request** (dev#45 L12), not only on the
-  access line, so such a line can be joined to its request. `tenant.id` appears once the token check confirmed the
-  tenant. This covers `middleware`, `rest`, `graph`, `services` and the Excel import and export, HTTP only: no
+  access line, so such a line can be joined to its request. `tenant.id` appears once the token check passed. For a
+  superuser that value is the unchecked header, so for everyone it is written only in the form agreed for all
+  services, `^[A-Z0-9][A-Z0-9_-]{0,63}$` after upper-casing (GEA `GC123456-001` passes); otherwise there is no
+  `tenant.id`. The access line follows the same rule. This covers `middleware`, `rest`, `graph`, `services` and the Excel import and export, HTTP only: no
   propagation over MQTT or gRPC. Not covered yet: the lines in `store/ebow` and `calculation`, which have no request
   context, and info, debug and trace lines.
 - **Some log texts changed** (dev#45 L11): lines that printed a struct now name its id or a count, e.g. the dispatcher
