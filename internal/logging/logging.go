@@ -312,24 +312,27 @@ func Event(ctx context.Context, l slog.Level, action, msg string, attrs ...slog.
 	Log(ctx, pcs[0], l, msg, append([]slog.Attr{slog.String("event.action", action)}, attrs...)...)
 }
 
-// Started writes the one start-up line: service.version (on every line) and the effective log
-// level, with the package overrides. It is written at every LOG_LEVEL, so a deployment can always
-// be told from the log.
+// Started writes the one start-up line: service.version (on every line) and the effective root
+// log level, the package overrides in the message text. It is written at every LOG_LEVEL, so a
+// deployment can always be told from the log.
 func Started() {
 	h := cur.Load()
-	r := slog.NewRecord(time.Now(), slog.LevelInfo, "service start", 0)
-	r.AddAttrs(slog.String("event.action", "service.start"), slog.String("log.effective_level", h.effectiveLevel()))
+	r := slog.NewRecord(time.Now(), slog.LevelInfo, h.startMessage(), 0)
+	r.AddAttrs(slog.String("event.action", "service.start"), slog.String("log.effective_level", levelName(h.global)))
 	_ = h.inner.Handle(context.Background(), r)
 }
 
-// effectiveLevel is the global level, then the overrides sorted: "info,ebow=trace,mqttclient=debug".
-func (h *handler) effectiveLevel() string {
+// startMessage names the overrides, sorted: "service start, level overrides: ebow=trace,mqttclient=debug".
+func (h *handler) startMessage() string {
+	if len(h.overrides) == 0 {
+		return "service start"
+	}
 	pkgs := make([]string, 0, len(h.overrides))
 	for pkg, l := range h.overrides {
 		pkgs = append(pkgs, pkg+"="+levelName(l))
 	}
 	slices.Sort(pkgs)
-	return strings.Join(append([]string{levelName(h.global)}, pkgs...), ",")
+	return "service start, level overrides: " + strings.Join(pkgs, ",")
 }
 
 // AuditOperator is the audit.operator field; it is written only on the events allowed for it.

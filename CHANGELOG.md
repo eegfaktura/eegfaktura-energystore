@@ -10,8 +10,8 @@ this changelog highlights the changes relevant for overview and operations.
 
 ### Added
 - **Start-up line and `deployment.environment`** (dev#45 L14). At start the service writes one line with
-  `event.action` = `service.start`, `service.version` and `log.effective_level` (the global level, then the package
-  overrides, e.g. `info,mqttclient=debug`), at every `LOG_LEVEL` and without any other setting. The new environment
+  `event.action` = `service.start`, `service.version` and `log.effective_level` (the root level, one plain value as in
+  all services; package overrides are named in the message text), at every `LOG_LEVEL` and without any other setting. The new environment
   variable `DEPLOYMENT_ENVIRONMENT` sets `deployment.environment` on every line; unset or blank, the field is left
   out. It is set per zone in the deployment.
 - **Never-log test** (dev#45 L11). `internal/logging` reads the source of every package with the Go type checker. A

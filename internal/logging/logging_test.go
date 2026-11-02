@@ -192,11 +192,20 @@ func TestStartLine(t *testing.T) {
 	m := decode(t, lines[0])
 	assert.Equal(t, "service.start", m["event.action"])
 	assert.Equal(t, "1.9.0", m["service.version"])
-	assert.Equal(t, "error,ebow=trace,mqttclient=debug", m["log.effective_level"])
+	assert.Equal(t, "error", m["log.effective_level"], "one plain level, in all services")
+	assert.Equal(t, "service start, level overrides: ebow=trace,mqttclient=debug", m["message"])
 	assert.Equal(t, "pilot", m["deployment.environment"])
 	assert.ElementsMatch(t, []string{"@timestamp", "log.level", "message", "service.name", "service.version",
 		"deployment.environment", "event.action", "log.effective_level"}, keys(m), "nothing else, so no secret")
 	assert.NotContains(t, lines[0], "s3cret")
+}
+
+func TestStartLineWithoutOverrides(t *testing.T) {
+	out := capture(t)
+	Started()
+	m := decode(t, out.lines()[0])
+	assert.Equal(t, "info", m["log.effective_level"])
+	assert.Equal(t, "service start", m["message"])
 }
 
 func keys(m map[string]any) []string {
