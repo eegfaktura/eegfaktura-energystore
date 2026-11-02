@@ -126,9 +126,6 @@ func AccessLog(next http.Handler) http.Handler {
 		if ri.operation != "" {
 			attrs = append(attrs, slog.String("graphql.operation.name", ri.operation))
 		}
-		if ri.tenant != "" {
-			attrs = append(attrs, slog.String("tenant.id", ri.tenant))
-		}
 		if ri.client != "" {
 			attrs = append(attrs, slog.String("client.id", ri.client))
 		}

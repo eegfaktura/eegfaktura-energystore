@@ -2,6 +2,7 @@ package excel
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -80,9 +81,9 @@ func returnFloatValue(array []float64, idx int) float64 {
 	return 0
 }
 
-func ExportEnergyDataToMail(tenant, ecid, to string, year, month int, cps *ExportParticipantEnergy) error {
+func ExportEnergyDataToMail(ctx context.Context, tenant, ecid, to string, year, month int, cps *ExportParticipantEnergy) error {
 
-	buf, err := ExportExcel(tenant, ecid, year, month, cps)
+	buf, err := ExportExcel(ctx, tenant, ecid, year, month, cps)
 	if err != nil {
 		return err
 	}
@@ -91,12 +92,12 @@ func ExportEnergyDataToMail(tenant, ecid, to string, year, month int, cps *Expor
 	return utils.SendMail(tenant, to, fmt.Sprintf("EEG (%s) - Excel Report", tenant), nil, &filename, buf)
 }
 
-func ExportExcel(tenant, ecid string, year, month int, cps *ExportParticipantEnergy) (*bytes.Buffer, error) {
+func ExportExcel(ctx context.Context, tenant, ecid string, year, month int, cps *ExportParticipantEnergy) (*bytes.Buffer, error) {
 	start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.Local)
 	end := time.Date(year, time.Month(month)+1, 0, 0, 0, 0, 0, time.Local)
 
 	//return CreateExcelFile(tenant, start, end, cps)
-	return ExportEnergyToExcel(tenant, ecid, start, end, cps)
+	return ExportEnergyToExcel(ctx, tenant, ecid, start, end, cps)
 }
 
 type periodRange struct {
@@ -315,7 +316,7 @@ func (er *EnergyRunner) run(db ebow.IBowStorage, f *excelize.File, start, end ti
 	return f.WriteToBuffer()
 }
 
-func ExportEnergyToExcel(tenant, ecid string, start, end time.Time, cps *ExportParticipantEnergy) (*bytes.Buffer, error) {
+func ExportEnergyToExcel(ctx context.Context, tenant, ecid string, start, end time.Time, cps *ExportParticipantEnergy) (*bytes.Buffer, error) {
 	if cps == nil { // the export lists only the given metering points (#53)
 		return nil, errors.New("no metering points given for the export")
 	}
@@ -328,7 +329,7 @@ func ExportEnergyToExcel(tenant, ecid string, start, end time.Time, cps *ExportP
 	f := excelize.NewFile()
 	defer func() {
 		if err := f.Close(); err != nil {
-			glog.Errorf("tenant=%s err: %v", tenant, err)
+			glog.ErrorContextf(ctx, "tenant=%s err: %v", tenant, err)
 		}
 	}()
 

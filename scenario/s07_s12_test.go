@@ -1,6 +1,7 @@
 package scenario_test
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -85,7 +86,7 @@ func TestS08_ExportForAMeterWithoutData(t *testing.T) {
 			{MeteringPoint: "AT0030000000000000000000000009999", Direction: model.CONSUMER_DIRECTION, ActiveSince: june1.UnixMilli(), InactiveSince: june1.AddDate(1, 0, 0).UnixMilli()},
 		}}
 	assert.NotPanics(t, func() {
-		_, _ = excel.ExportEnergyToExcel(tenant, ecId, june1, june1, cps)
+		_, _ = excel.ExportEnergyToExcel(context.Background(), tenant, ecId, june1, june1, cps)
 	})
 }
 

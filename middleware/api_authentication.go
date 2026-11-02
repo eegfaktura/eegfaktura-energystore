@@ -45,21 +45,21 @@ func ProtectApi(handler JWTHandlerFunc) http.HandlerFunc {
 
 		idToken, err := kcClientAPI.AuthenticateUserWithPassword(creds[0], creds[1])
 		if err != nil {
-			glog.Errorf("%v", err)
+			glog.ErrorContextf(r.Context(), "%v", err)
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
 
 		claims := PlatformClaims{}
 		if err := idToken.Claims(&claims); err != nil {
-			glog.Errorf("%v", err)
+			glog.ErrorContextf(r.Context(), "%v", err)
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
 
 		tenant := r.Header.Get("X-Tenant")
 		if contains(claims.Tenants, tenant) == false {
-			glog.Errorf("Unauthorized access with tenant %s", tenant)
+			glog.ErrorContextf(r.Context(), "Unauthorized access with tenant %s", tenant)
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}

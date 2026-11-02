@@ -116,7 +116,7 @@ func fetchEnergyReportV2() middleware.JWTHandlerFunc {
 		}
 
 		if energy, err = calculation.EnergyReportV2(tenant, ecid, request.Participants, request.ReportInterval.Year, request.ReportInterval.Segment, request.ReportInterval.Period); err != nil {
-			respondWithQueryError(w, http.StatusInternalServerError, tenant, err)
+			respondWithQueryError(r.Context(), w, http.StatusInternalServerError, tenant, err)
 			return
 		}
 		if own != nil {
@@ -167,7 +167,7 @@ func fetchRawEnergyV2() middleware.JWTHandlerFunc {
 
 		resp, err := store.QueryRawData(tenant, ecId, time.UnixMilli(request.Start), time.UnixMilli(request.End), cps, r.URL.Query())
 		if err != nil {
-			respondWithQueryError(w, http.StatusBadRequest, tenant, err)
+			respondWithQueryError(r.Context(), w, http.StatusBadRequest, tenant, err)
 			return
 		}
 
@@ -217,7 +217,7 @@ func deleteRawData() middleware.JWTHandlerFunc {
 		// audit.operator is written only on rawdata.delete.done/.failed (internal/logging).
 		if !request.DryRun {
 			action, level := "rawdata.delete.done", slog.LevelWarn
-			attrs := []slog.Attr{logging.AuditOperator(claims.Username), slog.String("tenant.id", tenant)}
+			attrs := []slog.Attr{logging.AuditOperator(claims.Username)}
 			if err != nil {
 				action, level = "rawdata.delete.failed", slog.LevelError
 				attrs = append(attrs, logging.ErrorAttrs(err)...)
@@ -227,7 +227,7 @@ func deleteRawData() middleware.JWTHandlerFunc {
 				from.UTC().Format(time.RFC3339), to.UTC().Format(time.RFC3339), affected), attrs...)
 		}
 		if err != nil {
-			respondWithQueryError(w, http.StatusBadRequest, tenant, err)
+			respondWithQueryError(r.Context(), w, http.StatusBadRequest, tenant, err)
 			return
 		}
 
@@ -280,9 +280,9 @@ func exportMeteringData() middleware.JWTHandlerFunc {
 
 		glog.V(3).Infof("Send energy export mail tenant=%s", tenant)
 
-		err = excel.ExportEnergyDataToMail(tenant, ecid, email, year, month, nil)
+		err = excel.ExportEnergyDataToMail(r.Context(), tenant, ecid, email, year, month, nil)
 		if err != nil {
-			respondWithQueryError(w, http.StatusBadRequest, tenant, err)
+			respondWithQueryError(r.Context(), w, http.StatusBadRequest, tenant, err)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
@@ -318,10 +318,10 @@ func exportReport() middleware.JWTHandlerFunc {
 		}
 
 		//b, err := excel.CreateExcelFile(tenant, time.UnixMilli(cps.Start), time.UnixMilli(cps.End), &cps)
-		b, err := excel.ExportEnergyToExcel(tenant, ecid, time.UnixMilli(cps.Start), time.UnixMilli(cps.End), &cps)
+		b, err := excel.ExportEnergyToExcel(r.Context(), tenant, ecid, time.UnixMilli(cps.Start), time.UnixMilli(cps.End), &cps)
 		if err != nil {
 			if !refuseTenant(w, err) {
-				respondWith(w, http.StatusInternalServerError, tenant, err)
+				respondWith(r.Context(), w, http.StatusInternalServerError, tenant, err)
 			}
 			return
 		}
@@ -333,10 +333,10 @@ func exportReport() middleware.JWTHandlerFunc {
 			time.UnixMilli(cps.End).Format("20060102")))
 
 		if _, err := b.WriteTo(w); err != nil {
-			glog.Errorf("tenant=%s error: %v", tenant, err)
+			glog.ErrorContextf(r.Context(), "tenant=%s error: %v", tenant, err)
 			_, err = fmt.Fprintf(w, "%s", err)
 			if err != nil {
-				glog.Errorf("tenant=%s error: %v", tenant, err)
+				glog.ErrorContextf(r.Context(), "tenant=%s error: %v", tenant, err)
 			}
 		}
 		glog.Infof("tenant=%s Energy Export finish (%v Sec.)", tenant, time.Now().Sub(start).Seconds())
@@ -364,7 +364,7 @@ func fetchIntraDayReportV2() middleware.JWTHandlerFunc {
 		resp, err := store.QueryIntraDayReport(tenant, ecid, time.UnixMilli(request.Start), time.UnixMilli(request.End))
 		glog.V(4).Infof("tenant=%s Time Monitor fetchIntraDayReport. %v Sec.", tenant, time.Now().Sub(startMonitor).Seconds())
 		if err != nil {
-			respondWithQueryError(w, http.StatusBadRequest, tenant, err)
+			respondWithQueryError(r.Context(), w, http.StatusBadRequest, tenant, err)
 			return
 		}
 		respondWithJSON(w, http.StatusOK, &resp)
@@ -393,7 +393,7 @@ func fetchLoadCurveReportV2() middleware.JWTHandlerFunc {
 		resp, err := store.QueryLoadCurveReport(tenant, ecid, time.UnixMilli(request.Start), time.UnixMilli(request.End), request.Func)
 		glog.V(4).Infof("Time Monitor fetchLoadCurveReport. %v\n", time.Now().Sub(startMonitor))
 		if err != nil {
-			respondWithQueryError(w, http.StatusBadRequest, tenant, err)
+			respondWithQueryError(r.Context(), w, http.StatusBadRequest, tenant, err)
 			return
 		}
 		respondWithJSON(w, http.StatusOK, &resp)
@@ -437,7 +437,7 @@ func getLoadCurveReportV2() middleware.JWTHandlerFunc {
 		resp, err := store.QueryLoadCurveReport(tenant, ecid, time.UnixMilli(request.Start), time.UnixMilli(request.End), request.Func)
 		glog.V(4).Infof("Time Monitor fetchLoadCurveReport. %v\n", time.Now().Sub(startMonitor))
 		if err != nil {
-			respondWithQueryError(w, http.StatusBadRequest, tenant, err)
+			respondWithQueryError(r.Context(), w, http.StatusBadRequest, tenant, err)
 			return
 		}
 		respondWithJSON(w, http.StatusOK, &resp)
@@ -466,7 +466,7 @@ func fetchCombinedReportV2() middleware.JWTHandlerFunc {
 		resp, err := store.QueryCombinedReports(tenant, ecid, request.Reports, time.UnixMilli(request.Start), time.UnixMilli(request.End))
 		glog.V(4).Infof("Time Monitor fetchCombinedReport. %v\n", time.Now().Sub(startMonitor))
 		if err != nil {
-			respondWithQueryError(w, http.StatusBadRequest, tenant, err)
+			respondWithQueryError(r.Context(), w, http.StatusBadRequest, tenant, err)
 			return
 		}
 		respondWithJSON(w, http.StatusOK, &resp)
@@ -510,7 +510,7 @@ func getCombinedReportV2() middleware.JWTHandlerFunc {
 		resp, err := store.QueryCombinedReports(tenant, ecid, request.Reports, time.UnixMilli(request.Start), time.UnixMilli(request.End))
 		glog.V(4).Infof("Time Monitor fetchCombinedReport. %v\n", time.Now().Sub(startMonitor))
 		if err != nil {
-			respondWithQueryError(w, http.StatusBadRequest, tenant, err)
+			respondWithQueryError(r.Context(), w, http.StatusBadRequest, tenant, err)
 			return
 		}
 		respondWithJSON(w, http.StatusOK, &resp)
@@ -536,7 +536,7 @@ func fetchSummaryReportV2() middleware.JWTHandlerFunc {
 		resp, err := calculation.EnergySummary(tenant, ecid, request.Year, request.Segment, request.Period)
 		glog.V(4).Infof("Time Monitor fetchSummaryReport. %v\n", time.Now().Sub(startMonitor))
 		if err != nil {
-			respondWithQueryError(w, http.StatusBadRequest, tenant, err)
+			respondWithQueryError(r.Context(), w, http.StatusBadRequest, tenant, err)
 			return
 		}
 

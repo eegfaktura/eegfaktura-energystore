@@ -234,6 +234,9 @@ func (h *handler) Handle(ctx context.Context, r slog.Record) error {
 	}
 	if ids := idsFrom(ctx); ids != nil {
 		r.AddAttrs(slog.String("request.id", ids.requestID))
+		if ids.tenant != "" {
+			r.AddAttrs(slog.String("tenant.id", ids.tenant))
+		}
 		if ids.traceID != "" {
 			r.AddAttrs(slog.String("trace.id", ids.traceID), slog.String("span.id", ids.spanID))
 		}

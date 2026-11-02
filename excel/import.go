@@ -2,6 +2,7 @@ package excel
 
 import (
 	"at.ourproject/energystore/store/ebow"
+	"context"
 	"errors"
 	"io"
 	"path/filepath"
@@ -9,7 +10,7 @@ import (
 	"at.ourproject/energystore/internal/logging/glog"
 )
 
-func ImportFile(tenant, ecId, filename, sheet string, file io.Reader) error {
+func ImportFile(ctx context.Context, tenant, ecId, filename, sheet string, file io.Reader) error {
 	glog.Info("Start Import")
 	db, err := ebow.OpenStorage(tenant, ecId)
 	if err != nil {
@@ -17,10 +18,10 @@ func ImportFile(tenant, ecId, filename, sheet string, file io.Reader) error {
 	}
 	defer func() { db.Close() }()
 
-	return ImportEEG(db, file, filename, sheet, tenant)
+	return ImportEEG(ctx, db, file, filename, sheet, tenant)
 }
 
-func ImportEEG(db *ebow.BowStorage, r io.Reader, filename, sheet, tenant string) error {
+func ImportEEG(ctx context.Context, db *ebow.BowStorage, r io.Reader, filename, sheet, tenant string) error {
 	/*
 		Path:  "/home/petero/Downloads/AT00300DUMMY_20210101_20211231_202202181342.xlsx"
 		Sheet: "ConsumptionDataReport"
@@ -36,7 +37,7 @@ func ImportEEG(db *ebow.BowStorage, r io.Reader, filename, sheet, tenant string)
 		defer closeFile()
 		unlock := db.LockWrites() // the MQTT import writes cpmeta/0 and the rows of the same store (#33)
 		defer unlock()
-		if err = ImportExcelEnergyFileNew(f, sheet, db); err != nil {
+		if err = ImportExcelEnergyFileNew(ctx, f, sheet, db); err != nil {
 			glog.Infof("Import Execl Error: %v\n", err)
 			return err
 		}
