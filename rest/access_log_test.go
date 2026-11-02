@@ -142,6 +142,7 @@ func TestApplicationLinesOfARequest(t *testing.T) {
 	require.Len(t, rs, 2, "the warning and the access line")
 	assert.Equal(t, "warn", rs[0]["log.level"])
 	assert.NotContains(t, rs[0], "tenant.id")
+	assert.NotContains(t, rs[0]["message"], "TE999999", "the refused tenant is chosen by the client")
 
 	// a resolver refuses the tenant argument: the checked tenant is the header's
 	rec = apitest.Do(h, apitest.Request{Method: "POST", Path: "/query",
@@ -152,6 +153,7 @@ func TestApplicationLinesOfARequest(t *testing.T) {
 	require.Len(t, rs, 2, "the warning and the access line")
 	assert.Equal(t, "warn", rs[0]["log.level"])
 	assert.Contains(t, rs[0]["message"], "lastEnergyDate refused")
+	assert.NotContains(t, rs[0]["message"], "TE999999", "the refused tenant is chosen by the client")
 	assert.Equal(t, tenant, rs[0]["tenant.id"])
 
 	// the audit line of the raw data deletion takes tenant.id from the request as well

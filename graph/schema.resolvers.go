@@ -18,7 +18,7 @@ import (
 // SingleUpload is the resolver for the singleUpload field.
 func (r *mutationResolver) SingleUpload(ctx context.Context, tenant string, ecID string, sheet string, file graphql.Upload) (bool, error) {
 	if err := tenantctx.Check(ctx, tenant); err != nil {
-		glog.WarningContextf(ctx, "singleUpload refused: tenant argument %s does not match the checked tenant", tenant)
+		glog.WarningContext(ctx, "singleUpload refused: tenant argument does not match the checked tenant")
 		return false, err
 	}
 	if tenantctx.IsMember(ctx) {
@@ -32,7 +32,7 @@ func (r *mutationResolver) SingleUpload(ctx context.Context, tenant string, ecID
 // LastEnergyDate is the resolver for the lastEnergyDate field.
 func (r *queryResolver) LastEnergyDate(ctx context.Context, tenant string, ecID string) (string, error) {
 	if err := tenantctx.Check(ctx, tenant); err != nil {
-		glog.WarningContextf(ctx, "lastEnergyDate refused: tenant argument %s does not match the checked tenant", tenant)
+		glog.WarningContext(ctx, "lastEnergyDate refused: tenant argument does not match the checked tenant")
 		return "", err
 	}
 	return services.GetLastEnergyEntry(tenant, ecID)

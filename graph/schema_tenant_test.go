@@ -1,10 +1,14 @@
 package graph
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"os"
+	"strings"
 	"testing"
 
+	"at.ourproject/energystore/internal/logging"
 	"at.ourproject/energystore/tenantctx"
 	"github.com/99designs/gqlgen/graphql"
 )
@@ -30,5 +34,28 @@ func TestResolversRejectWithoutCheckedTenant(t *testing.T) {
 	r := &Resolver{}
 	if _, err := r.Query().LastEnergyDate(context.Background(), "TE100001", "AT00999900000TC100200000000000002"); !errors.Is(err, tenantctx.ErrTenantMismatch) {
 		t.Fatalf("LastEnergyDate without a checked tenant: err=%v, want refused", err)
+	}
+}
+
+// The tenant argument is chosen by the client: a refusal says so, it does not repeat the value
+// (dev#45 L2).
+func TestRefusalLinesDoNotRepeatTheTenantArgument(t *testing.T) {
+	var out bytes.Buffer
+	if err := logging.Configure(nil, &out); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = logging.Configure(os.Environ(), os.Stdout) })
+	r := &Resolver{}
+	ctx := tenantctx.WithCaller(context.Background(), "TE100001", false)
+	const chosen = "CLIENT-CHOSEN-TENANT"
+
+	_, _ = r.Mutation().SingleUpload(ctx, chosen, "AT00999900000TC100200000000000002", "Sheet1", graphql.Upload{})
+	_, _ = r.Query().LastEnergyDate(ctx, chosen, "AT00999900000TC100200000000000002")
+
+	if n := strings.Count(out.String(), "refused"); n != 2 {
+		t.Fatalf("want both refusal lines, got %d: %s", n, out.String())
+	}
+	if strings.Contains(out.String(), chosen) {
+		t.Fatalf("the tenant argument is in the log: %s", out.String())
 	}
 }

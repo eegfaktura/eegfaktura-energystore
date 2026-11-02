@@ -32,6 +32,8 @@ this changelog highlights the changes relevant for overview and operations.
   their output.
 
 ### Fixed
+- **No client-chosen tenant in the refusal lines** (dev#45 L2). A refused request no longer repeats the tenant of the
+  `tenant` or `X-Tenant` header or of the GraphQL argument in the line text.
 - **No dump of the MQTT client on connection loss** (dev#45 L3). The line printed paho's client with its connection
   options; it logs the error now, also as `error.type` and `error.message`. The level stays info.
 
