@@ -17,8 +17,9 @@ this changelog highlights the changes relevant for overview and operations.
 - **Never-log test** (dev#45 L11). `internal/logging` reads the source of every package with the Go type checker. A
   log call fails the suite when it uses `%+v` or `%#v`, gets a value of a model or client type with any verb, or
   names a personal or secret value (first and last name, e-mail, IBAN, password, secret, token, user name, user id,
-  subject). A legitimate exception needs an entry with its reason; `audit.operator` on the raw data deletion is the
-  only one. Metering-point numbers are ids and may be logged.
+  subject, authorization, bearer, credentials, Basic auth, payload, body). `http.Header` counts as a client type. A
+  legitimate exception needs an entry with its reason, keyed on the log call; `AuditOperator` for `audit.operator` on
+  the raw data deletion is the only one. Metering-point numbers are ids and may be logged.
 
 ### Changed
 - **`request.id` and `tenant.id` on the warn and error lines of an HTTP request** (dev#45 L12), not only on the

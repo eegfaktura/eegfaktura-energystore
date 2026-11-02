@@ -34,12 +34,12 @@ import (
 
 const module = "at.ourproject/energystore"
 
-var neverLogAllowed = []struct{ file, finding, reason string }{
-	{"rest/restServer.go", "name Username",
+var neverLogAllowed = []struct{ call, finding, reason string }{
+	{"logging.AuditOperator", "name Username",
 		"audit.operator on the raw data deletion: decided exception (2026-10-30, W-261008-ca2), superuser-only tool; the module writes the field only on rawdata.delete.*"},
 }
 
-const sensitiveNames = `(?i)(first_?name|last_?name|e_?mail|iban|passw(or)?d|secret|token|user_?name|user_?id|subject)`
+const sensitiveNames = `(?i)(first_?name|last_?name|e_?mail|iban|passw(or)?d|secret|token|user_?name|user_?id|subject|authorization|bearer|creds|basic_?auth|payload|body)`
 
 var (
 	sensitive = regexp.MustCompile(sensitiveNames)
@@ -121,7 +121,7 @@ func scanFiles(t *testing.T, path string, files []*ast.File, s *scanner) {
 
 func scanSource(t *testing.T) *scanner {
 	t.Helper()
-	s := &scanner{fset: source.fset, root: source.root, findings: map[string]bool{}}
+	s := &scanner{fset: source.fset, root: source.root, findings: map[string]bool{}, used: map[int]bool{}}
 	for _, p := range source.packages {
 		var files []*ast.File
 		for _, name := range p.GoFiles {
@@ -146,22 +146,12 @@ func TestSourceNeverLogs(t *testing.T) {
 	s := scanSource(t)
 	require.Greater(t, s.calls, 150, "the scan must reach the log calls of the service")
 
-	used := make([]bool, len(neverLogAllowed))
-next:
 	for f := range s.findings {
-		file, rest, _ := strings.Cut(f, ":")
-		_, finding, _ := strings.Cut(rest, ": ")
-		for i, a := range neverLogAllowed {
-			if a.file == file && a.finding == finding {
-				used[i] = true
-				continue next
-			}
-		}
 		t.Errorf("never-log: %s (fix it, or add it to neverLogAllowed with a reason)", f)
 	}
 	for i, a := range neverLogAllowed {
-		assert.NotEmpty(t, a.reason, a.file)
-		assert.True(t, used[i], "stale neverLogAllowed entry: %s %s", a.file, a.finding)
+		assert.NotEmpty(t, a.reason, a.call)
+		assert.True(t, s.used[i], "stale neverLogAllowed entry: %s %s", a.call, a.finding)
 	}
 }
 
@@ -186,7 +176,8 @@ import (
 type person struct{ Firstname, LastName, IBAN, Password, Username, Subject string }
 
 func bad(ctx context.Context, cl mqtt.Client, hc *http.Client, m *model.CounterPointMeta,
-	ms []*model.CounterPointMeta, byId map[string]model.RawSourceMeta, s, email, value string, p person) {
+	ms []*model.CounterPointMeta, byId map[string]model.RawSourceMeta, s, email, value string, p person,
+	hdr http.Header, authorization, bearer, creds, basicAuth, payload, body string) {
 	glog.Infof("lost (%+v)", s) // hit dump verb %+v
 	glog.Infof("lost (%#v)", s) // hit dump verb %#v
 	glog.Infof("lost %v", cl) // hit type mqtt.Client
@@ -206,10 +197,18 @@ func bad(ctx context.Context, cl mqtt.Client, hc *http.Client, m *model.CounterP
 	glog.Error(fmt.Sprintf("x %+v", s)) // hit dump verb %+v
 	logging.Log(ctx, 0, slog.LevelInfo, "x", slog.String("user.email", s)) // hit key user.email
 	logging.Log(ctx, 0, slog.LevelInfo, "x", slog.Any("meta", m)) // hit type model.CounterPointMeta
-	logging.AuditOperator(p.Username) // hit name Username
+	glog.Infof("%v", hdr) // hit type http.Header
+	glog.Info(authorization) // hit name authorization
+	glog.Info(bearer) // hit name bearer
+	glog.Info(creds) // hit name creds
+	glog.Info(basicAuth) // hit name basicAuth
+	glog.Info(payload) // hit name payload
+	glog.Info(body) // hit name body
 }
 
-func good(ctx context.Context, tok mqtt.Token, vf *model.VfeegError, emailVerified bool, tokens []string, meteringPoint string, err error) {
+func good(ctx context.Context, tok mqtt.Token, vf *model.VfeegError, emailVerified bool, tokens []string, meteringPoint string, err error, p person) {
+	logging.AuditOperator(p.Username)
+	logging.Log(ctx, 0, slog.LevelWarn, "x", logging.AuditOperator(p.Username))
 	glog.Infof("metering point %s: %v", meteringPoint, err)
 	glog.Infof("token check failed: %v", err)
 	glog.Errorf("password rejected: %s", errors.New("x"))
@@ -226,7 +225,7 @@ func TestNeverLogScannerFindsPlantedLines(t *testing.T) {
 	require.NoError(t, source.err)
 	f, err := parser.ParseFile(source.fset, "fixture.go", neverLogFixture, parser.SkipObjectResolution)
 	require.NoError(t, err)
-	s := &scanner{fset: source.fset, root: source.root, findings: map[string]bool{}}
+	s := &scanner{fset: source.fset, root: source.root, findings: map[string]bool{}, used: map[int]bool{}}
 	scanFiles(t, "fixture", []*ast.File{f}, s)
 
 	want := []string{}

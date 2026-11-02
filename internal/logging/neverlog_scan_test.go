@@ -77,6 +77,9 @@ func dumpType(t types.Type) string {
 		if pkg == nil || !isDumpPackage(pkg.Path()) || implementsError(t) {
 			return ""
 		}
+		if pkg.Path() == "net/http" && t.Obj().Name() == "Header" {
+			return "http.Header"
+		}
 		switch u := t.Underlying().(type) {
 		case *types.Struct, *types.Interface:
 			return pkg.Name() + "." + t.Obj().Name()
@@ -101,10 +104,18 @@ type scanner struct {
 	info     *types.Info
 	root     string
 	calls    int
+	call     string          // the log call being scanned, "logging.AuditOperator"
 	findings map[string]bool // "file:line: finding"
+	used     map[int]bool    // the neverLogAllowed entries that matched
 }
 
 func (s *scanner) report(pos token.Pos, finding string) {
+	for i, a := range neverLogAllowed {
+		if a.call == s.call && a.finding == finding {
+			s.used[i] = true
+			return
+		}
+	}
 	p := s.fset.Position(pos)
 	file := p.Filename
 	if rel, err := filepath.Rel(s.root, file); err == nil {
@@ -126,6 +137,7 @@ func (s *scanner) file(f *ast.File) {
 }
 
 func (s *scanner) logCall(fn *types.Func, call *ast.CallExpr) {
+	s.call = fn.Pkg().Name() + "." + fn.Name()
 	s.args(fn, call.Args)
 	for _, arg := range call.Args { // a message built in place
 		ast.Inspect(arg, func(n ast.Node) bool {
@@ -188,6 +200,11 @@ func (s *scanner) value(arg ast.Expr, t types.Type) {
 		return
 	}
 	ast.Inspect(arg, func(n ast.Node) bool {
+		if c, ok := n.(*ast.CallExpr); ok {
+			if fn := calledFunc(c, s.info); fn != nil && isLogCall(fn) {
+				return false // scanned as a log call of its own
+			}
+		}
 		if id, ok := n.(*ast.Ident); ok && sensitive.MatchString(id.Name) {
 			s.report(id.Pos(), "name "+id.Name)
 		}
