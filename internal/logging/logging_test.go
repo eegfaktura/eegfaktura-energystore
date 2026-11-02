@@ -181,3 +181,47 @@ func TestEmptyPackageOverrideIsIgnored(t *testing.T) {
 	runtime.Callers(1, pcs[:])
 	assert.True(t, Enabled(pcs[0], slog.LevelDebug), "the global level applies")
 }
+
+func TestStartLine(t *testing.T) {
+	out := capture(t, "SERVICE_VERSION=1.9.0", "DEPLOYMENT_ENVIRONMENT=pilot", "LOG_LEVEL=error",
+		"LOG_LEVEL_MQTTCLIENT=debug", "LOG_LEVEL_EBOW=trace", "MQTT_PASSWORD=s3cret")
+	Started()
+
+	lines := out.lines()
+	require.Len(t, lines, 1, "written at every LOG_LEVEL")
+	m := decode(t, lines[0])
+	assert.Equal(t, "service.start", m["event.action"])
+	assert.Equal(t, "1.9.0", m["service.version"])
+	assert.Equal(t, "error,ebow=trace,mqttclient=debug", m["log.effective_level"])
+	assert.Equal(t, "pilot", m["deployment.environment"])
+	assert.ElementsMatch(t, []string{"@timestamp", "log.level", "message", "service.name", "service.version",
+		"deployment.environment", "event.action", "log.effective_level"}, keys(m), "nothing else, so no secret")
+	assert.NotContains(t, lines[0], "s3cret")
+}
+
+func keys(m map[string]any) []string {
+	var ks []string
+	for k := range m {
+		ks = append(ks, k)
+	}
+	return ks
+}
+
+func TestDeploymentEnvironmentOnEveryLine(t *testing.T) {
+	out := capture(t, "DEPLOYMENT_ENVIRONMENT= prod ")
+	Log(t.Context(), 0, slog.LevelInfo, "direct")
+	slog.Info("through slog")
+	log.Print("through the standard logger")
+	for _, line := range out.lines() {
+		assert.Equal(t, "prod", decode(t, line)["deployment.environment"], line)
+	}
+	require.Len(t, out.lines(), 3)
+}
+
+func TestDeploymentEnvironmentOmittedWhenUnset(t *testing.T) {
+	for _, env := range [][]string{nil, {"DEPLOYMENT_ENVIRONMENT="}, {"DEPLOYMENT_ENVIRONMENT=  "}} {
+		out := capture(t, env...)
+		Log(t.Context(), 0, slog.LevelInfo, "x")
+		assert.NotContains(t, decode(t, out.lines()[0]), "deployment.environment", env)
+	}
+}

@@ -11,6 +11,7 @@
 //	LOG_LEVEL_<PKG>   the same levels for one package, <PKG> = last element of the import path in
 //	                  upper case, e.g. LOG_LEVEL_MQTTCLIENT=debug, LOG_LEVEL_EBOW=trace
 //	SERVICE_VERSION   service.version (set by the image build), default dev
+//	DEPLOYMENT_ENVIRONMENT  deployment.environment on every line; the field is left out when unset
 //
 // An unknown value is reported by Check; main refuses to start on it.
 package logging
@@ -23,6 +24,7 @@ import (
 	"os"
 	"path"
 	"runtime"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -99,10 +101,14 @@ func Configure(env []string, out io.Writer) error {
 	} else {
 		inner = slog.NewTextHandler(out, opts)
 	}
-	inner = inner.WithAttrs([]slog.Attr{
+	base := []slog.Attr{
 		slog.String("service.name", ServiceName),
 		slog.String("service.version", Version),
-	})
+	}
+	if v := strings.TrimSpace(vars["DEPLOYMENT_ENVIRONMENT"]); v != "" {
+		base = append(base, slog.String("deployment.environment", v))
+	}
+	inner = inner.WithAttrs(base)
 	lowest := global
 	for _, l := range overrides {
 		lowest = min(lowest, l)
@@ -186,11 +192,12 @@ type handler struct {
 
 func (h *handler) Enabled(_ context.Context, l slog.Level) bool { return l >= h.min }
 
-// allowed are the only fields a line may carry besides @timestamp, log.level, message and
-// service.* (never-log rule: an unknown attribute is dropped, not written).
+// allowed are the only fields a line may carry besides @timestamp, log.level, message, service.*
+// and deployment.environment (never-log rule: an unknown attribute is dropped, not written).
 var allowed = map[string]bool{
 	"log.origin.file.name": true, "log.origin.file.line": true, "log.logger": true,
-	"event.action": true, "event.outcome": true, "event.duration": true,
+	"log.effective_level": true,
+	"event.action":        true, "event.outcome": true, "event.duration": true,
 	"http.request.method": true, "http.route": true, "http.response.status_code": true,
 	"graphql.operation.name": true, "tenant.id": true, "client.id": true,
 	"request.id": true, "trace.id": true, "span.id": true,
@@ -303,6 +310,26 @@ func Event(ctx context.Context, l slog.Level, action, msg string, attrs ...slog.
 	var pcs [1]uintptr
 	runtime.Callers(2, pcs[:]) // Callers, Event
 	Log(ctx, pcs[0], l, msg, append([]slog.Attr{slog.String("event.action", action)}, attrs...)...)
+}
+
+// Started writes the one start-up line: service.version (on every line) and the effective log
+// level, with the package overrides. It is written at every LOG_LEVEL, so a deployment can always
+// be told from the log.
+func Started() {
+	h := cur.Load()
+	r := slog.NewRecord(time.Now(), slog.LevelInfo, "service start", 0)
+	r.AddAttrs(slog.String("event.action", "service.start"), slog.String("log.effective_level", h.effectiveLevel()))
+	_ = h.inner.Handle(context.Background(), r)
+}
+
+// effectiveLevel is the global level, then the overrides sorted: "info,ebow=trace,mqttclient=debug".
+func (h *handler) effectiveLevel() string {
+	pkgs := make([]string, 0, len(h.overrides))
+	for pkg, l := range h.overrides {
+		pkgs = append(pkgs, pkg+"="+levelName(l))
+	}
+	slices.Sort(pkgs)
+	return strings.Join(append([]string{levelName(h.global)}, pkgs...), ",")
 }
 
 // AuditOperator is the audit.operator field; it is written only on the events allowed for it.
