@@ -248,10 +248,11 @@ func (s *statusWriter) Write(b []byte) (int, error) {
 	return s.ResponseWriter.Write(b)
 }
 
-// Flush sends the header (200 unless set) with what was written so far: the response has begun.
+// Flush sends the header (200 unless set) with what was written so far: the response has begun,
+// if the writer below can flush at all.
 func (s *statusWriter) Flush() {
-	s.wroteHeader = true
 	if f, ok := s.ResponseWriter.(http.Flusher); ok {
+		s.wroteHeader = true
 		f.Flush()
 	}
 }

@@ -348,3 +348,20 @@ func TestAccessLineHandlerPanicAfterFlush(t *testing.T) {
 	assert.Equal(t, "late", decode(t, lines[0])["error.message"])
 	assert.EqualValues(t, 500, decode(t, lines[1])["http.response.status_code"])
 }
+
+// noFlusher is a ResponseWriter that cannot flush.
+type noFlusher struct{ http.ResponseWriter }
+
+// A flush on a writer that cannot flush sends nothing: a later panic still gets its 500.
+func TestFlushWithoutFlusherDoesNotBeginTheResponse(t *testing.T) {
+	out := capture(t)
+	h := logging.AccessLog(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.(http.Flusher).Flush()
+		panic("early")
+	}))
+	rec := httptest.NewRecorder()
+	assert.NotPanics(t, func() { h.ServeHTTP(noFlusher{rec}, httptest.NewRequest("GET", "/x", nil)) })
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	require.Len(t, out.Lines(), 2)
+	assert.EqualValues(t, 500, decode(t, out.Lines()[1])["http.response.status_code"])
+}
