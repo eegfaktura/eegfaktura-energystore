@@ -36,20 +36,24 @@ type Verbose struct {
 
 const ignoredUsage = "ignored (former glog flag); the log level is set with LOG_LEVEL"
 
-func init() {
+func init() { registerFlags(flag.CommandLine) }
+
+func registerFlags(fs *flag.FlagSet) {
 	for _, name := range []string{"v", "vmodule", "log_backtrace_at", "stderrthreshold", "log_dir", "log_link", "logbuflevel"} {
-		flag.String(name, "", ignoredUsage)
+		fs.String(name, "", ignoredUsage)
 	}
 	for _, name := range []string{"logtostderr", "alsologtostderr"} { // given without a value
-		flag.Var(&ignoredBool{}, name, ignoredUsage)
+		fs.Var(&ignoredBool{}, name, ignoredUsage)
 	}
 }
 
 // IgnoredFlags lists the former glog flags that change behaviour in glog but not here and were
 // set on the command line (after flag.Parse); main warns about them.
-func IgnoredFlags() []string {
+func IgnoredFlags() []string { return ignoredFlags(flag.CommandLine) }
+
+func ignoredFlags(fs *flag.FlagSet) []string {
 	var set []string
-	flag.CommandLine.Visit(func(f *flag.Flag) {
+	fs.Visit(func(f *flag.Flag) {
 		if f.Name == "v" || f.Name == "vmodule" {
 			set = append(set, f.Name+"="+f.Value.String())
 		}

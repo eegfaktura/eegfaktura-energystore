@@ -53,6 +53,17 @@ func init() {
 // Check returns the configuration error found at start (unknown LOG_FORMAT or LOG_LEVEL*).
 func Check() error { return startErr }
 
+// Snapshot returns a func that puts the configuration in use now back (for tests that call
+// Configure; see internal/testsupport/logcapture).
+func Snapshot() (restore func()) {
+	h, d, v := cur.Load(), slog.Default(), Version
+	return func() {
+		cur.Store(h)
+		slog.SetDefault(d)
+		Version = v
+	}
+}
+
 // Configure builds the handler from env (KEY=VALUE entries, as os.Environ) and makes it the default
 // for slog and the standard log package. On an invalid setting it still installs a handler (json,
 // info), so the error can be logged, and returns the error.

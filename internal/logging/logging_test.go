@@ -1,68 +1,36 @@
-package logging
+package logging_test
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"log"
 	"log/slog"
-	"os"
 	"regexp"
 	"runtime"
-	"strings"
-	"sync"
 	"testing"
 
+	"at.ourproject/energystore/internal/logging"
+	"at.ourproject/energystore/internal/testsupport/logcapture"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// syncBuffer is safe for the concurrent writes of a running service.
-type syncBuffer struct {
-	mu  sync.Mutex
-	buf bytes.Buffer
-}
-
-func (b *syncBuffer) Write(p []byte) (int, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.Write(p)
-}
-
-func (b *syncBuffer) lines() []string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return strings.Split(strings.TrimSpace(b.buf.String()), "\n")
-}
-
-// capture configures the module with env, writing into a buffer; the default is restored after the test.
-func capture(t *testing.T, env ...string) *syncBuffer {
-	t.Helper()
-	out := &syncBuffer{}
-	require.NoError(t, Configure(env, out))
-	t.Cleanup(func() { _ = Configure(os.Environ(), os.Stdout) })
-	return out
-}
-
-func decode(t *testing.T, line string) map[string]any {
-	t.Helper()
-	m := map[string]any{}
-	require.NoError(t, json.Unmarshal([]byte(line), &m), line)
-	return m
-}
+var (
+	capture = logcapture.Capture
+	decode  = logcapture.Decode
+)
 
 func TestJSONLineHasTheCommonFields(t *testing.T) {
 	out := capture(t)
-	Log(t.Context(), 0, slog.LevelInfo, "hello", ErrorAttrs(errors.New("boom"))...)
+	logging.Log(t.Context(), 0, slog.LevelInfo, "hello", logging.ErrorAttrs(errors.New("boom"))...)
 
-	lines := out.lines()
+	lines := out.Lines()
 	require.Len(t, lines, 1)
 	m := decode(t, lines[0])
 	assert.Regexp(t, regexp.MustCompile(`^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$`), m["@timestamp"])
 	assert.Equal(t, "info", m["log.level"])
 	assert.Equal(t, "hello", m["message"])
-	assert.Equal(t, ServiceName, m["service.name"])
-	assert.Equal(t, Version, m["service.version"])
+	assert.Equal(t, logging.ServiceName, m["service.name"])
+	assert.Equal(t, logging.Version, m["service.version"])
 	assert.Equal(t, "*errors.errorString", m["error.type"])
 	assert.Equal(t, "boom", m["error.message"])
 	for _, k := range []string{"time", "level", "msg"} {
@@ -73,7 +41,7 @@ func TestJSONLineHasTheCommonFields(t *testing.T) {
 func TestUnknownFieldsAreDropped(t *testing.T) {
 	out := capture(t, "SERVICE_VERSION=1.8.2")
 	slog.Default().With("user.email", "a@b.example").Info("x", "iban", "AT61", "tenant.id", "TE100001")
-	m := decode(t, out.lines()[0])
+	m := decode(t, out.Lines()[0])
 	assert.Equal(t, "TE100001", m["tenant.id"])
 	assert.Equal(t, "1.8.2", m["service.version"])
 	assert.NotContains(t, m, "iban")
@@ -83,12 +51,12 @@ func TestUnknownFieldsAreDropped(t *testing.T) {
 // audit.operator (decision 2026-10-30) appears on the raw-data deletion events only.
 func TestAuditOperatorOnlyOnAuditEvents(t *testing.T) {
 	out := capture(t)
-	Event(t.Context(), slog.LevelWarn, "rawdata.delete.done", "done", AuditOperator("ops.person"))
-	Event(t.Context(), slog.LevelError, "rawdata.delete.failed", "failed", AuditOperator("ops.person"))
-	Event(t.Context(), slog.LevelInfo, "http.access", "access", AuditOperator("ops.person"))
-	Log(t.Context(), 0, slog.LevelInfo, "no event", AuditOperator("ops.person"))
-	slog.Default().With(AuditOperator("ops.person")).Info("with", "event.action", "rawdata.delete.done")
-	lines := out.lines()
+	logging.Event(t.Context(), slog.LevelWarn, "rawdata.delete.done", "done", logging.AuditOperator("ops.person"))
+	logging.Event(t.Context(), slog.LevelError, "rawdata.delete.failed", "failed", logging.AuditOperator("ops.person"))
+	logging.Event(t.Context(), slog.LevelInfo, "http.access", "access", logging.AuditOperator("ops.person"))
+	logging.Log(t.Context(), 0, slog.LevelInfo, "no event", logging.AuditOperator("ops.person"))
+	slog.Default().With(logging.AuditOperator("ops.person")).Info("with", "event.action", "rawdata.delete.done")
+	lines := out.Lines()
 	require.Len(t, lines, 5)
 	for i, line := range lines {
 		m := decode(t, line)
@@ -103,11 +71,11 @@ func TestAuditOperatorOnlyOnAuditEvents(t *testing.T) {
 
 func TestTextFormat(t *testing.T) {
 	out := capture(t, "LOG_FORMAT=text")
-	Log(t.Context(), 0, slog.LevelWarn, "careful")
-	line := out.lines()[0]
+	logging.Log(t.Context(), 0, slog.LevelWarn, "careful")
+	line := out.Lines()[0]
 	assert.Contains(t, line, "log.level=warn")
 	assert.Contains(t, line, "message=careful")
-	assert.Contains(t, line, "service.name="+ServiceName)
+	assert.Contains(t, line, "service.name="+logging.ServiceName)
 }
 
 func TestLevels(t *testing.T) {
@@ -123,71 +91,69 @@ func TestLevels(t *testing.T) {
 	}
 	for _, c := range cases {
 		out := capture(t, c.env)
-		for _, l := range []slog.Level{LevelTrace, slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError} {
-			Log(t.Context(), 0, l, "x")
+		for _, l := range []slog.Level{logging.LevelTrace, slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError} {
+			logging.Log(t.Context(), 0, l, "x")
 		}
 		var got []string
-		for _, line := range out.lines() {
-			if line != "" {
-				got = append(got, decode(t, line)["log.level"].(string))
-			}
+		for _, m := range out.Records(t) {
+			got = append(got, m["log.level"].(string))
 		}
 		assert.Equal(t, c.written, got, c.env)
 	}
 }
 
 func TestUnknownSettingsAreRefused(t *testing.T) {
-	t.Cleanup(func() { _ = Configure(os.Environ(), os.Stdout) })
+	logcapture.Restore(t)
 	for _, env := range []string{"LOG_LEVEL=verbose", "LOG_FORMAT=xml", "LOG_LEVEL_REST=loud"} {
-		assert.Error(t, Configure([]string{env}, &syncBuffer{}), env)
+		assert.Error(t, logging.Configure([]string{env}, &logcapture.Buffer{}), env)
 	}
 }
 
 func TestPackageOverride(t *testing.T) {
 	var pcs [1]uintptr
-	runtime.Callers(1, pcs[:]) // a pc in this package
+	runtime.Callers(1, pcs[:]) // a pc in this package (logging_test)
 	pc := pcs[0]
 
-	out := capture(t, "LOG_LEVEL=warn", "LOG_LEVEL_LOGGING=debug")
-	assert.True(t, Enabled(pc, slog.LevelDebug), "this package is lowered to debug")
-	assert.False(t, Enabled(0, slog.LevelDebug), "without a caller the global level applies")
-	Log(t.Context(), pc, slog.LevelDebug, "from logging")
-	Log(t.Context(), 0, slog.LevelInfo, "from nowhere")
-	lines := out.lines()
+	out := capture(t, "LOG_LEVEL=warn", "LOG_LEVEL_LOGGING_TEST=debug")
+	assert.True(t, logging.Enabled(pc, slog.LevelDebug), "this package is lowered to debug")
+	assert.False(t, logging.Enabled(0, slog.LevelDebug), "without a caller the global level applies")
+	logging.Log(t.Context(), pc, slog.LevelDebug, "from logging_test")
+	logging.Log(t.Context(), 0, slog.LevelInfo, "from nowhere")
+	lines := out.Lines()
 	require.Len(t, lines, 1)
 	m := decode(t, lines[0])
-	assert.Equal(t, "from logging", m["message"])
+	assert.Equal(t, "from logging_test", m["message"])
 	assert.Equal(t, "logging/logging_test.go", m["log.origin.file.name"])
 
 	out = capture(t, "LOG_LEVEL=warn", "LOG_LEVEL_REST=debug")
-	Log(t.Context(), pc, slog.LevelDebug, "from logging")
-	assert.Equal(t, []string{""}, out.lines(), "an override for another package changes nothing here")
+	logging.Log(t.Context(), pc, slog.LevelDebug, "from logging_test")
+	assert.Empty(t, out.Lines(), "an override for another package changes nothing here")
 }
 
 func TestStandardLogGoesThroughTheModule(t *testing.T) {
 	out := capture(t)
 	log.Printf("std %d", 1)
-	m := decode(t, out.lines()[0])
+	m := decode(t, out.Lines()[0])
 	assert.Equal(t, "std 1", m["message"])
 	assert.Equal(t, "info", m["log.level"])
-	assert.Equal(t, ServiceName, m["service.name"])
+	assert.Equal(t, logging.ServiceName, m["service.name"])
 }
 
 // An empty LOG_LEVEL_<PKG> is no override (it would pin the package to info).
 func TestEmptyPackageOverrideIsIgnored(t *testing.T) {
-	capture(t, "LOG_LEVEL=debug", "LOG_LEVEL_LOGGING= ")
-	assert.False(t, HasOverrides())
+	capture(t, "LOG_LEVEL=debug", "LOG_LEVEL_LOGGING_TEST= ")
+	assert.False(t, logging.HasOverrides())
 	var pcs [1]uintptr
 	runtime.Callers(1, pcs[:])
-	assert.True(t, Enabled(pcs[0], slog.LevelDebug), "the global level applies")
+	assert.True(t, logging.Enabled(pcs[0], slog.LevelDebug), "the global level applies")
 }
 
 func TestStartLine(t *testing.T) {
 	out := capture(t, "SERVICE_VERSION=1.9.0", "DEPLOYMENT_ENVIRONMENT=pilot", "LOG_LEVEL=error",
 		"LOG_LEVEL_MQTTCLIENT=debug", "LOG_LEVEL_EBOW=trace", "MQTT_PASSWORD=s3cret")
-	Started()
+	logging.Started()
 
-	lines := out.lines()
+	lines := out.Lines()
 	require.Len(t, lines, 1, "written at every LOG_LEVEL")
 	m := decode(t, lines[0])
 	assert.Equal(t, "service.start", m["event.action"])
@@ -202,8 +168,8 @@ func TestStartLine(t *testing.T) {
 
 func TestStartLineWithoutOverrides(t *testing.T) {
 	out := capture(t)
-	Started()
-	m := decode(t, out.lines()[0])
+	logging.Started()
+	m := decode(t, out.Lines()[0])
 	assert.Equal(t, "info", m["log.effective_level"])
 	assert.Equal(t, "service start", m["message"])
 }
@@ -218,19 +184,35 @@ func keys(m map[string]any) []string {
 
 func TestDeploymentEnvironmentOnEveryLine(t *testing.T) {
 	out := capture(t, "DEPLOYMENT_ENVIRONMENT= prod ")
-	Log(t.Context(), 0, slog.LevelInfo, "direct")
+	logging.Log(t.Context(), 0, slog.LevelInfo, "direct")
 	slog.Info("through slog")
 	log.Print("through the standard logger")
-	for _, line := range out.lines() {
-		assert.Equal(t, "prod", decode(t, line)["deployment.environment"], line)
+	for _, m := range out.Records(t) {
+		assert.Equal(t, "prod", m["deployment.environment"], m["message"])
 	}
-	require.Len(t, out.lines(), 3)
+	require.Len(t, out.Lines(), 3)
 }
 
 func TestDeploymentEnvironmentOmittedWhenUnset(t *testing.T) {
 	for _, env := range [][]string{nil, {"DEPLOYMENT_ENVIRONMENT="}, {"DEPLOYMENT_ENVIRONMENT=  "}} {
 		out := capture(t, env...)
-		Log(t.Context(), 0, slog.LevelInfo, "x")
-		assert.NotContains(t, decode(t, out.lines()[0]), "deployment.environment", env)
+		logging.Log(t.Context(), 0, slog.LevelInfo, "x")
+		assert.NotContains(t, decode(t, out.Lines()[0]), "deployment.environment", env)
 	}
+}
+
+// The configuration in use before a test is back afterwards, without reading the environment again.
+func TestCaptureRestoresTheConfiguration(t *testing.T) {
+	outer := capture(t, "LOG_LEVEL=info")
+	t.Run("inner", func(t *testing.T) {
+		inner := capture(t, "LOG_LEVEL=error")
+		slog.Info("dropped at error")
+		assert.Empty(t, inner.Lines())
+	})
+	slog.Info("outer")
+	log.Print("std")
+	rs := outer.Records(t)
+	require.Len(t, rs, 2, "slog and the standard logger are back on the outer configuration")
+	assert.Equal(t, "outer", rs[0]["message"])
+	assert.Equal(t, "std", rs[1]["message"])
 }
