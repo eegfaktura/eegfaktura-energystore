@@ -119,6 +119,7 @@ func TestLevels(t *testing.T) {
 		{"LOG_LEVEL=trace", []string{"trace", "debug", "info", "warn", "error"}},
 		{"LOG_LEVEL=DEBUG", []string{"debug", "info", "warn", "error"}},
 		{"LOG_LEVEL=warn", []string{"warn", "error"}},
+		{"LOG_LEVEL=warning", []string{"warn", "error"}},
 		{"LOG_LEVEL=error", []string{"error"}},
 	}
 	for _, c := range cases {
@@ -188,19 +189,22 @@ func TestStartLine(t *testing.T) {
 	assert.Equal(t, "service.start", m["event.action"])
 	assert.Equal(t, "1.9.0", m["service.version"])
 	assert.Equal(t, "error", m["log.effective_level"], "one plain level, in all services")
-	assert.Equal(t, "service start, level overrides: ebow=trace,mqttclient=debug", m["message"])
+	assert.Equal(t, "service start", m["message"], "the same in all services, no overrides named")
 	assert.Equal(t, "pilot", m["deployment.environment"])
 	assert.ElementsMatch(t, []string{"@timestamp", "log.level", "message", "service.name", "service.version",
 		"deployment.environment", "event.action", "log.effective_level"}, keys(m), "nothing else, so no secret")
 	assert.NotContains(t, lines[0], "s3cret")
 }
 
-func TestStartLineWithoutOverrides(t *testing.T) {
-	out := capture(t)
-	logging.Started()
-	m := decode(t, out.Lines()[0])
-	assert.Equal(t, "info", m["log.effective_level"])
-	assert.Equal(t, "service start", m["message"])
+func TestStartLineEffectiveLevel(t *testing.T) {
+	for env, want := range map[string]string{"": "info", "LOG_LEVEL=warning": "warn", "LOG_LEVEL=TRACE": "trace"} {
+		out := capture(t, env)
+		logging.Started()
+		m := decode(t, out.Lines()[0])
+		assert.Equal(t, want, m["log.effective_level"], env)
+		assert.Equal(t, "info", m["log.level"], env)
+		assert.Equal(t, "service start", m["message"], env)
+	}
 }
 
 func keys(m map[string]any) []string {
