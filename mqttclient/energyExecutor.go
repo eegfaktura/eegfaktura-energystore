@@ -251,7 +251,7 @@ func decodeMessage(msg []byte) *model.MqttEnergyMessage {
 func decodeMessageSize(msg []byte) (*model.MqttEnergyMessage, int64) {
 	decompressed, err := decryptMessage(msg)
 	if err != nil {
-		glog.Errorf("Error decoding CR_MSG transport payload. %s", err.Error())
+		glog.Errorf("Error decoding CR_MSG transport payload. %v", err)
 		return nil, 0
 	}
 

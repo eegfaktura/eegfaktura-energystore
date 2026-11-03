@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -113,4 +115,31 @@ func TestFormerGlogFlagsAreAccepted(t *testing.T) {
 	require.NoError(t, fs.Parse([]string{"-logtostderr", "-alsologtostderr=false", "-stderrthreshold=INFO", "-v=3",
 		"-vmodule=x=2", "-log_dir=/tmp"}))
 	assert.ElementsMatch(t, []string{"v=3", "vmodule=x=2"}, IgnoredFlags())
+}
+
+func TestContextCallsCarryTheIdsOfTheRequest(t *testing.T) {
+	out := capture(t)
+	h := logging.AccessLog(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logging.SetCaller(r.Context(), "TE100001", "client")
+		WarningContext(r.Context(), "w")
+		WarningContextf(r.Context(), "wf %d\n", 1)
+		ErrorContext(r.Context(), errors.New("boom"))
+		ErrorContextf(r.Context(), "ef %v", errors.New("bang"))
+	}))
+	req := httptest.NewRequest("GET", "/x", nil)
+	req.Header.Set("X-Request-Id", "req-7")
+	h.ServeHTTP(httptest.NewRecorder(), req)
+
+	want := [][2]string{{"warn", "w"}, {"warn", "wf 1"}, {"error", "boom"}, {"error", "ef bang"}}
+	rs := records(t, out)
+	require.Len(t, rs, len(want)+1, "and the access line")
+	for i, w := range want {
+		assert.Equal(t, w[0], rs[i]["log.level"], w[1])
+		assert.Equal(t, w[1], rs[i]["message"], w[1])
+		assert.Equal(t, "req-7", rs[i]["request.id"], w[1])
+		assert.Equal(t, "TE100001", rs[i]["tenant.id"], w[1])
+		assert.Equal(t, "glog/glog_test.go", rs[i]["log.origin.file.name"], w[1])
+	}
+	assert.Equal(t, "boom", rs[2]["error.message"])
+	assert.Equal(t, "bang", rs[3]["error.message"])
 }

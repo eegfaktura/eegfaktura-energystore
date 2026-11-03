@@ -5,6 +5,7 @@ import (
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
+	"context"
 	"fmt"
 	"github.com/xuri/excelize/v2"
 	"math"
@@ -30,7 +31,7 @@ func calcRawDataMatrixLen(a []float64, step int) int {
 	return int(math.Ceil(float64(l) / float64(step)))
 }
 
-func ImportExcelEnergyFileNew(f *excelize.File, sheet string, db ebow.IBowStorage) error {
+func ImportExcelEnergyFileNew(ctx context.Context, f *excelize.File, sheet string, db ebow.IBowStorage) error {
 
 	exp := "DD.MM.YYYY HH:MM:SS"
 	style, err := f.NewStyle(&excelize.Style{CustomNumFmt: &exp})
@@ -38,7 +39,7 @@ func ImportExcelEnergyFileNew(f *excelize.File, sheet string, db ebow.IBowStorag
 
 	rows, err := f.Rows(sheet)
 	if err != nil {
-		glog.Error(err)
+		glog.ErrorContext(ctx, err)
 		return err
 	}
 	defer rows.Close()
@@ -182,7 +183,7 @@ func ImportExcelEnergyFileNew(f *excelize.File, sheet string, db ebow.IBowStorag
 						cell, _ := excelize.CoordinatesToCellName(1, totalRowCols)
 						s, e := f.GetCellStyle(sheet, cell)
 						if e != nil {
-							glog.Errorf("Error get cell format %+v", e)
+							glog.ErrorContextf(ctx, "Error get cell format %v", e)
 						}
 						firstSkippedStyle = s
 					}
@@ -192,7 +193,7 @@ func ImportExcelEnergyFileNew(f *excelize.File, sheet string, db ebow.IBowStorag
 	}
 
 	if skippedRows > 0 { // one line per sheet, no cell content
-		glog.Warningf("Could not handle row format, %d rows skipped; first skipped row %d (cell style %d)",
+		glog.WarningContextf(ctx, "Could not handle row format, %d rows skipped; first skipped row %d (cell style %d)",
 			skippedRows, firstSkippedRow, firstSkippedStyle)
 	}
 	if !excelHeaderInitialized {
@@ -210,7 +211,7 @@ func ImportExcelEnergyFileNew(f *excelize.File, sheet string, db ebow.IBowStorag
 	rawMeta := &model.RawSourceMeta{Id: fmt.Sprintf("cpmeta/%d", 0), CounterPoints: updatedCpMeta, NumberOfMetering: rIdx}
 	err = db.SetMeta(rawMeta)
 	if err != nil {
-		glog.Error(err.Error())
+		glog.ErrorContext(ctx, err.Error())
 		return err
 	}
 	glog.V(4).Infof("Import %d lines", len(rawDatas))

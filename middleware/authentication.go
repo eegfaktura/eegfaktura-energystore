@@ -188,14 +188,14 @@ func GQLProtect(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		jwtToken, err := parseBearerTokenFromHeader(r)
 		if err != nil {
-			glog.Errorf("No Access_token in request or invalid Authorization: %v\n", err)
+			glog.ErrorContextf(r.Context(), "No Access_token in request or invalid Authorization: %v\n", err)
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
 
 		claims, err := verifyAndExtractClaims(context.Background(), jwtToken)
 		if err != nil {
-			glog.Errorf("%v", err)
+			glog.ErrorContextf(r.Context(), "%v", err)
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte(err.Error()))
 			return
@@ -203,14 +203,14 @@ func GQLProtect(next http.Handler) http.Handler {
 
 		tenant := getTenant(r)
 		if len(tenant) == 0 {
-			glog.Warning("Unauthorized access without tenant")
+			glog.WarningContext(r.Context(), "Unauthorized access without tenant")
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
 		superuser := hasRole(claims.RealmAccess.Roles, "superuser")
 		if !superuser {
 			if contains(claims.Tenants, tenant) == false {
-				glog.Warningf("Unauthorized access with tenant %s", tenant)
+				glog.WarningContext(r.Context(), "Unauthorized access: tenant check failed")
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
@@ -231,14 +231,14 @@ func verifyRequest(handler JWTHandlerFunc) func(w http.ResponseWriter, r *http.R
 	return func(w http.ResponseWriter, r *http.Request) {
 		jwtToken, err := parseBearerTokenFromHeader(r)
 		if err != nil {
-			glog.Errorf("No Access_token in request or invalid Authorization: %v\n", err)
+			glog.ErrorContextf(r.Context(), "No Access_token in request or invalid Authorization: %v\n", err)
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
 
 		claims, err := verifyAndExtractClaims(context.Background(), jwtToken)
 		if err != nil {
-			glog.Errorf("%v", err)
+			glog.ErrorContextf(r.Context(), "%v", err)
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte(err.Error()))
 			return
@@ -246,14 +246,14 @@ func verifyRequest(handler JWTHandlerFunc) func(w http.ResponseWriter, r *http.R
 
 		tenant := getTenant(r)
 		if len(tenant) == 0 {
-			glog.Warning("Unauthorized access without tenant")
+			glog.WarningContext(r.Context(), "Unauthorized access without tenant")
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
 		superuser := hasRole(claims.RealmAccess.Roles, "superuser")
 		if !superuser {
 			if contains(claims.Tenants, tenant) == false {
-				glog.Warningf("Unauthorized access with tenant %s", tenant)
+				glog.WarningContext(r.Context(), "Unauthorized access: tenant check failed")
 				w.WriteHeader(http.StatusForbidden)
 				return
 			}

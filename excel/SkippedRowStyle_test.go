@@ -2,6 +2,7 @@ package excel
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -45,7 +46,7 @@ func TestSkippedRowNamesTheCellStyle_New(t *testing.T) {
 	f, style := skippedRowWorkbook(t)
 	out := captureLog(t)
 
-	_ = ImportExcelEnergyFileNew(f, "Sheet1", setupMock()) // no energy data: error expected
+	_ = ImportExcelEnergyFileNew(context.Background(), f, "Sheet1", setupMock()) // no energy data: error expected
 
 	assertSkippedSummary(t, out.String(), style)
 }

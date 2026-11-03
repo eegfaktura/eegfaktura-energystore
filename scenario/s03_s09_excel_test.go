@@ -1,6 +1,7 @@
 package scenario_test
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -18,7 +19,7 @@ const sheet = "ConsumptionDataReport"
 func uploadExcel(t *testing.T, rows []excelRow, direction string, withMeterCode bool) error {
 	t.Helper()
 	f := excelWorkbook(t, direction, withMeterCode, rows)
-	return excel.ImportFile(tenant, ecId, "upload.xlsx", sheet, workbookBytes(t, f))
+	return excel.ImportFile(context.Background(), tenant, ecId, "upload.xlsx", sheet, workbookBytes(t, f))
 }
 
 func storedLine(t *testing.T, id string) *model.RawSourceLine {

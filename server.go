@@ -60,6 +60,7 @@ func main() {
 	for _, f := range glog.IgnoredFlags() {
 		glog.Warningf("flag -%s is ignored: the log level is set with LOG_LEVEL", f)
 	}
+	logging.Started()
 
 	glog.V(3).Info("-> Read Config")
 	config.ReadConfig(*configPath)

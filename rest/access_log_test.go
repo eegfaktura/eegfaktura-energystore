@@ -108,3 +108,73 @@ func TestAccessLineThroughTheRouter(t *testing.T) {
 	assert.NotContains(t, m, "tenant.id")
 	assert.NotContains(t, line, apiUser)
 }
+
+// lines returns the lines of a request, decoded.
+func (b *lockedBuffer) lines(t *testing.T, id string) []map[string]any {
+	t.Helper()
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	var rs []map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(b.buf.String()), "\n") {
+		m := map[string]any{}
+		if json.Unmarshal([]byte(line), &m) == nil && m["request.id"] == id {
+			rs = append(rs, m)
+		}
+	}
+	return rs
+}
+
+// TestApplicationLinesOfARequest: warn and error lines in the request path carry request.id, and
+// tenant.id when the token check confirmed it (dev#45 L12).
+func TestApplicationLinesOfARequest(t *testing.T) {
+	seed(t)
+	out := &lockedBuffer{}
+	require.NoError(t, logging.Configure([]string{"LOG_LEVEL=info"}, out))
+	t.Cleanup(func() { _ = logging.Configure(os.Environ(), os.Stdout) })
+	h := logging.AccessLog(apitest.Router())
+	token := apitest.AppToken([]string{tenant})
+
+	// the token check refuses: the tenant in the header was not confirmed
+	rec := apitest.Do(h, apitest.Request{Method: "GET", Path: "/eeg/" + ecId + "/lastRecordDate",
+		Header: map[string]string{"Authorization": "Bearer " + token, "tenant": "TE999999", "X-Request-Id": "t-header"}})
+	require.Equal(t, 403, rec.Code)
+	rs := out.lines(t, "t-header")
+	require.Len(t, rs, 2, "the warning and the access line")
+	assert.Equal(t, "warn", rs[0]["log.level"])
+	assert.NotContains(t, rs[0], "tenant.id")
+	assert.NotContains(t, rs[0]["message"], "TE999999", "the refused tenant is chosen by the client")
+
+	// a resolver refuses the tenant argument: the checked tenant is the header's
+	rec = apitest.Do(h, apitest.Request{Method: "POST", Path: "/query",
+		Header: map[string]string{"Authorization": "Bearer " + token, "tenant": tenant, "X-Request-Id": "t-gql"},
+		Body:   fmt.Sprintf(`{"query":"{ lastEnergyDate(tenant: \"TE999999\", ecId: \"%s\") }"}`, ecId)})
+	require.Equal(t, 200, rec.Code)
+	rs = out.lines(t, "t-gql")
+	require.Len(t, rs, 2, "the warning and the access line")
+	assert.Equal(t, "warn", rs[0]["log.level"])
+	assert.Contains(t, rs[0]["message"], "lastEnergyDate refused")
+	assert.NotContains(t, rs[0]["message"], "TE999999", "the refused tenant is chosen by the client")
+	assert.Equal(t, tenant, rs[0]["tenant.id"])
+
+	// the audit line of the raw data deletion takes tenant.id from the request as well
+	rec = apitest.Do(h, apitest.Request{Method: "POST", Path: "/eeg/v2/" + ecId + "/rawdata/delete",
+		Header: map[string]string{"Authorization": "Bearer " + apitest.AppToken([]string{tenant}, "superuser"),
+			"tenant": tenant, "X-Request-Id": "t-audit"},
+		Body: `{"meteringPoint":"AT0030000000000000000000000000099","start":1000,"end":2000}`})
+	require.Equal(t, 200, rec.Code, rec.Body.String())
+	rs = out.lines(t, "t-audit")
+	require.Len(t, rs, 2, "the audit line and the access line")
+	assert.Equal(t, "rawdata.delete.done", rs[0]["event.action"])
+	assert.Equal(t, tenant, rs[0]["tenant.id"])
+
+	// a superuser's tenant is the unchecked header: a GEA tenant passes, anything else gives no tenant.id
+	superuser := "Bearer " + apitest.AppToken([]string{tenant}, "superuser")
+	apitest.Do(h, apitest.Request{Method: "GET", Path: "/eeg/" + ecId + "/lastRecordDate",
+		Header: map[string]string{"Authorization": superuser, "tenant": "gc123456-001", "X-Request-Id": "t-gea"}})
+	_, m := out.accessLine(t, "t-gea")
+	assert.Equal(t, "GC123456-001", m["tenant.id"])
+	apitest.Do(h, apitest.Request{Method: "GET", Path: "/eeg/" + ecId + "/lastRecordDate",
+		Header: map[string]string{"Authorization": superuser, "tenant": "not a tenant", "X-Request-Id": "t-junk"}})
+	_, m = out.accessLine(t, "t-junk")
+	assert.NotContains(t, m, "tenant.id")
+}

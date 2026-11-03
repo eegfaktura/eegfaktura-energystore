@@ -65,8 +65,8 @@ func clientOptions() *mqtt.ClientOptions {
 	opts.AutoReconnect = true
 
 	// Log events
-	opts.OnConnectionLost = func(cl mqtt.Client, err error) {
-		glog.Infof("connection lost Err: %+v (%+v)", err.Error(), cl)
+	opts.OnConnectionLost = func(_ mqtt.Client, err error) {
+		glog.Infof("connection lost: %v", err)
 	}
 	opts.OnConnect = func(mqtt.Client) {
 		glog.Info("connection established")

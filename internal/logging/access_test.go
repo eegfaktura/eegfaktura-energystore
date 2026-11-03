@@ -2,6 +2,7 @@ package logging
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -269,4 +270,57 @@ func TestAccessLineHandlerPanicAfterWrite(t *testing.T) {
 	require.Len(t, lines, 2)
 	assert.Equal(t, "late", decode(t, lines[0])["error.message"])
 	assert.EqualValues(t, 500, decode(t, lines[1])["http.response.status_code"])
+}
+
+// Every line of a request carries its request.id, and tenant.id once the token check confirmed it;
+// the access line gets tenant.id the same way, so it is written once.
+func TestLinesOfARequestCarryTheIds(t *testing.T) {
+	out := capture(t)
+	h := AccessLog(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		Log(r.Context(), 0, slog.LevelWarn, "before the check")
+		SetCaller(r.Context(), "TE100001", "at.ourproject.vfeeg.app")
+		Log(r.Context(), 0, slog.LevelError, "after the check")
+	}))
+	req := httptest.NewRequest("GET", "/eeg/RC100001/thing", nil)
+	req.Header.Set("X-Request-Id", "req-7")
+	h.ServeHTTP(httptest.NewRecorder(), req)
+
+	lines := out.lines()
+	require.Len(t, lines, 3)
+	before, after, access := decode(t, lines[0]), decode(t, lines[1]), decode(t, lines[2])
+	assert.Equal(t, "req-7", before["request.id"])
+	assert.NotContains(t, before, "tenant.id", "not confirmed yet")
+	assert.Equal(t, "req-7", after["request.id"])
+	assert.Equal(t, "TE100001", after["tenant.id"])
+	assert.Equal(t, "TE100001", access["tenant.id"])
+	assert.Equal(t, 1, strings.Count(lines[2], `"tenant.id"`), "no duplicate key")
+}
+
+// A line outside a request has neither.
+func TestLineOutsideARequestHasNoIds(t *testing.T) {
+	out := capture(t)
+	Log(t.Context(), 0, slog.LevelError, "mqtt")
+	m := decode(t, out.lines()[0])
+	assert.NotContains(t, m, "request.id")
+	assert.NotContains(t, m, "tenant.id")
+}
+
+// tenant.id only for a value of the agreed form, upper-cased; the client stays either way.
+func TestSetCallerValidatesTheTenant(t *testing.T) {
+	for in, want := range map[string]string{
+		"RC100123": "RC100123", "rc100123": "RC100123", "GC123456-001": "GC123456-001", "gc123456_002": "GC123456_002",
+		strings.Repeat("A", 64): strings.Repeat("A", 64),
+		strings.Repeat("A", 65): "", "": "", "-RC1": "", "_RC1": "", "RC 1": "", "RC1\n": "", `RC1"x`: "", "RC.1": "", "RC/1": "",
+	} {
+		out := capture(t)
+		h := AccessLog(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { SetCaller(r.Context(), in, "client") }))
+		h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/x", nil))
+		m := decode(t, out.lines()[0])
+		assert.Equal(t, "client", m["client.id"], in)
+		if want == "" {
+			assert.NotContains(t, m, "tenant.id", in)
+		} else {
+			assert.Equal(t, want, m["tenant.id"], in)
+		}
+	}
 }

@@ -105,6 +105,24 @@ func Warningf(format string, args ...any) { emit(slog.LevelWarn, fmt.Sprintf(for
 func Error(args ...any)                   { emit(slog.LevelError, fmt.Sprint(args...), args) }
 func Errorf(format string, args ...any)   { emit(slog.LevelError, fmt.Sprintf(format, args...), args) }
 
+// The *Context functions log with the ids of the HTTP request in ctx (request.id, tenant.id, ...).
+
+func WarningContext(ctx context.Context, args ...any) {
+	emitContext(ctx, slog.LevelWarn, fmt.Sprint(args...), args)
+}
+
+func WarningContextf(ctx context.Context, format string, args ...any) {
+	emitContext(ctx, slog.LevelWarn, fmt.Sprintf(format, args...), args)
+}
+
+func ErrorContext(ctx context.Context, args ...any) {
+	emitContext(ctx, slog.LevelError, fmt.Sprint(args...), args)
+}
+
+func ErrorContextf(ctx context.Context, format string, args ...any) {
+	emitContext(ctx, slog.LevelError, fmt.Sprintf(format, args...), args)
+}
+
 // Fatal logs at error and exits with 255, as glog (without glog's goroutine dump).
 func Fatal(args ...any) { emit(slog.LevelError, fmt.Sprint(args...), args); exit(255) }
 
@@ -129,10 +147,18 @@ func callerPC() uintptr {
 	return pcs[0]
 }
 
-// emit writes msg; the first error among args becomes error.type / error.message.
-func emit(l slog.Level, msg string, args []any) {
+// emit writes a line outside an HTTP request.
+func emit(l slog.Level, msg string, args []any) { write(context.Background(), l, msg, args) }
+
+// emitContext writes a line with the ids in ctx.
+func emitContext(ctx context.Context, l slog.Level, msg string, args []any) {
+	write(ctx, l, msg, args)
+}
+
+// write writes msg; the first error among args becomes error.type / error.message.
+func write(ctx context.Context, l slog.Level, msg string, args []any) {
 	var pcs [1]uintptr
-	runtime.Callers(3, pcs[:]) // Callers, emit, the glog function
+	runtime.Callers(4, pcs[:]) // Callers, write, emit, the glog function
 	var attrs []slog.Attr
 	for _, a := range args {
 		if err, ok := a.(error); ok && err != nil {
@@ -140,5 +166,5 @@ func emit(l slog.Level, msg string, args []any) {
 			break
 		}
 	}
-	logging.Log(context.Background(), pcs[0], l, strings.TrimRight(msg, "\n"), attrs...)
+	logging.Log(ctx, pcs[0], l, strings.TrimRight(msg, "\n"), attrs...)
 }

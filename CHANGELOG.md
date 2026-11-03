@@ -8,6 +8,38 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Added
+- **Start-up line and `deployment.environment`** (dev#45 L14). At start the service writes one line with
+  `event.action` = `service.start`, `service.version` and `log.effective_level` (the root level, one plain value as in
+  all services; package overrides are named in the message text), at every `LOG_LEVEL` and without any other setting. The new environment
+  variable `DEPLOYMENT_ENVIRONMENT` sets `deployment.environment` on every line; unset or blank, the field is left
+  out. It is set per zone in the deployment.
+- **Never-log test** (dev#45 L11). `internal/logging` reads the source of every package with the Go type checker. A
+  log call fails the suite when it uses `%+v` or `%#v`, gets a value of a model or client type with any verb, or
+  names a personal or secret value (first and last name, e-mail, IBAN, password, secret, token, user name, user id,
+  subject, authorization, bearer, credentials, Basic auth, payload, body). `http.Header` counts as a client type. A
+  legitimate exception needs an entry with its reason, keyed on the log call; `AuditOperator` for `audit.operator` on
+  the raw data deletion is the only one. Metering-point numbers are ids and may be logged.
+
+### Changed
+- **`request.id` and `tenant.id` on the warn and error lines of an HTTP request** (dev#45 L12), not only on the
+  access line, so such a line can be joined to its request. `tenant.id` appears once the token check passed. For a
+  superuser that value is the unchecked header, so for everyone it is written only in the form agreed for all
+  services, `^[A-Z0-9][A-Z0-9_-]{0,63}$` after upper-casing (GEA `GC123456-001` passes); otherwise there is no
+  `tenant.id`. The access line follows the same rule. This covers `middleware`, `rest`, `graph`, `services` and the Excel import and export, HTTP only: no
+  propagation over MQTT or gRPC. Not covered yet: the lines in `store/ebow` and `calculation`, which have no request
+  context, and info, debug and trace lines.
+- **Some log texts changed** (dev#45 L11): lines that printed a struct now name its id or a count, e.g. the dispatcher
+  start, the mail server reply, `Update Metadata`, `Update Source Line`, and the error `Energie Values ... different
+  ...`, now `Energie Values <code>: source <n> not in the <m> data blocks`. Lines that used `%+v` on plain values keep
+  their output.
+
+### Fixed
+- **No client-chosen tenant in the refusal lines** (dev#45 L2). A refused request no longer repeats the tenant of the
+  `tenant` or `X-Tenant` header or of the GraphQL argument in the line text.
+- **No dump of the MQTT client on connection loss** (dev#45 L3). The line printed paho's client with its connection
+  options; it logs the error now, also as `error.type` and `error.message`. The level stays info.
+
 ## [1.9.0] – 2026-10-31
 
 ### Added

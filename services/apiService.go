@@ -13,16 +13,16 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-func RequestActiveMeteringPoints(tenant string, from, to *uint64) ([]*protobuf.MeteringPoint, error) {
+func RequestActiveMeteringPoints(ctx context.Context, tenant string, from, to *uint64) ([]*protobuf.MeteringPoint, error) {
 	conn, err := grpc.Dial(viper.GetString("services.master-server"), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		glog.Error(err)
+		glog.ErrorContext(ctx, err)
 		return nil, err
 	}
 	defer conn.Close()
 	c := protobuf.NewApiServiceClient(conn)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	callCtx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
 	request := &protobuf.MeteringRequest{
@@ -32,13 +32,13 @@ func RequestActiveMeteringPoints(tenant string, from, to *uint64) ([]*protobuf.M
 		To:     to,
 	}
 
-	r, err := c.MasterData_MeteringPoint(ctx, request)
+	r, err := c.MasterData_MeteringPoint(callCtx, request)
 	glog.V(5).Infof("Response from MASTER-DATA Service: %d metering points", len(r.GetMeteringPoints()))
 	if r == nil {
 		if err != nil {
-			glog.Error(fmt.Sprintf("Error Servicecall: %v", err))
+			glog.ErrorContext(ctx, fmt.Sprintf("Error Servicecall: %v", err))
 		}
-		glog.Error(errors.New("error fetch Meteringpoints"))
+		glog.ErrorContext(ctx, errors.New("error fetch Meteringpoints"))
 		return nil, errors.New("error fetch Meteringpoints")
 	}
 	return r.MeteringPoints, err
