@@ -277,6 +277,10 @@ func (er *EnergyRunner) run(db ebow.IBowStorage, f *excelize.File, start, end ti
 	var pt *time.Time = nil
 	for g1Ok {
 		_, t, err := utils.ConvertRowIdToTimeString("CP", _lineG1.Id, time.UTC)
+		if err != nil { // a row id that is no time is skipped, as store.Engine.Query does
+			g1Ok = iterCP.Next(&_lineG1)
+			continue
+		}
 		if rowOk := utils.CheckTime(pt, t); !rowOk {
 			diff := ((t.Unix() - pt.Unix()) / (60 * 15)) - 1
 			if diff > 0 {
