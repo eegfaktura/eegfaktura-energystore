@@ -33,7 +33,7 @@ func TestJSONLineHasTheCommonFields(t *testing.T) {
 	assert.Equal(t, "info", m["log.level"])
 	assert.Equal(t, "hello", m["message"])
 	assert.Equal(t, logging.ServiceName, m["service.name"])
-	assert.Equal(t, logging.Version, m["service.version"])
+	assert.Equal(t, "dev", m["service.version"], "without SERVICE_VERSION")
 	assert.Equal(t, "*errors.errorString", m["error.type"])
 	assert.Equal(t, "boom", m["error.message"])
 	for _, k := range []string{"time", "level", "msg"} {
@@ -147,8 +147,8 @@ func TestPackageOverride(t *testing.T) {
 	pc := pcs[0]
 
 	out := capture(t, "LOG_LEVEL=warn", "LOG_LEVEL_LOGGING_TEST=debug")
-	assert.True(t, logging.Enabled(pc, slog.LevelDebug), "this package is lowered to debug")
-	assert.False(t, logging.Enabled(0, slog.LevelDebug), "without a caller the global level applies")
+	assert.True(t, logging.Enabled(slog.LevelDebug, 0), "this package is lowered to debug")
+	assert.False(t, logging.Enabled(logging.LevelTrace, 0), "but not to trace")
 	logging.Log(t.Context(), pc, slog.LevelDebug, "from logging_test")
 	logging.Log(t.Context(), 0, slog.LevelInfo, "from nowhere")
 	lines := out.Lines()
@@ -174,10 +174,7 @@ func TestStandardLogGoesThroughTheModule(t *testing.T) {
 // An empty LOG_LEVEL_<PKG> is no override (it would pin the package to info).
 func TestEmptyPackageOverrideIsIgnored(t *testing.T) {
 	capture(t, "LOG_LEVEL=debug", "LOG_LEVEL_LOGGING_TEST= ")
-	assert.False(t, logging.HasOverrides())
-	var pcs [1]uintptr
-	runtime.Callers(1, pcs[:])
-	assert.True(t, logging.Enabled(pcs[0], slog.LevelDebug), "the global level applies")
+	assert.True(t, logging.Enabled(slog.LevelDebug, 0), "the global level applies, not info")
 }
 
 func TestStartLine(t *testing.T) {

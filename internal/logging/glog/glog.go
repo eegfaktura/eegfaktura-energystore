@@ -4,7 +4,7 @@
 //	Info*                 info
 //	Warning*              warn
 //	Error*                error
-//	Fatal*, Exit*         error, then the process exits (255 / 1, as glog)
+//	Fatal*, Exitf         error, then the process exits (255 / 1, as glog)
 //	V(1..3).Info*         debug
 //	V(4+).Info*           trace
 //
@@ -74,17 +74,10 @@ func vLevel(l Level) slog.Level {
 	return slog.LevelDebug
 }
 
-// V reports whether verbosity level l is on for the calling package. The caller's stack is read
-// only when a per-package override could change the answer (V is called on hot paths).
+// V reports whether verbosity level l is on for the calling package.
 func V(l Level) Verbose {
 	lv := vLevel(l)
-	if !logging.EnabledAnywhere(lv) {
-		return Verbose{level: lv}
-	}
-	if !logging.HasOverrides() {
-		return Verbose{enabled: true, level: lv}
-	}
-	return Verbose{enabled: logging.Enabled(callerPC(), lv), level: lv}
+	return Verbose{enabled: logging.Enabled(lv, 1), level: lv}
 }
 
 // Enabled replaces glog's `if glog.V(n) {`.
@@ -143,13 +136,6 @@ func Exitf(format string, args ...any) {
 }
 
 var exit = os.Exit
-
-// callerPC is the pc of the function that called the exported glog function.
-func callerPC() uintptr {
-	var pcs [1]uintptr
-	runtime.Callers(3, pcs[:]) // Callers, callerPC, the glog function
-	return pcs[0]
-}
 
 // emit writes a line outside an HTTP request.
 func emit(l slog.Level, msg string, args []any) { write(context.Background(), l, msg, args) }

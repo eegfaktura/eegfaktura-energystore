@@ -33,10 +33,6 @@ import (
 // ServiceName is service.name in every line.
 const ServiceName = "eegfaktura-energystore"
 
-// Version is service.version in every line: SERVICE_VERSION, set by the image build (Dockerfile
-// ARG/ENV from the release workflow), default "dev".
-var Version = "dev"
-
 // LevelTrace is below slog's debug: payload shapes, only locally.
 const LevelTrace = slog.Level(-8)
 
@@ -56,11 +52,10 @@ func Check() error { return startErr }
 // Snapshot returns a func that puts the configuration in use now back (for tests that call
 // Configure; see internal/testsupport/logcapture).
 func Snapshot() (restore func()) {
-	h, d, v := cur.Load(), slog.Default(), Version
+	h, d := cur.Load(), slog.Default()
 	return func() {
 		cur.Store(h)
 		slog.SetDefault(d)
-		Version = v
 	}
 }
 
@@ -74,9 +69,11 @@ func Configure(env []string, out io.Writer) error {
 		k, v, _ := strings.Cut(kv, "=")
 		vars[k] = v
 	}
-	Version = "dev"
+	// service.version: SERVICE_VERSION, set by the image build (Dockerfile ARG/ENV from the release
+	// workflow), default "dev".
+	version := "dev"
 	if v := strings.TrimSpace(vars["SERVICE_VERSION"]); v != "" {
-		Version = v
+		version = v
 	}
 	format := strings.ToLower(strings.TrimSpace(vars["LOG_FORMAT"]))
 	if format == "" {
@@ -114,7 +111,7 @@ func Configure(env []string, out io.Writer) error {
 	}
 	base := []slog.Attr{
 		slog.String("service.name", ServiceName),
-		slog.String("service.version", Version),
+		slog.String("service.version", version),
 	}
 	if v := strings.TrimSpace(vars["DEPLOYMENT_ENVIRONMENT"]); v != "" {
 		base = append(base, slog.String("deployment.environment", v))
@@ -180,17 +177,21 @@ func replaceAttr(groups []string, a slog.Attr) slog.Attr {
 	return a
 }
 
-// Enabled reports whether a line at level l from the caller pc would be written (pc 0: the
-// global level only).
-func Enabled(pc uintptr, l slog.Level) bool { return cur.Load().levelFor(pc) <= l }
-
-// EnabledAnywhere reports whether level l reaches the global level or any package override; it
-// needs no caller pc.
-func EnabledAnywhere(l slog.Level) bool { return l >= cur.Load().min }
-
-// HasOverrides reports whether a LOG_LEVEL_<PKG> override is set (only then the caller's package
-// matters).
-func HasOverrides() bool { return len(cur.Load().overrides) > 0 }
+// Enabled reports whether a line at level l would be written for the function skip frames above
+// the caller of Enabled (glog.V passes 1: its own caller). The stack is read only when a package
+// override could change the answer, since V is called on hot paths.
+func Enabled(l slog.Level, skip int) bool {
+	h := cur.Load()
+	if l < h.min {
+		return false
+	}
+	if len(h.overrides) == 0 {
+		return true // min is the global level
+	}
+	var pcs [1]uintptr
+	runtime.Callers(skip+2, pcs[:]) // Callers, Enabled
+	return h.levelOf(function(pcs[0])) <= l
+}
 
 // handler applies LOG_LEVEL and the per-package overrides, and adds log.origin and the request
 // ids carried in the context.
@@ -224,7 +225,11 @@ const auditOperator = "audit.operator"
 var auditEvents = map[string]bool{"rawdata.delete.done": true, "rawdata.delete.failed": true}
 
 func (h *handler) Handle(ctx context.Context, r slog.Record) error {
-	if r.Level < h.levelFor(r.PC) {
+	var origin runtime.Frame // resolved once: for the package level and log.origin
+	if r.PC != 0 {
+		origin, _ = runtime.CallersFrames([]uintptr{r.PC}).Next()
+	}
+	if r.Level < h.levelOf(origin.Function) {
 		return nil
 	}
 	if r.NumAttrs() > 0 {
@@ -244,12 +249,9 @@ func (h *handler) Handle(ctx context.Context, r slog.Record) error {
 		})
 		r = kept
 	}
-	if r.PC != 0 {
-		f, _ := runtime.CallersFrames([]uintptr{r.PC}).Next()
-		if f.File != "" {
-			r.AddAttrs(slog.String("log.origin.file.name", path.Base(path.Dir(f.File))+"/"+path.Base(f.File)),
-				slog.Int("log.origin.file.line", f.Line))
-		}
+	if origin.File != "" {
+		r.AddAttrs(slog.String("log.origin.file.name", path.Base(path.Dir(origin.File))+"/"+path.Base(origin.File)),
+			slog.Int("log.origin.file.line", origin.Line))
 	}
 	if ids := idsFrom(ctx); ids != nil {
 		r.AddAttrs(slog.String("request.id", ids.requestID))
@@ -283,22 +285,27 @@ func (h *handler) WithGroup(name string) slog.Handler {
 	return &c
 }
 
-// levelFor is the level that applies to the package of pc.
-func (h *handler) levelFor(pc uintptr) slog.Level {
-	if len(h.overrides) == 0 || pc == 0 {
+// levelOf is the level that applies to the package of fn ("" : the global level).
+func (h *handler) levelOf(fn string) slog.Level {
+	if len(h.overrides) == 0 || fn == "" {
 		return h.global
 	}
-	if l, ok := h.overrides[packageOf(pc)]; ok {
+	if l, ok := h.overrides[packageOf(fn)]; ok {
 		return l
 	}
 	return h.global
 }
 
-// packageOf is the last element of the import path of the function at pc, in lower case
-// ("at.ourproject/energystore/store/ebow.(*DB).Get" → "ebow").
-func packageOf(pc uintptr) string {
+// function is the name of the function at pc.
+func function(pc uintptr) string {
 	f, _ := runtime.CallersFrames([]uintptr{pc}).Next()
-	name := f.Function
+	return f.Function
+}
+
+// packageOf is the last element of the import path of function fn, in lower case
+// ("at.ourproject/energystore/store/ebow.(*DB).Get" → "ebow").
+func packageOf(fn string) string {
+	name := fn
 	if i := strings.LastIndex(name, "/"); i >= 0 {
 		name = name[i+1:]
 	}
