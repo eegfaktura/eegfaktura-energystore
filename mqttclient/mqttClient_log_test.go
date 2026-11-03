@@ -1,15 +1,12 @@
 package mqttclient
 
 import (
-	"bytes"
 	"errors"
-	"os"
 	"testing"
 
-	"at.ourproject/energystore/internal/logging"
+	"at.ourproject/energystore/internal/testsupport/logcapture"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // clientWithSecret stands for paho's client, whose printed form holds the connection options.
@@ -19,9 +16,7 @@ type clientWithSecret struct {
 }
 
 func TestConnectionLostLogsOnlyTheError(t *testing.T) {
-	var out bytes.Buffer
-	require.NoError(t, logging.Configure(nil, &out))
-	t.Cleanup(func() { _ = logging.Configure(os.Environ(), os.Stdout) })
+	out := logcapture.Capture(t)
 
 	clientOptions().OnConnectionLost(&clientWithSecret{Password: "s3cret"}, errors.New("broker gone"))
 

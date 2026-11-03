@@ -1,42 +1,20 @@
 package glog
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"flag"
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"strings"
 	"testing"
 
 	"at.ourproject/energystore/internal/logging"
+	"at.ourproject/energystore/internal/testsupport/logcapture"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func capture(t *testing.T, env ...string) *bytes.Buffer {
-	t.Helper()
-	out := &bytes.Buffer{}
-	require.NoError(t, logging.Configure(env, out))
-	t.Cleanup(func() { _ = logging.Configure(os.Environ(), os.Stdout) })
-	return out
-}
-
-func records(t *testing.T, out *bytes.Buffer) []map[string]any {
-	t.Helper()
-	var rs []map[string]any
-	for _, line := range strings.Split(strings.TrimSpace(out.String()), "\n") {
-		if line == "" {
-			continue
-		}
-		m := map[string]any{}
-		require.NoError(t, json.Unmarshal([]byte(line), &m), line)
-		rs = append(rs, m)
-	}
-	return rs
-}
+var capture = logcapture.Capture
 
 func TestLevelsOfTheGlogCalls(t *testing.T) {
 	out := capture(t, "LOG_LEVEL=trace")
@@ -53,7 +31,7 @@ func TestLevelsOfTheGlogCalls(t *testing.T) {
 
 	want := [][2]string{{"info", "i"}, {"info", "if 1"}, {"warn", "w"}, {"warn", "wf"}, {"error", "e"},
 		{"error", "ef"}, {"debug", "v1"}, {"debug", "v3"}, {"trace", "v4"}, {"trace", "v6"}}
-	rs := records(t, out)
+	rs := out.Records(t)
 	require.Len(t, rs, len(want))
 	for i, w := range want {
 		assert.Equal(t, w[0], rs[i]["log.level"], w[1])
@@ -67,7 +45,7 @@ func TestVerbosityFollowsLogLevel(t *testing.T) {
 	assert.False(t, V(1).Enabled())
 	V(3).Infof("hidden")
 	Info("shown")
-	require.Len(t, records(t, out), 1)
+	require.Len(t, out.Records(t), 1)
 
 	capture(t, "LOG_LEVEL=debug")
 	assert.True(t, V(3).Enabled())
@@ -87,7 +65,7 @@ func TestErrorArgumentBecomesErrorFields(t *testing.T) {
 	out := capture(t)
 	Error(errors.New("disk full"))
 	Errorf("open: %v", os.ErrNotExist)
-	rs := records(t, out)
+	rs := out.Records(t)
 	require.Len(t, rs, 2)
 	assert.Equal(t, "disk full", rs[0]["error.message"])
 	assert.Equal(t, "*errors.errorString", rs[0]["error.type"])
@@ -103,18 +81,19 @@ func TestFatalAndExit(t *testing.T) {
 	Fatalf("ff %d", 1)
 	Exitf("ef")
 	assert.Equal(t, []int{255, 255, 1}, codes)
-	for _, r := range records(t, out) {
+	for _, r := range out.Records(t) {
 		assert.Equal(t, "error", r["log.level"])
 	}
 }
 
-// The deployment still passes the glog flags (gitops: -logtostderr=true -stderrthreshold=INFO -v=3);
+// The prod deployment still passes the glog flags until gitops#160 (-logtostderr=true -stderrthreshold=INFO -v=3);
 // they must not stop the start.
 func TestFormerGlogFlagsAreAccepted(t *testing.T) {
-	fs := flag.CommandLine
+	fs := flag.NewFlagSet("energystore", flag.ContinueOnError)
+	registerFlags(fs)
 	require.NoError(t, fs.Parse([]string{"-logtostderr", "-alsologtostderr=false", "-stderrthreshold=INFO", "-v=3",
 		"-vmodule=x=2", "-log_dir=/tmp"}))
-	assert.ElementsMatch(t, []string{"v=3", "vmodule=x=2"}, IgnoredFlags())
+	assert.ElementsMatch(t, []string{"v=3", "vmodule=x=2"}, ignoredFlags(fs))
 }
 
 func TestContextCallsCarryTheIdsOfTheRequest(t *testing.T) {
@@ -131,7 +110,7 @@ func TestContextCallsCarryTheIdsOfTheRequest(t *testing.T) {
 	h.ServeHTTP(httptest.NewRecorder(), req)
 
 	want := [][2]string{{"warn", "w"}, {"warn", "wf 1"}, {"error", "boom"}, {"error", "ef bang"}}
-	rs := records(t, out)
+	rs := out.Records(t)
 	require.Len(t, rs, len(want)+1, "and the access line")
 	for i, w := range want {
 		assert.Equal(t, w[0], rs[i]["log.level"], w[1])

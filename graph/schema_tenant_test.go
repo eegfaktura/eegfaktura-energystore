@@ -1,14 +1,12 @@
 package graph
 
 import (
-	"bytes"
 	"context"
 	"errors"
-	"os"
 	"strings"
 	"testing"
 
-	"at.ourproject/energystore/internal/logging"
+	"at.ourproject/energystore/internal/testsupport/logcapture"
 	"at.ourproject/energystore/tenantctx"
 	"github.com/99designs/gqlgen/graphql"
 )
@@ -40,11 +38,7 @@ func TestResolversRejectWithoutCheckedTenant(t *testing.T) {
 // The tenant argument is chosen by the client: a refusal says so, it does not repeat the value
 // (dev#45 L2).
 func TestRefusalLinesDoNotRepeatTheTenantArgument(t *testing.T) {
-	var out bytes.Buffer
-	if err := logging.Configure(nil, &out); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = logging.Configure(os.Environ(), os.Stdout) })
+	out := logcapture.Capture(t)
 	r := &Resolver{}
 	ctx := tenantctx.WithCaller(context.Background(), "TE100001", false)
 	const chosen = "CLIENT-CHOSEN-TENANT"

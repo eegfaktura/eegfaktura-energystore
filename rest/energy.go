@@ -70,7 +70,7 @@ func queryRawData() middleware.JWTHandlerFunc {
 
 		resp, err := store.QueryRawData(tenant, request.EcId, time.UnixMilli(request.Start), time.UnixMilli(request.End), cps, r.URL.Query())
 		if err != nil {
-			respondWithQueryError(r.Context(), w, http.StatusBadRequest, tenant, err)
+			respondWithQueryError(r.Context(), w, http.StatusBadRequest, err)
 			return
 		}
 

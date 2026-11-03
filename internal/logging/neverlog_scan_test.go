@@ -11,11 +11,80 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode"
 )
 
-var verb = regexp.MustCompile(`%[-+# 0]*[0-9]*(?:\.[0-9]+)?[a-zA-Z%]`)
+// neverLogWords is the list of all services (dev#45, amended 2026-11-03). An identifier is split into
+// words (camelCase, snake_case) and a run of up to three words, joined, is compared with an entry,
+// also with a trailing s: "FirstName", "first_name" and "firstname" are "firstname", "IBANs" is
+// "iban". In an identifier all in lower case, an entry of five or more letters also matches inside
+// a word ("accesstoken"); shorter ones stay whole words ("subscription" is not "sub").
+var neverLogWords = map[string]bool{}
 
-var errorType = types.Universe.Lookup("error").Type().Underlying().(*types.Interface)
+func init() {
+	for _, w := range strings.Fields(`password passwd pwd secret token jwt bearer authorization credential
+		creds cookie apikey iban bic firstname lastname vorname nachname name1 name2 street phone email
+		mailaddress recipient sentto owner accountholder username userid sub subject payload body`) {
+		neverLogWords[w] = true
+	}
+}
+
+// words splits an identifier: "basicAuthHeader" → basic auth header, "HTTPServer" → http server,
+// "user_id" → user id, "Name1" → name1.
+func words(id string) []string {
+	var ws []string
+	rs := []rune(id)
+	start := 0
+	cut := func(end, next int) {
+		if end > start {
+			ws = append(ws, strings.ToLower(string(rs[start:end])))
+		}
+		start = next
+	}
+	for i, r := range rs {
+		switch {
+		case r == '_' || r == '-' || r == '.':
+			cut(i, i+1)
+		case i > start && unicode.IsUpper(r):
+			prev := rs[i-1]
+			// "HTTPServer": the acronym ends before "Server"; "IBANs": a plural s is no word of its own
+			pluralS := i+1 < len(rs) && rs[i+1] == 's' && (i+2 == len(rs) || !unicode.IsLower(rs[i+2]))
+			endOfAcronym := unicode.IsUpper(prev) && i+1 < len(rs) && unicode.IsLower(rs[i+1]) && !pluralS
+			if unicode.IsLower(prev) || unicode.IsDigit(prev) || endOfAcronym {
+				cut(i, i)
+			}
+		}
+	}
+	cut(len(rs), len(rs))
+	return ws
+}
+
+// sensitiveName reports whether an identifier names a value of the list.
+func sensitiveName(id string) bool {
+	ws := words(id)
+	for i := range ws {
+		joined := ""
+		for j := i; j < len(ws) && j < i+3; j++ {
+			joined += ws[j]
+			if neverLogWords[joined] || neverLogWords[strings.TrimSuffix(joined, "s")] {
+				return true
+			}
+		}
+	}
+	if id == strings.ToLower(id) {
+		for w := range neverLogWords {
+			if len(w) >= 5 && strings.Contains(id, w) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// labelBeforeVerb is the word right in front of a verb of a format: "password=%s", "token: %v".
+var labelBeforeVerb = regexp.MustCompile(`([\pL\pN_]+)[ =:'"(\[-]{0,3}$`)
+
+var verb = regexp.MustCompile(`%[-+# 0]*[0-9]*(?:\.[0-9]+)?[a-zA-Z%]`)
 
 // isLogCall: the calls that write a line or build a field of one.
 func isLogCall(fn *types.Func) bool {
@@ -30,10 +99,15 @@ func isLogCall(fn *types.Func) bool {
 		return has("Info", "Warning", "Error", "Fatal", "Exit")
 	case module + "/internal/logging":
 		return fn.Name() == "Log" || fn.Name() == "Event" || fn.Name() == "AuditOperator"
-	case "log/slog":
-		return fn.Name() != "New" && fn.Name() != "SetDefault"
+	case "log/slog": // the functions and Logger methods that write or build fields, not the handler side
+		if recv := fn.Signature().Recv(); recv != nil {
+			return strings.HasSuffix(types.TypeString(recv.Type(), nil), "slog.Logger")
+		}
+		return !strings.HasPrefix(fn.Name(), "New") && !strings.HasPrefix(fn.Name(), "Set")
 	case "log":
 		return has("Print", "Fatal", "Panic")
+	case "fmt": // stdout ends up in the container log as well (as in the backend)
+		return fn.Name() == "Print" || fn.Name() == "Println" || fn.Name() == "Printf"
 	}
 	return false
 }
@@ -53,38 +127,68 @@ func calledFunc(call *ast.CallExpr, info *types.Info) *types.Func {
 	return fn
 }
 
-func isDumpPackage(path string) bool {
-	return path == module || strings.HasPrefix(path, module+"/") || slices.Contains(dumpPackages, path)
+// clientPackages hold client interfaces whose dynamic value prints its options.
+var clientPackages = []string{
+	"github.com/eclipse/paho.mqtt.golang", "net/http", "github.com/coreos/go-oidc/v3/oidc",
+	"github.com/golang-jwt/jwt/v4", "google.golang.org/grpc",
 }
 
-func implementsError(t types.Type) bool {
-	return types.Implements(t, errorType) || types.Implements(types.NewPointer(t), errorType)
+func isClientPackage(path string) bool {
+	return path == module || strings.HasPrefix(path, module+"/") || slices.Contains(clientPackages, path)
 }
 
-// dumpType is the model or client type inside t, "" if there is none.
-func dumpType(t types.Type) string {
+// printsItself: an error or a fmt.Stringer prints what it chooses, not its fields. Only the method
+// set of t counts (addressable false): fmt does not call a pointer-receiver String on a value.
+func printsItself(t types.Type) bool {
+	for _, name := range []string{"Error", "String"} {
+		obj, _, _ := types.LookupFieldOrMethod(t, false, nil, name)
+		if f, ok := obj.(*types.Func); ok {
+			sig := f.Signature()
+			if sig.Params().Len() == 0 && sig.Results().Len() == 1 && types.Identical(sig.Results().At(0).Type(), types.Typ[types.String]) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// printedWhole is the type inside t that a line would print field by field: any struct (as in the
+// backend), http.Header, or a client interface of this module or clientPackages. "" if none.
+func printedWhole(t types.Type) string {
+	if t == nil || printsItself(t) {
+		return ""
+	}
 	switch t := types.Unalias(t).(type) {
 	case *types.Pointer:
-		return dumpType(t.Elem())
+		return printedWhole(t.Elem())
 	case *types.Slice:
-		return dumpType(t.Elem())
+		return printedWhole(t.Elem())
 	case *types.Array:
-		return dumpType(t.Elem())
+		return printedWhole(t.Elem())
 	case *types.Map:
-		return cmp.Or(dumpType(t.Key()), dumpType(t.Elem()))
+		return cmp.Or(printedWhole(t.Key()), printedWhole(t.Elem()))
+	case *types.Struct:
+		return "struct"
 	case *types.Named:
 		pkg := t.Obj().Pkg()
-		if pkg == nil || !isDumpPackage(pkg.Path()) || implementsError(t) {
+		name := t.Obj().Name()
+		if pkg == nil {
 			return ""
 		}
+		name = pkg.Name() + "." + name
 		if pkg.Path() == "net/http" && t.Obj().Name() == "Header" {
-			return "http.Header"
+			return name // holds Authorization and cookies
 		}
 		switch u := t.Underlying().(type) {
-		case *types.Struct, *types.Interface:
-			return pkg.Name() + "." + t.Obj().Name()
+		case *types.Struct:
+			return name
+		case *types.Interface:
+			if isClientPackage(pkg.Path()) {
+				return name
+			}
+			return ""
 		default:
-			return dumpType(u)
+			return printedWhole(u)
 		}
 	}
 	return ""
@@ -95,40 +199,50 @@ func carriesText(t types.Type) bool {
 	if b, ok := t.Underlying().(*types.Basic); ok && b.Info()&(types.IsNumeric|types.IsBoolean) != 0 {
 		return false
 	}
-	return !implementsError(t)
+	return !types.Implements(t, errorType) && !types.Implements(types.NewPointer(t), errorType)
 }
 
-// scanner collects the findings of one package.
+var errorType = types.Universe.Lookup("error").Type().Underlying().(*types.Interface)
+
+// scanner collects the findings of the scanned packages.
 type scanner struct {
 	fset     *token.FileSet
 	info     *types.Info
 	root     string
-	calls    int
-	call     string          // the log call being scanned, "logging.AuditOperator"
-	findings map[string]bool // "file:line: finding"
-	used     map[int]bool    // the neverLogAllowed entries that matched
+	call     string            // the log call being scanned, "logging.AuditOperator"
+	findings map[string]string // "file:line: finding" → its neverLogAllowed key
+	used     map[string]bool   // the neverLogAllowed keys that matched
+	scanned  map[string]bool   // "file: call" of every log call scanned
 }
 
-func (s *scanner) report(pos token.Pos, finding string) {
-	for i, a := range neverLogAllowed {
-		if a.call == s.call && a.finding == finding {
-			s.used[i] = true
-			return
-		}
-	}
+func newScanner() *scanner {
+	return &scanner{fset: source.fset, root: source.root, findings: map[string]string{}, used: map[string]bool{}, scanned: map[string]bool{}}
+}
+
+// position is the file (relative to the module root) and line of pos.
+func (s *scanner) position(pos token.Pos) (string, int) {
 	p := s.fset.Position(pos)
 	file := p.Filename
 	if rel, err := filepath.Rel(s.root, file); err == nil {
 		file = filepath.ToSlash(rel)
 	}
-	s.findings[fmt.Sprintf("%s:%d: %s", file, p.Line, finding)] = true
+	return file, p.Line
+}
+
+func (s *scanner) report(pos token.Pos, finding string) {
+	file, line := s.position(pos)
+	key := fmt.Sprintf("%s: %s in %s(...)", file, finding, s.call)
+	if neverLogAllowed[key] != "" {
+		s.used[key] = true
+		return
+	}
+	s.findings[fmt.Sprintf("%s:%d: %s", file, line, finding)] = key
 }
 
 func (s *scanner) file(f *ast.File) {
 	ast.Inspect(f, func(n ast.Node) bool {
 		if call, ok := n.(*ast.CallExpr); ok {
 			if fn := calledFunc(call, s.info); fn != nil && isLogCall(fn) {
-				s.calls++
 				s.logCall(fn, call)
 			}
 		}
@@ -138,11 +252,13 @@ func (s *scanner) file(f *ast.File) {
 
 func (s *scanner) logCall(fn *types.Func, call *ast.CallExpr) {
 	s.call = fn.Pkg().Name() + "." + fn.Name()
+	file, _ := s.position(call.Pos())
+	s.scanned[file+": "+s.call] = true
 	s.args(fn, call.Args)
 	for _, arg := range call.Args { // a message built in place
 		ast.Inspect(arg, func(n ast.Node) bool {
 			if c, ok := n.(*ast.CallExpr); ok {
-				if f := calledFunc(c, s.info); f != nil && f.Pkg() != nil && f.Pkg().Path() == "fmt" {
+				if f := calledFunc(c, s.info); f != nil && f.Pkg() != nil && f.Pkg().Path() == "fmt" && !isLogCall(f) {
 					s.args(f, c.Args)
 				}
 			}
@@ -151,39 +267,39 @@ func (s *scanner) logCall(fn *types.Func, call *ast.CallExpr) {
 	}
 }
 
+// args: the format text is read for dump verbs only (string literals are not scanned for names);
+// every other argument for what it prints.
 func (s *scanner) args(fn *types.Func, args []ast.Expr) {
-	format := -1
+	format := strings.HasSuffix(fn.Name(), "f")
 	for i, arg := range args {
 		tv := s.info.Types[arg]
-		if tv.Value == nil || tv.Value.Kind() != constant.String {
-			s.value(arg, tv.Type)
+		if tv.Value != nil && tv.Value.Kind() == constant.String {
+			if format {
+				format = false
+				s.format(arg, constant.StringVal(tv.Value), args[i+1:])
+			}
 			continue
 		}
-		text := constant.StringVal(tv.Value)
-		if format < 0 && strings.HasSuffix(fn.Name(), "f") {
-			format = i
-			s.format(arg, text, args[i+1:])
-		} else if fn.Pkg().Path() == "log/slog" && sensitive.MatchString(text) {
-			s.report(arg.Pos(), "key "+text)
-		}
+		s.value(arg, tv.Type)
 	}
 }
 
+// format reads a format text for dump verbs, and for a word of the list right in front of a verb
+// whose value carries text (the only place a literal is read for names).
 func (s *scanner) format(lit ast.Expr, text string, values []ast.Expr) {
-	n := 0
-	last := 0
+	n, last := 0, 0
 	for _, m := range verb.FindAllStringIndex(text, -1) {
-		v := text[m[0]:m[1]]
-		before := text[last:m[0]]
+		v, before := text[m[0]:m[1]], text[last:m[0]]
 		last = m[1]
-		if strings.HasSuffix(v, "%") {
+		if v == "%%" {
 			continue
 		}
 		if strings.HasSuffix(v, "v") && strings.ContainsAny(v, "+#") {
 			s.report(lit.Pos(), "dump verb "+v)
 		}
-		if n < len(values) && carriesText(s.info.TypeOf(values[n])) && labelled.MatchString(before) {
-			s.report(lit.Pos(), "label "+strings.TrimSpace(labelled.FindString(before)))
+		if l := labelBeforeVerb.FindStringSubmatch(before); l != nil && sensitiveName(l[1]) &&
+			n < len(values) && carriesText(s.info.TypeOf(values[n])) {
+			s.report(lit.Pos(), "label "+l[1])
 		}
 		n++
 	}
@@ -193,8 +309,8 @@ func (s *scanner) value(arg ast.Expr, t types.Type) {
 	if t == nil {
 		return
 	}
-	if d := dumpType(t); d != "" {
-		s.report(arg.Pos(), "type "+d)
+	if w := printedWhole(t); w != "" {
+		s.report(arg.Pos(), "type "+w)
 	}
 	if !carriesText(t) {
 		return
@@ -205,8 +321,10 @@ func (s *scanner) value(arg ast.Expr, t types.Type) {
 				return false // scanned as a log call of its own
 			}
 		}
-		if id, ok := n.(*ast.Ident); ok && sensitive.MatchString(id.Name) {
-			s.report(id.Pos(), "name "+id.Name)
+		if id, ok := n.(*ast.Ident); ok && sensitiveName(id.Name) {
+			if _, pkg := s.info.Uses[id].(*types.PkgName); !pkg {
+				s.report(id.Pos(), "name "+id.Name)
+			}
 		}
 		return true
 	})

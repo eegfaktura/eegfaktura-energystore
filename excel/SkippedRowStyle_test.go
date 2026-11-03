@@ -1,14 +1,12 @@
 package excel
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 
-	"at.ourproject/energystore/internal/logging"
+	"at.ourproject/energystore/internal/testsupport/logcapture"
 	"at.ourproject/energystore/store/ebow"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,12 +29,9 @@ func skippedRowWorkbook(t *testing.T) (*excelize.File, int) {
 	return f, style
 }
 
-func captureLog(t *testing.T) *bytes.Buffer {
+func captureLog(t *testing.T) *logcapture.Buffer {
 	t.Helper()
-	out := &bytes.Buffer{}
-	require.NoError(t, logging.Configure([]string{"LOG_LEVEL=info"}, out))
-	t.Cleanup(func() { _ = logging.Configure(os.Environ(), os.Stdout) })
-	return out
+	return logcapture.Capture(t, "LOG_LEVEL=info")
 }
 
 // Skipped rows give one warning per sheet with the count, the first skipped row and the style of

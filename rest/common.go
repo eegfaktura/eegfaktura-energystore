@@ -32,12 +32,12 @@ func respondWithError(w http.ResponseWriter, code int, message string) {
 // respondWithQueryError answers an error of a data query. A read error of the store (ebow.ErrReadRecord)
 // may carry local file paths in its cause: it is logged, the client gets a generic text (#31). Other
 // errors are passed through as before.
-func respondWithQueryError(ctx context.Context, w http.ResponseWriter, code int, tenant string, err error) {
+func respondWithQueryError(ctx context.Context, w http.ResponseWriter, code int, err error) {
 	if refuseTenant(w, err) {
 		return
 	}
 	if errors.Is(err, ebow.ErrReadRecord) {
-		glog.ErrorContextf(ctx, "%v tenant=%s", err, tenant)
+		glog.ErrorContextf(ctx, "%v", err) // the tenant is in tenant.id
 	}
 	respondWithError(w, code, ebow.ClientMessage(err))
 }
@@ -60,10 +60,10 @@ func respondWithHttpError(w http.ResponseWriter, httpCode int, error *HttpError)
 	respondWithJSON(w, httpCode, map[string]interface{}{"error": error})
 }
 
-func respondWith(ctx context.Context, w http.ResponseWriter, httpCode int, tenant, data interface{}) {
+func respondWith(ctx context.Context, w http.ResponseWriter, httpCode int, data interface{}) {
 	switch e := data.(type) {
 	case *model.VfeegError:
-		glog.ErrorContextf(ctx, "%v tenant=%s", e.Error(), tenant)
+		glog.ErrorContextf(ctx, "%v", e.Error()) // the tenant is in tenant.id
 		httpStatus := e.HttpCode
 		if httpStatus == 0 {
 			httpStatus = httpCode

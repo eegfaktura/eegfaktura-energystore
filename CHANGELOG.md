@@ -9,17 +9,20 @@ this changelog highlights the changes relevant for overview and operations.
 ## [Unreleased]
 
 ### Added
-- **Start-up line and `deployment.environment`** (dev#45 L14). At start the service writes one line with
-  `event.action` = `service.start`, `service.version` and `log.effective_level` (the root level, one plain value as in
-  all services; package overrides are named in the message text), at every `LOG_LEVEL` and without any other setting. The new environment
+- **Start-up line and `deployment.environment`** (dev#45 L14, Q8). At start the service writes one line with the
+  message `service start`, `event.action` = `service.start`, `service.version` and `log.effective_level` (the root
+  level, one plain value as in all services), at info whatever `LOG_LEVEL` says and without any other setting. The new environment
   variable `DEPLOYMENT_ENVIRONMENT` sets `deployment.environment` on every line; unset or blank, the field is left
   out. It is set per zone in the deployment.
-- **Never-log test** (dev#45 L11). `internal/logging` reads the source of every package with the Go type checker. A
-  log call fails the suite when it uses `%+v` or `%#v`, gets a value of a model or client type with any verb, or
-  names a personal or secret value (first and last name, e-mail, IBAN, password, secret, token, user name, user id,
-  subject, authorization, bearer, credentials, Basic auth, payload, body). `http.Header` counts as a client type. A
-  legitimate exception needs an entry with its reason, keyed on the log call; `AuditOperator` for `audit.operator` on
-  the raw data deletion is the only one. Metering-point numbers are ids and may be logged.
+- **Never-log test** (dev#45 L11, Q2). `internal/logging` reads the source of every package with the Go type checker.
+  A log call (glog, `internal/logging`, `log/slog`, `log`, `fmt.Print*`) fails the suite when it uses `%+v` or `%#v`,
+  gets a value that prints field by field with any verb (any struct, `http.Header`, a client interface; errors and
+  Stringers excepted), or has an identifier with a word of the never-log list of all services (split into camelCase
+  and snake_case words, compared as whole words, also with a plural s; in an all-lower-case identifier a list word of
+  five or more letters also matches inside it), or such a word right before a verb of the format (`password=%s`).
+  Other string literals are not scanned. A legitimate exception needs an entry keyed by file, finding and log call
+  with its reason; `audit.operator` in `logging.AuditOperator` in `rest/restServer.go` is the only one.
+  Metering-point numbers are ids and may be logged.
 
 ### Changed
 - **`request.id` and `tenant.id` on the warn and error lines of an HTTP request** (dev#45 L12), not only on the
@@ -34,7 +37,19 @@ this changelog highlights the changes relevant for overview and operations.
   ...`, now `Energie Values <code>: source <n> not in the <m> data blocks`. Lines that used `%+v` on plain values keep
   their output.
 
+- **Logging clean-up after the code-quality review** (dev#45 Q1, Q4, Q5, Q9). `tenant.id`, `request.id`,
+  `trace.id` and `span.id` come only from the request context: a caller can no longer set them, so a line never
+  carries them twice, and the tenant rule is applied in one place, where the field is written. Request lines no
+  longer repeat the tenant in the text (`tenant=...` in query errors, the billing check, the member metering points,
+  the export write error and the `RAWDATA-DELETE` audit line), it is in `tenant.id` (261102-mm1). The image no longer
+  passes `-logtostderr=true -stderrthreshold=INFO`; the flags are still accepted (prod gitops passes them until
+  gitops#160). The operator commands `move` and the reset function print the metering point name and index instead
+  of the whole meta record.
+
 ### Fixed
+- **A flushed response counts as begun** (dev#45 Q6). A handler that flushed and then panicked got a second
+  `WriteHeader(500)`; the connection is aborted now, as after a write.
+- **Start without the `api` Keycloak client panics with the reason** (dev#45 Q7), not with `nil`.
 - **No client-chosen tenant in the refusal lines** (dev#45 L2). A refused request no longer repeats the tenant of the
   `tenant` or `X-Tenant` header or of the GraphQL argument in the line text.
 - **No dump of the MQTT client on connection loss** (dev#45 L3). The line printed paho's client with its connection

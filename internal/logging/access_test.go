@@ -1,4 +1,4 @@
-package logging
+package logging_test
 
 import (
 	"errors"
@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"at.ourproject/energystore/internal/logging"
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,18 +25,18 @@ var accessFields = map[string]bool{
 	"request.id": true, "trace.id": true, "span.id": true,
 }
 
-// testRouter mimics the service: a mux route behind a token check that calls SetCaller.
+// testRouter mimics the service: a mux route behind a token check that calls logging.SetCaller.
 func testRouter(status int) http.Handler {
 	r := mux.NewRouter()
-	r.Use(MuxRoute)
+	r.Use(logging.MuxRoute)
 	r.HandleFunc("/eeg/{ecid}/thing", func(w http.ResponseWriter, r *http.Request) {
 		if status < 400 {
-			SetCaller(r.Context(), "TE100001", "at.ourproject.vfeeg.app")
+			logging.SetCaller(r.Context(), "TE100001", "at.ourproject.vfeeg.app")
 		}
 		w.WriteHeader(status)
 	})
 	r.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {})
-	return AccessLog(r)
+	return logging.AccessLog(r)
 }
 
 func sensitiveRequest() *http.Request {
@@ -56,7 +57,7 @@ func TestAccessLine(t *testing.T) {
 	testRouter(200).ServeHTTP(rec, req)
 
 	assert.Equal(t, "req-1", rec.Header().Get("X-Request-Id"))
-	lines := out.lines()
+	lines := out.Lines()
 	require.Len(t, lines, 1)
 	m := decode(t, lines[0])
 	assert.Equal(t, "http.access", m["event.action"])
@@ -76,7 +77,7 @@ func TestAccessLine(t *testing.T) {
 func TestAccessLineNeverLogs(t *testing.T) {
 	out := capture(t)
 	testRouter(200).ServeHTTP(httptest.NewRecorder(), sensitiveRequest())
-	line := out.lines()[0]
+	line := out.Lines()[0]
 	for k := range decode(t, line) {
 		assert.True(t, accessFields[k], "unexpected field %q in the access line", k)
 	}
@@ -91,7 +92,7 @@ func TestAccessLineRefusedAndUnmatched(t *testing.T) {
 	h := testRouter(403)
 	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/eeg/RC1/thing", nil))
 	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/nowhere/RC1", nil))
-	lines := out.lines()
+	lines := out.Lines()
 	require.Len(t, lines, 2)
 	refused := decode(t, lines[0])
 	assert.Equal(t, "refused", refused["event.outcome"])
@@ -118,7 +119,7 @@ func TestAccessLineRequestID(t *testing.T) {
 		h.ServeHTTP(rec, req)
 		assert.Regexp(t, `^[0-9a-f]{32}$`, rec.Header().Get("X-Request-Id"), "%q is replaced", id)
 	}
-	for _, line := range out.lines() {
+	for _, line := range out.Lines() {
 		assert.Regexp(t, `^[0-9a-f]{12}4[0-9a-f]{3}[89ab][0-9a-f]{15}$`, decode(t, line)["request.id"], "uuid4")
 	}
 	keep := strings.Repeat("a", 128)
@@ -130,9 +131,14 @@ func TestAccessLineRequestID(t *testing.T) {
 }
 
 func TestTraceparentValidation(t *testing.T) {
-	ok := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
-	_, _, valid := parseTraceparent(ok)
-	assert.True(t, valid)
+	traceID := func(tp string) any {
+		out := capture(t)
+		req := httptest.NewRequest("GET", "/x", nil)
+		req.Header.Set("traceparent", tp)
+		logging.AccessLog(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})).ServeHTTP(httptest.NewRecorder(), req)
+		return decode(t, out.Lines()[0])["trace.id"]
+	}
+	assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", traceID("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"))
 	for _, bad := range []string{
 		"ff-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
 		"00-00000000000000000000000000000000-00f067aa0ba902b7-01",
@@ -140,15 +146,14 @@ func TestTraceparentValidation(t *testing.T) {
 		"00-4BF92F3577B34DA6A3CE929D0E0E4736-00f067aa0ba902b7-01",
 		"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7",
 	} {
-		_, _, valid := parseTraceparent(bad)
-		assert.False(t, valid, bad)
+		assert.Nil(t, traceID(bad), bad)
 	}
 }
 
 func TestProbesAreNotLogged(t *testing.T) {
 	out := capture(t)
 	testRouter(200).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/healthz", nil))
-	assert.Equal(t, []string{""}, out.lines())
+	assert.Empty(t, out.Lines())
 }
 
 func TestPropagate(t *testing.T) {
@@ -157,28 +162,27 @@ func TestPropagate(t *testing.T) {
 	r := mux.NewRouter()
 	r.HandleFunc("/x", func(w http.ResponseWriter, r *http.Request) {
 		got = http.Header{}
-		Propagate(r.Context(), got)
+		logging.Propagate(r.Context(), got)
 	})
 	req := httptest.NewRequest("GET", "/x", nil)
 	req.Header.Set("X-Request-Id", "req-2")
 	req.Header.Set("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
-	AccessLog(r).ServeHTTP(httptest.NewRecorder(), req)
+	logging.AccessLog(r).ServeHTTP(httptest.NewRecorder(), req)
 	assert.Equal(t, "req-2", got.Get("X-Request-Id"))
 	// a child span: same trace id and flags, a new parent id
 	out := got.Get("traceparent")
 	assert.Regexp(t, `^00-4bf92f3577b34da6a3ce929d0e0e4736-[0-9a-f]{16}-01$`, out)
 	assert.NotEqual(t, "00f067aa0ba902b7", out[36:52], "not the incoming span id")
-	_, _, valid := parseTraceparent(out)
-	assert.True(t, valid)
+	assert.NotEqual(t, "0000000000000000", out[36:52], "a valid parent id")
 
 	// without an incoming traceparent: only X-Request-Id
 	req = httptest.NewRequest("GET", "/x", nil)
-	AccessLog(r).ServeHTTP(httptest.NewRecorder(), req)
+	logging.AccessLog(r).ServeHTTP(httptest.NewRecorder(), req)
 	assert.Regexp(t, `^[0-9a-f]{32}$`, got.Get("X-Request-Id"))
 	assert.Empty(t, got.Get("traceparent"))
 
 	h := http.Header{}
-	Propagate(t.Context(), h) // outside a request: nothing
+	logging.Propagate(t.Context(), h) // outside a request: nothing
 	assert.Empty(t, h)
 }
 
@@ -187,7 +191,7 @@ func TestAccessLogKeepsHijack(t *testing.T) {
 	capture(t)
 	// the handler runs on the server's goroutine: report back over a channel, no require there
 	hijackErr := make(chan error, 1)
-	h := AccessLog(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := logging.AccessLog(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hj, ok := w.(http.Hijacker)
 		if !ok {
 			hijackErr <- errors.New("statusWriter does not implement http.Hijacker")
@@ -208,24 +212,26 @@ func TestAccessLogKeepsHijack(t *testing.T) {
 	assert.NoError(t, <-hijackErr, "the handler hijacked the connection")
 
 	// a writer that cannot hijack reports an error instead of panicking
-	sw := &statusWriter{ResponseWriter: httptest.NewRecorder()}
-	_, _, err = sw.Hijack()
-	assert.Error(t, err)
+	logging.AccessLog(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _, err := w.(http.Hijacker).Hijack()
+		hijackErr <- err
+	})).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/x", nil))
+	assert.Error(t, <-hijackErr)
 }
 
 // A resolver panic is one JSON line through the module (not a plain stack on stderr); the client
 // gets a generic error.
 func TestGQLRecover(t *testing.T) {
 	out := capture(t)
-	err := GQLRecover(t.Context(), "nil map")
+	err := logging.GQLRecover(t.Context(), "nil map")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "internal system error")
-	m := decode(t, out.lines()[0])
+	m := decode(t, out.Lines()[0])
 	assert.Equal(t, "error", m["log.level"])
 	assert.Equal(t, "graphql.panic", m["event.action"])
 	assert.Equal(t, "string", m["error.type"])
 	assert.Equal(t, "nil map", m["error.message"])
-	assert.Contains(t, m["error.stack_trace"], "GQLRecover")
+	assert.Contains(t, m["error.stack_trace"], "logging.GQLRecover")
 }
 
 // A handler panic: one error line with error.* (no remote address), an access line with 500, and
@@ -233,15 +239,15 @@ func TestGQLRecover(t *testing.T) {
 func TestAccessLineHandlerPanic(t *testing.T) {
 	out := capture(t)
 	r := mux.NewRouter()
-	r.Use(MuxRoute)
+	r.Use(logging.MuxRoute)
 	r.HandleFunc("/eeg/{ecid}/thing", func(w http.ResponseWriter, r *http.Request) { panic("boom") })
 	req := httptest.NewRequest("GET", "/eeg/RC1/thing", nil)
 	req.RemoteAddr = "198.51.100.9:4711"
 	rec := httptest.NewRecorder()
-	AccessLog(r).ServeHTTP(rec, req)
+	logging.AccessLog(r).ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
-	lines := out.lines()
+	lines := out.Lines()
 	require.Len(t, lines, 2)
 	e := decode(t, lines[0])
 	assert.Equal(t, "error", e["log.level"])
@@ -259,14 +265,14 @@ func TestAccessLineHandlerPanic(t *testing.T) {
 // After the response has begun, the connection is aborted with http.ErrAbortHandler.
 func TestAccessLineHandlerPanicAfterWrite(t *testing.T) {
 	out := capture(t)
-	h := AccessLog(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := logging.AccessLog(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("partial"))
 		panic("late")
 	}))
 	assert.PanicsWithValue(t, http.ErrAbortHandler, func() {
 		h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/x", nil))
 	})
-	lines := out.lines()
+	lines := out.Lines()
 	require.Len(t, lines, 2)
 	assert.Equal(t, "late", decode(t, lines[0])["error.message"])
 	assert.EqualValues(t, 500, decode(t, lines[1])["http.response.status_code"])
@@ -276,16 +282,16 @@ func TestAccessLineHandlerPanicAfterWrite(t *testing.T) {
 // the access line gets tenant.id the same way, so it is written once.
 func TestLinesOfARequestCarryTheIds(t *testing.T) {
 	out := capture(t)
-	h := AccessLog(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		Log(r.Context(), 0, slog.LevelWarn, "before the check")
-		SetCaller(r.Context(), "TE100001", "at.ourproject.vfeeg.app")
-		Log(r.Context(), 0, slog.LevelError, "after the check")
+	h := logging.AccessLog(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logging.Log(r.Context(), 0, slog.LevelWarn, "before the check")
+		logging.SetCaller(r.Context(), "TE100001", "at.ourproject.vfeeg.app")
+		logging.Log(r.Context(), 0, slog.LevelError, "after the check")
 	}))
 	req := httptest.NewRequest("GET", "/eeg/RC100001/thing", nil)
 	req.Header.Set("X-Request-Id", "req-7")
 	h.ServeHTTP(httptest.NewRecorder(), req)
 
-	lines := out.lines()
+	lines := out.Lines()
 	require.Len(t, lines, 3)
 	before, after, access := decode(t, lines[0]), decode(t, lines[1]), decode(t, lines[2])
 	assert.Equal(t, "req-7", before["request.id"])
@@ -299,23 +305,23 @@ func TestLinesOfARequestCarryTheIds(t *testing.T) {
 // A line outside a request has neither.
 func TestLineOutsideARequestHasNoIds(t *testing.T) {
 	out := capture(t)
-	Log(t.Context(), 0, slog.LevelError, "mqtt")
-	m := decode(t, out.lines()[0])
+	logging.Log(t.Context(), 0, slog.LevelError, "mqtt")
+	m := decode(t, out.Lines()[0])
 	assert.NotContains(t, m, "request.id")
 	assert.NotContains(t, m, "tenant.id")
 }
 
 // tenant.id only for a value of the agreed form, upper-cased; the client stays either way.
-func TestSetCallerValidatesTheTenant(t *testing.T) {
+func TestTenantIDFollowsTheRule(t *testing.T) {
 	for in, want := range map[string]string{
 		"RC100123": "RC100123", "rc100123": "RC100123", "GC123456-001": "GC123456-001", "gc123456_002": "GC123456_002",
 		strings.Repeat("A", 64): strings.Repeat("A", 64),
 		strings.Repeat("A", 65): "", "": "", "-RC1": "", "_RC1": "", "RC 1": "", "RC1\n": "", `RC1"x`: "", "RC.1": "", "RC/1": "",
 	} {
 		out := capture(t)
-		h := AccessLog(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { SetCaller(r.Context(), in, "client") }))
+		h := logging.AccessLog(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { logging.SetCaller(r.Context(), in, "client") }))
 		h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/x", nil))
-		m := decode(t, out.lines()[0])
+		m := decode(t, out.Lines()[0])
 		assert.Equal(t, "client", m["client.id"], in)
 		if want == "" {
 			assert.NotContains(t, m, "tenant.id", in)
@@ -323,4 +329,39 @@ func TestSetCallerValidatesTheTenant(t *testing.T) {
 			assert.Equal(t, want, m["tenant.id"], in)
 		}
 	}
+}
+
+// A flush sends the header: a later panic aborts the connection instead of writing a second header.
+func TestAccessLineHandlerPanicAfterFlush(t *testing.T) {
+	out := capture(t)
+	h := logging.AccessLog(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.(http.Flusher).Flush()
+		panic("late")
+	}))
+	rec := httptest.NewRecorder()
+	assert.PanicsWithValue(t, http.ErrAbortHandler, func() {
+		h.ServeHTTP(rec, httptest.NewRequest("GET", "/x", nil))
+	})
+	assert.Equal(t, http.StatusOK, rec.Code, "the flushed header stays")
+	lines := out.Lines()
+	require.Len(t, lines, 2)
+	assert.Equal(t, "late", decode(t, lines[0])["error.message"])
+	assert.EqualValues(t, 500, decode(t, lines[1])["http.response.status_code"])
+}
+
+// noFlusher is a ResponseWriter that cannot flush.
+type noFlusher struct{ http.ResponseWriter }
+
+// A flush on a writer that cannot flush sends nothing: a later panic still gets its 500.
+func TestFlushWithoutFlusherDoesNotBeginTheResponse(t *testing.T) {
+	out := capture(t)
+	h := logging.AccessLog(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.(http.Flusher).Flush()
+		panic("early")
+	}))
+	rec := httptest.NewRecorder()
+	assert.NotPanics(t, func() { h.ServeHTTP(noFlusher{rec}, httptest.NewRequest("GET", "/x", nil)) })
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	require.Len(t, out.Lines(), 2)
+	assert.EqualValues(t, 500, decode(t, out.Lines()[1])["http.response.status_code"])
 }

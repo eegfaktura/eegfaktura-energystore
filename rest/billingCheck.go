@@ -49,7 +49,7 @@ func fetchBillingCheck() middleware.JWTHandlerFunc {
 			if refuseTenant(w, err) {
 				return
 			}
-			glog.ErrorContextf(r.Context(), "billing check failed: %v tenant=%s", err, tenant)
+			glog.ErrorContextf(r.Context(), "billing check failed: %v", err)
 			respondWithError(w, http.StatusInternalServerError, "billing check failed")
 			return
 		}

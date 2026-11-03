@@ -1,40 +1,23 @@
 package rest_test
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
-	"sync"
 	"testing"
 
 	"at.ourproject/energystore/internal/logging"
 	"at.ourproject/energystore/internal/testsupport/apitest"
 	"at.ourproject/energystore/internal/testsupport/fakeoidc"
+	"at.ourproject/energystore/internal/testsupport/logcapture"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-type lockedBuffer struct {
-	mu  sync.Mutex
-	buf bytes.Buffer
-}
-
-func (b *lockedBuffer) Write(p []byte) (int, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.Write(p)
-}
-
 // accessLine returns the http.access line of the request with X-Request-Id id.
-func (b *lockedBuffer) accessLine(t *testing.T, id string) (string, map[string]any) {
+func accessLine(t *testing.T, out *logcapture.Buffer, id string) (string, map[string]any) {
 	t.Helper()
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	for _, line := range strings.Split(b.buf.String(), "\n") {
-		m := map[string]any{}
-		if json.Unmarshal([]byte(line), &m) == nil && m["event.action"] == "http.access" && m["request.id"] == id {
+	for _, line := range out.Lines() {
+		if m := logcapture.Decode(t, line); m["event.action"] == "http.access" && m["request.id"] == id {
 			return line, m
 		}
 	}
@@ -47,9 +30,7 @@ func (b *lockedBuffer) accessLine(t *testing.T, id string) (string, map[string]a
 // bearer REST routes, GraphQL and the Basic-auth /query API, and nothing about the person.
 func TestAccessLineThroughTheRouter(t *testing.T) {
 	seed(t)
-	out := &lockedBuffer{}
-	require.NoError(t, logging.Configure([]string{"LOG_LEVEL=info"}, out))
-	t.Cleanup(func() { _ = logging.Configure(os.Environ(), os.Stdout) })
+	out := logcapture.Capture(t, "LOG_LEVEL=info")
 	h := logging.AccessLog(apitest.Router())
 
 	token := fakeoidc.Token(map[string]any{
@@ -84,7 +65,7 @@ func TestAccessLineThroughTheRouter(t *testing.T) {
 		c.req.Header["X-Request-Id"] = c.id
 		rec := apitest.Do(h, c.req)
 		require.Equal(t, c.status, rec.Code, c.name)
-		line, m := out.accessLine(t, c.id)
+		line, m := accessLine(t, out, c.id)
 		assert.Equal(t, c.route, m["http.route"], c.name)
 		assert.Equal(t, "success", m["event.outcome"], c.name)
 		assert.Equal(t, tenant, m["tenant.id"], c.name)
@@ -103,21 +84,18 @@ func TestAccessLineThroughTheRouter(t *testing.T) {
 	rec := apitest.Do(h, apitest.Request{Method: "POST", Path: "/query/" + ecId + "/metadata",
 		Header: map[string]string{"Authorization": apitest.Basic(apiUser, "wrong"), "X-Tenant": tenant, "X-Request-Id": "t-refused"}})
 	require.Equal(t, 403, rec.Code)
-	line, m := out.accessLine(t, "t-refused")
+	line, m := accessLine(t, out, "t-refused")
 	assert.Equal(t, "refused", m["event.outcome"])
 	assert.NotContains(t, m, "tenant.id")
 	assert.NotContains(t, line, apiUser)
 }
 
-// lines returns the lines of a request, decoded.
-func (b *lockedBuffer) lines(t *testing.T, id string) []map[string]any {
+// requestLines returns the lines of a request, decoded.
+func requestLines(t *testing.T, out *logcapture.Buffer, id string) []map[string]any {
 	t.Helper()
-	b.mu.Lock()
-	defer b.mu.Unlock()
 	var rs []map[string]any
-	for _, line := range strings.Split(strings.TrimSpace(b.buf.String()), "\n") {
-		m := map[string]any{}
-		if json.Unmarshal([]byte(line), &m) == nil && m["request.id"] == id {
+	for _, m := range out.Records(t) {
+		if m["request.id"] == id {
 			rs = append(rs, m)
 		}
 	}
@@ -128,9 +106,7 @@ func (b *lockedBuffer) lines(t *testing.T, id string) []map[string]any {
 // tenant.id when the token check confirmed it (dev#45 L12).
 func TestApplicationLinesOfARequest(t *testing.T) {
 	seed(t)
-	out := &lockedBuffer{}
-	require.NoError(t, logging.Configure([]string{"LOG_LEVEL=info"}, out))
-	t.Cleanup(func() { _ = logging.Configure(os.Environ(), os.Stdout) })
+	out := logcapture.Capture(t, "LOG_LEVEL=info")
 	h := logging.AccessLog(apitest.Router())
 	token := apitest.AppToken([]string{tenant})
 
@@ -138,7 +114,7 @@ func TestApplicationLinesOfARequest(t *testing.T) {
 	rec := apitest.Do(h, apitest.Request{Method: "GET", Path: "/eeg/" + ecId + "/lastRecordDate",
 		Header: map[string]string{"Authorization": "Bearer " + token, "tenant": "TE999999", "X-Request-Id": "t-header"}})
 	require.Equal(t, 403, rec.Code)
-	rs := out.lines(t, "t-header")
+	rs := requestLines(t, out, "t-header")
 	require.Len(t, rs, 2, "the warning and the access line")
 	assert.Equal(t, "warn", rs[0]["log.level"])
 	assert.NotContains(t, rs[0], "tenant.id")
@@ -149,7 +125,7 @@ func TestApplicationLinesOfARequest(t *testing.T) {
 		Header: map[string]string{"Authorization": "Bearer " + token, "tenant": tenant, "X-Request-Id": "t-gql"},
 		Body:   fmt.Sprintf(`{"query":"{ lastEnergyDate(tenant: \"TE999999\", ecId: \"%s\") }"}`, ecId)})
 	require.Equal(t, 200, rec.Code)
-	rs = out.lines(t, "t-gql")
+	rs = requestLines(t, out, "t-gql")
 	require.Len(t, rs, 2, "the warning and the access line")
 	assert.Equal(t, "warn", rs[0]["log.level"])
 	assert.Contains(t, rs[0]["message"], "lastEnergyDate refused")
@@ -162,19 +138,20 @@ func TestApplicationLinesOfARequest(t *testing.T) {
 			"tenant": tenant, "X-Request-Id": "t-audit"},
 		Body: `{"meteringPoint":"AT0030000000000000000000000000099","start":1000,"end":2000}`})
 	require.Equal(t, 200, rec.Code, rec.Body.String())
-	rs = out.lines(t, "t-audit")
+	rs = requestLines(t, out, "t-audit")
 	require.Len(t, rs, 2, "the audit line and the access line")
 	assert.Equal(t, "rawdata.delete.done", rs[0]["event.action"])
 	assert.Equal(t, tenant, rs[0]["tenant.id"])
+	assert.NotContains(t, rs[0]["message"], tenant, "the tenant is in tenant.id, not in the text (261102-mm1)")
 
 	// a superuser's tenant is the unchecked header: a GEA tenant passes, anything else gives no tenant.id
 	superuser := "Bearer " + apitest.AppToken([]string{tenant}, "superuser")
 	apitest.Do(h, apitest.Request{Method: "GET", Path: "/eeg/" + ecId + "/lastRecordDate",
 		Header: map[string]string{"Authorization": superuser, "tenant": "gc123456-001", "X-Request-Id": "t-gea"}})
-	_, m := out.accessLine(t, "t-gea")
+	_, m := accessLine(t, out, "t-gea")
 	assert.Equal(t, "GC123456-001", m["tenant.id"])
 	apitest.Do(h, apitest.Request{Method: "GET", Path: "/eeg/" + ecId + "/lastRecordDate",
 		Header: map[string]string{"Authorization": superuser, "tenant": "not a tenant", "X-Request-Id": "t-junk"}})
-	_, m = out.accessLine(t, "t-junk")
+	_, m = accessLine(t, out, "t-junk")
 	assert.NotContains(t, m, "tenant.id")
 }

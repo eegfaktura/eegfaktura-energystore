@@ -329,7 +329,7 @@ func ExportEnergyToExcel(ctx context.Context, tenant, ecid string, start, end ti
 	f := excelize.NewFile()
 	defer func() {
 		if err := f.Close(); err != nil {
-			glog.ErrorContextf(ctx, "tenant=%s err: %v", tenant, err)
+			glog.ErrorContextf(ctx, "err: %v", err) // the tenant is in tenant.id
 		}
 	}()
 
