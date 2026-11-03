@@ -58,7 +58,8 @@ func init() {
 	}
 
 	if _, ok := kcConfig["api"]; !ok {
-		glog.Errorf("Init Keycloak: %v", errors.New("no client-id 'at.ourproject.vfeeg.api' available"))
+		err = errors.New("no client-id 'at.ourproject.vfeeg.api' available")
+		glog.Errorf("Init Keycloak: %v", err)
 		panic(err)
 	}
 
