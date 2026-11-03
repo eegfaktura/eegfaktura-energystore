@@ -3,7 +3,6 @@ package mqttclient
 import (
 	"bytes"
 	"compress/gzip"
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -76,22 +75,6 @@ func (tmw *TenantEnergyImporter) ensureDb(ecId string) (*ebow.BowStorage, error)
 	}
 	tmw.db[ecId] = st
 	return st, nil
-}
-
-// Execute decodes, stores and confirms one CR_MSG: ExecuteBatch with this one message, the path the
-// dispatcher takes. It acks the message after ExecuteBatch returns (executeBatch), whatever the outcome (#19):
-//   - stored: the cr_msg_history reply goes to the backend ("Energiedaten empfangen").
-//   - store error (open store, meta record, a corrupt row, Badger write; could succeed later): ERROR log,
-//     no reply. The data is not in the store, the gap shows in the check before billing (#148) and the
-//     day is requested again. The message is still acked: mosquitto redelivers an unacked message only
-//     when the session reconnects, and until then it holds one of the client's inflight slots
-//     (max_inflight_messages, 20 by default) for every tenant.
-//   - undecodable payload (Base64, gzip, larger than mqtt.maxDecompressedMB, JSON): permanent, ERROR log,
-//     no reply.
-//
-// Only a message whose processing did not finish (crash, OOM, shutdown) stays unacked and is redelivered.
-func (tmw *TenantEnergyImporter) Execute(msg mqtt.Message) {
-	tmw.ExecuteBatch(context.Background(), []mqtt.Message{msg})
 }
 
 func dayStart(ts int64) int64 {

@@ -81,8 +81,8 @@ func TestExecuteDropsUndecodablePayload(t *testing.T) {
 	defer imp.Close()
 
 	assert.NotPanics(t, func() {
-		imp.Execute(testsupport.CrMsgMessage(ackTenant, []byte("not base64 %%%")))
-		imp.Execute(testsupport.CrMsgMessage(ackTenant, testsupport.EncodeCrMsg(t, []byte(`{"ecId":`))))
+		imp.ExecuteBatch(context.Background(), []mqtt.Message{testsupport.CrMsgMessage(ackTenant, []byte("not base64 %%%"))})
+		imp.ExecuteBatch(context.Background(), []mqtt.Message{testsupport.CrMsgMessage(ackTenant, testsupport.EncodeCrMsg(t, []byte(`{"ecId":`)))})
 	})
 	assert.Empty(t, client.PublishedMessages(), "no reply for a message that was not stored")
 }
@@ -97,7 +97,7 @@ func TestImportStoreErrorIsReturned(t *testing.T) {
 	imp := NewTenantEnergyImporter(ackTenant, &MQTTStreamer{client: client})
 	defer imp.Close()
 	assert.Error(t, imp.Import(ackCrMsg(ackEcId, ackMeter).Message()))
-	imp.Execute(testsupport.CrMsgMessage(ackTenant, ackCrMsg(ackEcId, ackMeter).Payload(t)))
+	imp.ExecuteBatch(context.Background(), []mqtt.Message{testsupport.CrMsgMessage(ackTenant, ackCrMsg(ackEcId, ackMeter).Payload(t))})
 	assert.Empty(t, client.PublishedMessages())
 }
 
@@ -151,7 +151,6 @@ func TestWorkerAcksStoreErrorWithoutReply(t *testing.T) {
 
 type panicExecutor struct{ executed bool }
 
-func (p *panicExecutor) Execute(mqtt.Message) { p.executed = true; panic("boom") }
 func (p *panicExecutor) ExecuteBatch(context.Context, []mqtt.Message) []bool {
 	p.executed = true
 	panic("boom")

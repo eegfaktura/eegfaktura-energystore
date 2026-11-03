@@ -102,8 +102,7 @@ type heldExecutor struct {
 	tenant  string
 }
 
-func (h heldExecutor) Execute(mqtt.Message) {}
-func (h heldExecutor) Close()               {}
+func (h heldExecutor) Close() {}
 func (h heldExecutor) ExecuteBatch(ctx context.Context, msgs []mqtt.Message) []bool {
 	h.started <- h.tenant
 	select {

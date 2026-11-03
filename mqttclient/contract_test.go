@@ -1,6 +1,7 @@
 package mqttclient
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"sort"
@@ -9,6 +10,7 @@ import (
 
 	"at.ourproject/energystore/internal/testsupport"
 	"at.ourproject/energystore/store"
+	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -68,7 +70,7 @@ func TestCrMsgContract(t *testing.T) {
 
 			client := testsupport.NewFakeClient()
 			imp := NewTenantEnergyImporter(tc.tenant, &MQTTStreamer{client: client})
-			imp.Execute(testsupport.CrMsgMessage(tc.tenant, testsupport.EncodeCrMsg(t, payload)))
+			imp.ExecuteBatch(context.Background(), []mqtt.Message{testsupport.CrMsgMessage(tc.tenant, testsupport.EncodeCrMsg(t, payload))})
 			imp.Close()
 
 			day := time.UnixMilli(msg.Energy[0].Start)
