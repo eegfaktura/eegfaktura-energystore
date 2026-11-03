@@ -142,6 +142,7 @@ func TestApplicationLinesOfARequest(t *testing.T) {
 	require.Len(t, rs, 2, "the audit line and the access line")
 	assert.Equal(t, "rawdata.delete.done", rs[0]["event.action"])
 	assert.Equal(t, tenant, rs[0]["tenant.id"])
+	assert.NotContains(t, rs[0]["message"], tenant, "the tenant is in tenant.id, not in the text (261102-mm1)")
 
 	// a superuser's tenant is the unchecked header: a GEA tenant passes, anything else gives no tenant.id
 	superuser := "Bearer " + apitest.AppToken([]string{tenant}, "superuser")
