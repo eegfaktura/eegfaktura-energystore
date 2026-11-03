@@ -123,10 +123,11 @@ func isClientPackage(path string) bool {
 	return path == module || strings.HasPrefix(path, module+"/") || slices.Contains(clientPackages, path)
 }
 
-// printsItself: an error or a fmt.Stringer prints what it chooses, not its fields.
+// printsItself: an error or a fmt.Stringer prints what it chooses, not its fields. Only the method
+// set of t counts (addressable false): fmt does not call a pointer-receiver String on a value.
 func printsItself(t types.Type) bool {
 	for _, name := range []string{"Error", "String"} {
-		obj, _, _ := types.LookupFieldOrMethod(t, true, nil, name)
+		obj, _, _ := types.LookupFieldOrMethod(t, false, nil, name)
 		if f, ok := obj.(*types.Func); ok {
 			sig := f.Signature()
 			if sig.Params().Len() == 0 && sig.Results().Len() == 1 && types.Identical(sig.Results().At(0).Type(), types.Typ[types.String]) {

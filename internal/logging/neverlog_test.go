@@ -172,6 +172,11 @@ import (
 
 type person struct{ Firstname, LastName, IBAN, Password, Username, Subject string }
 
+// contact prints itself only through a pointer: fmt prints a value field by field.
+type contact struct{ Name, Phone string }
+
+func (c *contact) String() string { return c.Name }
+
 func bad(ctx context.Context, cl mqtt.Client, hc *http.Client, m *model.CounterPointMeta,
 	ms []*model.CounterPointMeta, byId map[string]model.RawSourceMeta, s, email, value string, p person,
 	hdr http.Header, authorization, bearer, creds, apiKey, api_key, payload, body, name1, sentTo, jwtToken string,
@@ -208,7 +213,8 @@ func bad(ctx context.Context, cl mqtt.Client, hc *http.Client, m *model.CounterP
 	glog.Infof("%v", tok) // hit type mqtt.Token
 }
 
-func whole(p person, local struct{ A int }, m *model.CounterPointMeta, email string) {
+func whole(p person, local struct{ A int }, m *model.CounterPointMeta, email string, c contact) {
+	glog.Infof("%v", c) // hit type fixture.contact
 	glog.Infof("%v", local) // hit type struct
 	glog.Infof("%d", []person{p}) // hit type fixture.person
 	fmt.Printf("%v", m) // hit type model.CounterPointMeta
@@ -217,7 +223,8 @@ func whole(p person, local struct{ A int }, m *model.CounterPointMeta, email str
 }
 
 func good(ctx context.Context, tok mqtt.Token, vf *model.VfeegError, emailVerified bool, tokens []string,
-	meteringPoint, subscription, nameServer, tokenizer, value string, err error, t time.Time) {
+	meteringPoint, subscription, nameServer, tokenizer, value string, err error, t time.Time, c contact) {
+	glog.Infof("%v", &c) // String on the pointer
 	glog.Infof("metering point %s: %v", meteringPoint, err)
 	glog.Infof("token check failed: %v", err)
 	glog.Errorf("password rejected: %s", errors.New("x"))
