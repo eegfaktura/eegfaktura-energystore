@@ -8,8 +8,6 @@ RUN go mod download && go mod verify
 
 COPY . .
 RUN go build -o /usr/local/bin/energystore -ldflags="-s -w" server.go
-# RUN go build -o /usr/local/bin/initQoV -ldflags="-s -w" initQoV.go
-# RUN go build -o /usr/local/bin/ebowctl -ldflags="-s -w" ebowctl.go
 RUN go build -o /usr/local/bin/estore -ldflags="-s -w" estore.go
 
 # Laufzeit: schlankes Debian derselben Release wie das Build-Image (golang:1.26.10 = trixie), ohne

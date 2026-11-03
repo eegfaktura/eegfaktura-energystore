@@ -131,7 +131,7 @@ func scanSource(t *testing.T) *scanner {
 			scanFiles(t, p.ImportPath, files, s)
 			continue
 		}
-		for _, f := range files { // the root holds three func main: each file is its own program
+		for _, f := range files { // the root holds two func main: each file is its own program
 			scanFiles(t, p.ImportPath, []*ast.File{f}, s)
 		}
 	}

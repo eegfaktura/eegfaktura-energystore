@@ -84,7 +84,7 @@ jobs:
           git diff --exit-code protoc/
 
       # Tests gate the image (M0): a red test, a race, a format or vet finding or a package
-      # below its coverage floor stops the job before anything is built or pushed. The root package (three func main) is left out, #1.
+      # below its coverage floor stops the job before anything is built or pushed. The root package (two func main) is left out, #1.
       - name: Format and vet
         run: bash scripts/dev/static-check.sh
 
