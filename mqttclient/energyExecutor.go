@@ -241,11 +241,6 @@ func (tmw *TenantEnergyImporter) Import(data *model.MqttEnergyMessage) error {
 	return errs.err()
 }
 
-func decodeMessage(msg []byte) *model.MqttEnergyMessage {
-	m, _ := decodeMessageSize(msg)
-	return m
-}
-
 // decodeMessageSize also returns the size of the unpacked JSON (the decoded message on the heap is several
 // times larger).
 func decodeMessageSize(msg []byte) (*model.MqttEnergyMessage, int64) {

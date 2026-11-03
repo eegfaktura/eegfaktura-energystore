@@ -142,7 +142,7 @@ func TestDecodeMessage(t *testing.T) {
 			map[model.MeterCodeValue][]float64{model.CODE_CON: {0.5, 0.25}})
 	valid := b.Payload(t)
 
-	got := decodeMessage(valid)
+	got, _ := decodeMessageSize(valid)
 	require.NotNil(t, got)
 	assert.Equal(t, b.Message(), got)
 
@@ -158,7 +158,10 @@ func TestDecodeMessage(t *testing.T) {
 		"energy not list": testsupport.EncodeCrMsg(t, []byte(`{"energy":{"start":0}}`)),
 	} {
 		t.Run(name, func(t *testing.T) {
-			assert.NotPanics(t, func() { assert.Nil(t, decodeMessage(payload)) })
+			assert.NotPanics(t, func() {
+				m, _ := decodeMessageSize(payload)
+				assert.Nil(t, m)
+			})
 		})
 	}
 }

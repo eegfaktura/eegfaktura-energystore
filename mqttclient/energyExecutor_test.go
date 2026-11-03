@@ -44,10 +44,12 @@ func gzipData(data []byte) ([]byte, error) {
 }
 
 func TestDecodeMessageRejectsIncompatibleTransportPayload(t *testing.T) {
-	require.Nil(t, decodeMessage([]byte("not-a-base64-cr-msg")))
+	m, _ := decodeMessageSize([]byte("not-a-base64-cr-msg"))
+	require.Nil(t, m)
 
 	notGzip := base64.StdEncoding.EncodeToString([]byte("not-gzip"))
-	require.Nil(t, decodeMessage([]byte(notGzip)))
+	m, _ = decodeMessageSize([]byte(notGzip))
+	require.Nil(t, m)
 }
 
 func TestNewMqttEnergyImporter(t *testing.T) {
@@ -305,7 +307,7 @@ func TestImportRawdataStore(t *testing.T) {
 	compressed, err := encryptMessage(jsonRaw)
 	require.NoError(t, err)
 
-	rawData := decodeMessage(compressed)
+	rawData, _ := decodeMessageSize(compressed)
 	require.NotNil(t, rawData)
 
 	importer := NewTenantEnergyImporter("te100190", &MQTTStreamer{})
