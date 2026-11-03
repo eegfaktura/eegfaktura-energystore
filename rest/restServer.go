@@ -22,13 +22,9 @@ import (
 )
 
 func NewRestServer() *mux.Router {
-	//jwtWrapper := middleware.JWTMiddleware(viper.GetString("jwt.pubKeyFile"))
 	initMemberMeters()
 	r := mux.NewRouter()
 	r.Use(logging.MuxRoute) // route template for the access line (logging.AccessLog, server.go)
-	//s := r.PathPrefix("/rest").Subrouter()
-	//r.HandleFunc("/eeg/{year}/{month}", jwtWrapper(fetchEnergy())).Methods("GET")
-	//r.HandleFunc("/eeg/report", middleware.ProtectApp(fetchEnergyReport())).Methods("POST")
 	r.HandleFunc("/eeg/v2/{ecid}/report", middleware.ProtectApp(fetchEnergyReportV2())).Methods("POST")
 	r.HandleFunc("/eeg/v2/{ecid}/meta", middleware.ProtectApp(queryMetaData(true))).Methods("GET")
 	r.HandleFunc("/eeg/v2/{ecid}/raw", middleware.ProtectApp(fetchRawEnergyV2())).Methods("POST")
@@ -50,31 +46,6 @@ func NewRestServer() *mux.Router {
 	r = InitQueryApiRouter(r)
 	return r
 }
-
-// fetchEnergyReport Rest endpoint retrieve energy values of requested participant and period pattern.
-//func fetchEnergyReport() middleware.JWTHandlerFunc {
-//	return func(w http.ResponseWriter, r *http.Request, claims *middleware.PlatformClaims, tenant string) {
-//		energy := &model.EegEnergy{}
-//
-//		var request model.EnergyReportRequest
-//		err := json.NewDecoder(r.Body).Decode(&request)
-//		if err != nil {
-//			http.Error(w, err.Error(), http.StatusBadRequest)
-//			return
-//		}
-//
-//		if energy, err = calculation.EnergyReport(tenant, request.Year, request.Segment, request.Period); err != nil {
-//			respondWithError(w, http.StatusInternalServerError, err.Error())
-//			return
-//		}
-//
-//		resp := struct {
-//			Eeg *model.EegEnergy `json:"eeg"`
-//		}{Eeg: energy}
-//
-//		respondWithJSON(w, http.StatusOK, &resp)
-//	}
-//}
 
 // fetchEnergyReportV2 Rest endpoint retrieve energy values of requested participant and period pattern.
 func fetchEnergyReportV2() middleware.JWTHandlerFunc {
@@ -318,7 +289,6 @@ func exportReport() middleware.JWTHandlerFunc {
 			}
 		}
 
-		//b, err := excel.CreateExcelFile(tenant, time.UnixMilli(cps.Start), time.UnixMilli(cps.End), &cps)
 		b, err := excel.ExportEnergyToExcel(r.Context(), tenant, ecid, time.UnixMilli(cps.Start), time.UnixMilli(cps.End), &cps)
 		if err != nil {
 			if !refuseTenant(w, err) {
