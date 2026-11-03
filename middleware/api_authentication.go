@@ -65,7 +65,7 @@ func ProtectApi(handler JWTHandlerFunc) http.HandlerFunc {
 		}
 
 		// client.id is the API client; the Basic user is not logged
-		logging.SetCaller(r.Context(), strings.ToUpper(tenant), kcClientAPI.clientID)
+		logging.SetCaller(r.Context(), tenant, kcClientAPI.clientID)
 		handler(w, r, &claims, strings.ToUpper(tenant))
 	}
 }

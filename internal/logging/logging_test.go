@@ -4,8 +4,11 @@ import (
 	"errors"
 	"log"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"regexp"
 	"runtime"
+	"strings"
 	"testing"
 
 	"at.ourproject/energystore/internal/logging"
@@ -40,12 +43,41 @@ func TestJSONLineHasTheCommonFields(t *testing.T) {
 
 func TestUnknownFieldsAreDropped(t *testing.T) {
 	out := capture(t, "SERVICE_VERSION=1.8.2")
-	slog.Default().With("user.email", "a@b.example").Info("x", "iban", "AT61", "tenant.id", "TE100001")
+	slog.Default().With("user.email", "a@b.example").Info("x", "iban", "AT61", "client.id", "app")
 	m := decode(t, out.Lines()[0])
-	assert.Equal(t, "TE100001", m["tenant.id"])
+	assert.Equal(t, "app", m["client.id"])
 	assert.Equal(t, "1.8.2", m["service.version"])
 	assert.NotContains(t, m, "iban")
 	assert.NotContains(t, m, "user.email")
+}
+
+// tenant.id and the request ids come only from the request context, never from a caller: a caller
+// could write them twice or bypass the tenant rule.
+func TestRequestFieldsOnlyFromTheContext(t *testing.T) {
+	out := capture(t)
+	ids := []any{"tenant.id", "not a tenant", "request.id", "r", "trace.id", "t", "span.id", "s"}
+	slog.Info("outside", ids...)
+	slog.Default().With(ids...).Info("with")
+	logging.AccessLog(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logging.SetCaller(r.Context(), "te100001", "client")
+		slog.InfoContext(r.Context(), "inside", ids...)
+	})).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/x", nil))
+
+	lines := out.Lines()
+	require.Len(t, lines, 4, "two lines outside, one inside, the access line")
+	for _, line := range lines[:2] {
+		m := decode(t, line)
+		for _, k := range []string{"tenant.id", "request.id", "trace.id", "span.id"} {
+			assert.NotContains(t, m, k, line)
+		}
+	}
+	inside := decode(t, lines[2])
+	assert.Equal(t, "TE100001", inside["tenant.id"], "the context tenant, upper-cased")
+	assert.NotEqual(t, "r", inside["request.id"])
+	assert.NotContains(t, inside, "trace.id")
+	for _, k := range []string{"tenant.id", "request.id"} {
+		assert.Equal(t, 1, strings.Count(lines[2], `"`+k+`"`), "%s written once", k)
+	}
 }
 
 // audit.operator (decision 2026-10-30) appears on the raw-data deletion events only.

@@ -162,14 +162,11 @@ func MuxRoute(next http.Handler) http.Handler {
 }
 
 // SetCaller records what the token check decided: the tenant and the Keycloak client (token azp, or
-// the API client of the Basic-auth /query API). Never a user. A superuser's tenant is the unchecked
-// header: tenant.id is written only for a value of the form agreed for all services, upper-cased.
+// the API client of the Basic-auth /query API). Never a user. The handler writes tenant.id only for
+// a value of the form agreed for all services (a superuser's tenant is the unchecked header).
 func SetCaller(ctx context.Context, tenant, client string) {
 	if ri := idsFrom(ctx); ri != nil {
-		ri.client = client
-		if t := strings.ToUpper(tenant); tenantPattern.MatchString(t) {
-			ri.tenant = t
-		}
+		ri.tenant, ri.client = tenant, client
 	}
 }
 

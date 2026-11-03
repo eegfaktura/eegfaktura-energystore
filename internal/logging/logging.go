@@ -203,15 +203,16 @@ type handler struct {
 
 func (h *handler) Enabled(_ context.Context, l slog.Level) bool { return l >= h.min }
 
-// allowed are the only fields a line may carry besides @timestamp, log.level, message, service.*
-// and deployment.environment (never-log rule: an unknown attribute is dropped, not written).
+// allowed are the only fields a caller may put on a line besides @timestamp, log.level, message,
+// service.* and deployment.environment (never-log rule: an unknown attribute is dropped, not
+// written). tenant.id, request.id, trace.id and span.id are not among them: only Handle adds them,
+// from the request context.
 var allowed = map[string]bool{
 	"log.origin.file.name": true, "log.origin.file.line": true, "log.logger": true,
 	"log.effective_level": true,
 	"event.action":        true, "event.outcome": true, "event.duration": true,
 	"http.request.method": true, "http.route": true, "http.response.status_code": true,
-	"graphql.operation.name": true, "tenant.id": true, "client.id": true,
-	"request.id": true, "trace.id": true, "span.id": true,
+	"graphql.operation.name": true, "client.id": true,
 	"error.type": true, "error.message": true, "error.stack_trace": true,
 }
 
@@ -252,8 +253,10 @@ func (h *handler) Handle(ctx context.Context, r slog.Record) error {
 	}
 	if ids := idsFrom(ctx); ids != nil {
 		r.AddAttrs(slog.String("request.id", ids.requestID))
-		if ids.tenant != "" {
-			r.AddAttrs(slog.String("tenant.id", ids.tenant))
+		// The tenant rule of all services, applied here and nowhere else: upper-cased, and only a
+		// value of the agreed form (a superuser's tenant is the unchecked header).
+		if t := strings.ToUpper(ids.tenant); tenantPattern.MatchString(t) {
+			r.AddAttrs(slog.String("tenant.id", t))
 		}
 		if ids.traceID != "" {
 			r.AddAttrs(slog.String("trace.id", ids.traceID), slog.String("span.id", ids.spanID))

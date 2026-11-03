@@ -312,7 +312,7 @@ func TestLineOutsideARequestHasNoIds(t *testing.T) {
 }
 
 // tenant.id only for a value of the agreed form, upper-cased; the client stays either way.
-func TestSetCallerValidatesTheTenant(t *testing.T) {
+func TestTenantIDFollowsTheRule(t *testing.T) {
 	for in, want := range map[string]string{
 		"RC100123": "RC100123", "rc100123": "RC100123", "GC123456-001": "GC123456-001", "gc123456_002": "GC123456_002",
 		strings.Repeat("A", 64): strings.Repeat("A", 64),
