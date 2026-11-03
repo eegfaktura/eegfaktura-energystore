@@ -34,10 +34,8 @@ var (
 	// Tests override it to avoid network calls.
 	VerifyTokenClaims func(ctx context.Context, token string) (*PlatformClaims, error)
 
-	ErrNoAuthorization      = errors.New("authorization header missing")
-	ErrInvalidAuthSchema    = errors.New("invalid authorization schema")
-	ErrInvalidBasicEncoding = errors.New("invalid basic auth encoding")
-	ErrInvalidBasicFormat   = errors.New("invalid basic auth format")
+	ErrNoAuthorization   = errors.New("authorization header missing")
+	ErrInvalidAuthSchema = errors.New("invalid authorization schema")
 )
 
 type keycloakConfig struct {
@@ -275,4 +273,13 @@ func getTenant(r *http.Request) string {
 		tenant = r.Header.Get("X-Tenant")
 	}
 	return tenant
+}
+
+func contains(s []string, str string) bool {
+	for _, v := range s {
+		if strings.ToUpper(v) == strings.ToUpper(str) {
+			return true
+		}
+	}
+	return false
 }
