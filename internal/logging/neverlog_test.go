@@ -31,13 +31,13 @@ import (
 //     are not scanned. Metering-point numbers are ids and may be logged (decided, W-261008-ca2).
 //
 // Errors, numbers and booleans carry no such name. A legitimate exception is an entry in
-// neverLogAllowed, keyed by file and finding (no line), with its reason; an entry that no longer
+// neverLogAllowed, keyed by file, finding and log call (no line), with its reason; an entry that no longer
 // matches fails the suite too. A false positive is fixed in the scanner, not allowed here.
 
 const module = "at.ourproject/energystore"
 
 var neverLogAllowed = map[string]string{
-	"rest/restServer.go: name Username": "audit.operator on the raw data deletion: decided exception (2026-10-30, " +
+	"rest/restServer.go: name Username in logging.AuditOperator(...)": "audit.operator on the raw data deletion: decided exception (2026-10-30, " +
 		"W-261008-ca2), superuser-only tool; the module writes the field only on rawdata.delete.*",
 }
 
@@ -143,8 +143,8 @@ func TestSourceNeverLogs(t *testing.T) {
 	require.NotEmpty(t, source.packages, "go list found the packages of the module")
 	s := scanSource(t)
 
-	for f := range s.findings {
-		t.Errorf("never-log: %s (fix it, or add it to neverLogAllowed with a reason)", f)
+	for f, key := range s.findings {
+		t.Errorf("never-log: %s (fix it, or allow %q in neverLogAllowed with a reason)", f, key)
 	}
 	for key := range neverLogAllowed {
 		assert.True(t, s.used[key], "stale neverLogAllowed entry: %s", key)
@@ -258,6 +258,14 @@ func TestNeverLogScannerFindsPlantedLines(t *testing.T) {
 		got = append(got, k)
 	}
 	assert.ElementsMatch(t, want, got)
+
+	// the allowlist key names the call, so an entry does not cover the same name elsewhere in the file
+	keys := map[string]bool{}
+	for _, key := range s.findings {
+		keys[key] = true
+	}
+	assert.True(t, keys["fixture.go: name Username in logging.AuditOperator(...)"])
+	assert.True(t, keys["fixture.go: name Username in log.Printf(...)"])
 }
 
 func TestNeverLogWords(t *testing.T) {

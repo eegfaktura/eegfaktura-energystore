@@ -195,12 +195,13 @@ type scanner struct {
 	fset     *token.FileSet
 	info     *types.Info
 	root     string
-	findings map[string]bool // "file:line: finding"
-	used     map[string]bool // the neverLogAllowed keys that matched
+	call     string            // the log call being scanned, "logging.AuditOperator"
+	findings map[string]string // "file:line: finding" → its neverLogAllowed key
+	used     map[string]bool   // the neverLogAllowed keys that matched
 }
 
 func newScanner() *scanner {
-	return &scanner{fset: source.fset, root: source.root, findings: map[string]bool{}, used: map[string]bool{}}
+	return &scanner{fset: source.fset, root: source.root, findings: map[string]string{}, used: map[string]bool{}}
 }
 
 func (s *scanner) report(pos token.Pos, finding string) {
@@ -209,11 +210,12 @@ func (s *scanner) report(pos token.Pos, finding string) {
 	if rel, err := filepath.Rel(s.root, file); err == nil {
 		file = filepath.ToSlash(rel)
 	}
-	if key := file + ": " + finding; neverLogAllowed[key] != "" {
+	key := fmt.Sprintf("%s: %s in %s(...)", file, finding, s.call)
+	if neverLogAllowed[key] != "" {
 		s.used[key] = true
 		return
 	}
-	s.findings[fmt.Sprintf("%s:%d: %s", file, p.Line, finding)] = true
+	s.findings[fmt.Sprintf("%s:%d: %s", file, p.Line, finding)] = key
 }
 
 func (s *scanner) file(f *ast.File) {
@@ -228,6 +230,7 @@ func (s *scanner) file(f *ast.File) {
 }
 
 func (s *scanner) logCall(fn *types.Func, call *ast.CallExpr) {
+	s.call = fn.Pkg().Name() + "." + fn.Name()
 	s.args(fn, call.Args)
 	for _, arg := range call.Args { // a message built in place
 		ast.Inspect(arg, func(n ast.Node) bool {
