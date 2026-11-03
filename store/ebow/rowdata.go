@@ -211,12 +211,6 @@ func (b *BowStorage) GetLineRange(bucket, key, until string) IRange {
 func (b *BowStorage) GetLine(line *model.RawSourceLine) error {
 	return b.db.Bucket("rawdata").Get(line.Id, line)
 }
-func (b *BowStorage) GetLineG2(line *model.RawSourceLine) error {
-	return b.db.Bucket("rawdata").Get(line.Id, line)
-}
-func (b *BowStorage) GetLineG3(line *model.RawSourceLine) error {
-	return b.db.Bucket("rawdata").Get(line.Id, line)
-}
 
 func (b *BowStorage) ListBuckets() ([]string, error) {
 	return b.db.Buckets(), nil
