@@ -179,16 +179,6 @@ func (b *BowStorage) SetLine(line *model.RawSourceLine) error {
 	return b.db.Bucket("rawdata").Put(line)
 }
 
-func (b *BowStorage) SetReport(line *model.EnergyReport) error {
-	return b.db.Bucket("rawdata").Put(line)
-}
-
-func (b *BowStorage) GetReport(period string) (*model.EnergyReport, error) {
-	var report model.EnergyReport = model.EnergyReport{}
-	err := b.db.Bucket("rawdata").Get(period, &report)
-	return &report, err
-}
-
 func (b *BowStorage) SetMeta(line *model.RawSourceMeta) error {
 
 	return b.db.Bucket("metadata").Put(line)
@@ -214,12 +204,4 @@ func (b *BowStorage) GetLine(line *model.RawSourceLine) error {
 
 func (b *BowStorage) ListBuckets() ([]string, error) {
 	return b.db.Buckets(), nil
-}
-
-func (b *BowStorage) GetBucket(name string) (*Iter, error) {
-	return b.db.Bucket(name).Iter(), nil
-}
-
-func GenerateCPKey(year int, month int) string {
-	return fmt.Sprintf("CP/%.4d/%.2d", year, month)
 }

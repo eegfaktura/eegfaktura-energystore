@@ -6,32 +6,6 @@ import (
 	"strings"
 )
 
-func DetermineDirection(meteringPoint string) model.MeterDirection {
-	// 012345678901234567890123456789012
-	// AT0030000000000000000000030032764
-	// AT0070000907310000000000000633966
-
-	netoperator := meteringPoint[:8]
-
-	if netoperator == "AT003000" {
-		switch meteringPoint[25] {
-		case '1', '2', '3':
-			return model.PRODUCER_DIRECTION
-		default:
-			return model.CONSUMER_DIRECTION
-		}
-	} else if netoperator == "AT007000" {
-		println(string(meteringPoint[13]))
-		switch meteringPoint[13] {
-		case '1', '2':
-			return model.PRODUCER_DIRECTION
-		default:
-			return model.CONSUMER_DIRECTION
-		}
-	}
-	return model.CONSUMER_DIRECTION
-}
-
 // ExamineDirection exermine the meteringpoint direction accourding to the metercode of energy values.
 // It is expected that a GENERATOR have a metercode with profit values CODE_PLUS (1-1:2.9.0 P.01)
 func ExamineDirection(energydata []model.MqttEnergyData) model.MeterDirection {
