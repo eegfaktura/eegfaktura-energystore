@@ -105,9 +105,6 @@ type periodRange struct {
 	end   time.Time
 }
 
-// MESSUNG ONLY - nicht mergen
-var skipQoVSheet = false
-
 type Sheet interface {
 	initSheet(ctx *RunnerContext) error
 	handleLine(ctx *RunnerContext, line *model.RawSourceLine) error
