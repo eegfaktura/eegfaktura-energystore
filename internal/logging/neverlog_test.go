@@ -139,9 +139,14 @@ func scanSource(t *testing.T) *scanner {
 
 func TestSourceNeverLogs(t *testing.T) {
 	loadedSource(t)
-	// that the scan finds what it should is TestNeverLogScannerFindsPlantedLines
-	require.NotEmpty(t, source.packages, "go list found the packages of the module")
 	s := scanSource(t)
+	// the scan reaches real call sites of every kind of log call (what it finds in them is
+	// TestNeverLogScannerFindsPlantedLines)
+	for _, site := range []string{"mqttclient/mqttClient.go: glog.Infof", "rest/common.go: glog.ErrorContextf",
+		"rest/restServer.go: logging.Event", "rest/restServer.go: logging.AuditOperator",
+		"config/config.go: log.Printf", "store/function/reset.go: fmt.Printf"} {
+		assert.True(t, s.scanned[site], "the scan did not reach %s", site)
+	}
 
 	for f, key := range s.findings {
 		t.Errorf("never-log: %s (fix it, or allow %q in neverLogAllowed with a reason)", f, key)
