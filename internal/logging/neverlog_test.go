@@ -27,8 +27,9 @@ import (
 //   - prints with %+v or %#v (a dump, whatever the value is);
 //   - gets a value that prints field by field, with any verb: any struct (a model above all),
 //     http.Header, or a client interface (printedWhole). Errors and Stringers print what they choose;
-//   - names a personal or secret value: an identifier with a word of neverLogWords. String literals
-//     are not scanned. Metering-point numbers are ids and may be logged (decided, W-261008-ca2).
+//   - names a personal or secret value: an identifier with a word of neverLogWords, or such a word
+//     right in front of a verb of the format ("password=%s"). Other string literals are not scanned.
+//     Metering-point numbers are ids and may be logged (decided, W-261008-ca2).
 //
 // Errors, numbers and booleans carry no such name. A legitimate exception is an entry in
 // neverLogAllowed, keyed by file, finding and log call (no line), with its reason; an entry that no longer
@@ -218,6 +219,18 @@ func bad(ctx context.Context, cl mqtt.Client, hc *http.Client, m *model.CounterP
 	glog.Infof("%v", tok) // hit type mqtt.Token
 }
 
+func amended(s, value, emails, IBANs, recipients, accesstoken, userpassword, tokenizer string) {
+	glog.Info(emails) // hit name emails
+	glog.Info(IBANs) // hit name IBANs
+	glog.Info(recipients) // hit name recipients
+	glog.Info(accesstoken) // hit name accesstoken
+	glog.Info(userpassword) // hit name userpassword
+	glog.Info(tokenizer) // hit name tokenizer
+	glog.Infof("password=%s", value) // hit label password
+	glog.Infof("mail: %s emails: %s", s, value) // hit label emails
+	glog.Error(fmt.Sprintf("x %s token: %v", s, value)) // hit label token
+}
+
 func whole(p person, local struct{ A int }, m *model.CounterPointMeta, email string, c contact) {
 	glog.Infof("%v", c) // hit type fixture.contact
 	glog.Infof("%v", local) // hit type struct
@@ -228,17 +241,18 @@ func whole(p person, local struct{ A int }, m *model.CounterPointMeta, email str
 }
 
 func good(ctx context.Context, tok mqtt.Token, vf *model.VfeegError, emailVerified bool, tokens []string,
-	meteringPoint, subscription, nameServer, tokenizer, value string, err error, t time.Time, c contact) {
+	meteringPoint, subscription, nameServer, subway, value string, err error, t time.Time, c contact) {
 	glog.Infof("%v", &c) // String on the pointer
 	glog.Infof("metering point %s: %v", meteringPoint, err)
 	glog.Infof("token check failed: %v", err)
 	glog.Errorf("password rejected: %s", errors.New("x"))
-	glog.Infof("password=%s email: %s", value, value) // literals are not scanned
+	glog.Infof("password reset for %s, the email went to %s", meteringPoint, value) // no list word right before a verb
+	glog.Infof("token: %v, tokens: %d", err, len(tokens)) // an error and a number carry no name
 	logging.Log(ctx, 0, slog.LevelInfo, "x", slog.String("user.email", value))
 	glog.Error(tok.Error())
 	glog.Errorf("%v", vf)
 	glog.Infof("%t %d", emailVerified, len(tokens))
-	glog.Info(subscription, nameServer, tokenizer) // not a whole word of the list
+	glog.Info(subscription, nameServer, subway) // "sub" is too short to match inside a word
 	glog.Infof("%v", t) // a Stringer
 	glog.Info("No User:Password in request!")
 	_ = fmt.Sprintf("not a log line %+v", tok)
@@ -276,14 +290,15 @@ func TestNeverLogScannerFindsPlantedLines(t *testing.T) {
 func TestNeverLogWords(t *testing.T) {
 	for id, want := range map[string][]string{
 		"basicAuthHeader": {"basic", "auth", "header"}, "HTTPServer": {"http", "server"}, "user_id": {"user", "id"},
-		"Name1": {"name1"}, "IBAN": {"iban"}, "meteringPoint": {"metering", "point"}, "x": {"x"},
+		"Name1": {"name1"}, "IBAN": {"iban"}, "IBANs": {"ibans"}, "meteringPoint": {"metering", "point"}, "x": {"x"},
 	} {
 		assert.Equal(t, want, words(id), id)
 	}
-	for _, id := range []string{"FirstName", "first_name", "firstname", "userID", "UserId", "mailAddress", "AccountHolder", "Sub"} {
+	for _, id := range []string{"FirstName", "first_name", "firstname", "userID", "UserId", "mailAddress", "AccountHolder",
+		"Sub", "tokens", "IBANs", "recipients", "accesstoken", "userpassword", "ownership", "user_emails"} {
 		assert.True(t, sensitiveName(id), id)
 	}
-	for _, id := range []string{"tokens", "subscription", "ownership", "nameServer", "Submit", "bodyless", "id"} {
+	for _, id := range []string{"subscription", "subway", "nameServer", "Submit", "bodyless", "id", "AccessTokenizerX"} {
 		assert.False(t, sensitiveName(id), id)
 	}
 }

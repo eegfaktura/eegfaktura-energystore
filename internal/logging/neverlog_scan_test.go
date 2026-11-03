@@ -14,9 +14,11 @@ import (
 	"unicode"
 )
 
-// neverLogWords is the list of all services (dev#45). An identifier is split into words (camelCase,
-// snake_case) and a run of up to three words, joined, is compared with an entry: "FirstName",
-// "first_name" and "firstname" are "firstname", "tokens" and "subscription" are not on the list.
+// neverLogWords is the list of all services (dev#45, amended 2026-11-03). An identifier is split into
+// words (camelCase, snake_case) and a run of up to three words, joined, is compared with an entry,
+// also with a trailing s: "FirstName", "first_name" and "firstname" are "firstname", "IBANs" is
+// "iban". In an identifier all in lower case, an entry of five or more letters also matches inside
+// a word ("accesstoken"); shorter ones stay whole words ("subscription" is not "sub").
 var neverLogWords = map[string]bool{}
 
 func init() {
@@ -45,7 +47,9 @@ func words(id string) []string {
 			cut(i, i+1)
 		case i > start && unicode.IsUpper(r):
 			prev := rs[i-1]
-			endOfAcronym := unicode.IsUpper(prev) && i+1 < len(rs) && unicode.IsLower(rs[i+1])
+			// "HTTPServer": the acronym ends before "Server"; "IBANs": a plural s is no word of its own
+			pluralS := i+1 < len(rs) && rs[i+1] == 's' && (i+2 == len(rs) || !unicode.IsLower(rs[i+2]))
+			endOfAcronym := unicode.IsUpper(prev) && i+1 < len(rs) && unicode.IsLower(rs[i+1]) && !pluralS
 			if unicode.IsLower(prev) || unicode.IsDigit(prev) || endOfAcronym {
 				cut(i, i)
 			}
@@ -62,13 +66,23 @@ func sensitiveName(id string) bool {
 		joined := ""
 		for j := i; j < len(ws) && j < i+3; j++ {
 			joined += ws[j]
-			if neverLogWords[joined] {
+			if neverLogWords[joined] || neverLogWords[strings.TrimSuffix(joined, "s")] {
+				return true
+			}
+		}
+	}
+	if id == strings.ToLower(id) {
+		for w := range neverLogWords {
+			if len(w) >= 5 && strings.Contains(id, w) {
 				return true
 			}
 		}
 	}
 	return false
 }
+
+// labelBeforeVerb is the word right in front of a verb of a format: "password=%s", "token: %v".
+var labelBeforeVerb = regexp.MustCompile(`([\pL\pN_]+)[ =:'"(\[-]{0,3}$`)
 
 var verb = regexp.MustCompile(`%[-+# 0]*[0-9]*(?:\.[0-9]+)?[a-zA-Z%]`)
 
@@ -257,20 +271,37 @@ func (s *scanner) logCall(fn *types.Func, call *ast.CallExpr) {
 // every other argument for what it prints.
 func (s *scanner) args(fn *types.Func, args []ast.Expr) {
 	format := strings.HasSuffix(fn.Name(), "f")
-	for _, arg := range args {
+	for i, arg := range args {
 		tv := s.info.Types[arg]
 		if tv.Value != nil && tv.Value.Kind() == constant.String {
 			if format {
 				format = false
-				for _, v := range verb.FindAllString(constant.StringVal(tv.Value), -1) {
-					if strings.HasSuffix(v, "v") && strings.ContainsAny(v, "+#") {
-						s.report(arg.Pos(), "dump verb "+v)
-					}
-				}
+				s.format(arg, constant.StringVal(tv.Value), args[i+1:])
 			}
 			continue
 		}
 		s.value(arg, tv.Type)
+	}
+}
+
+// format reads a format text for dump verbs, and for a word of the list right in front of a verb
+// whose value carries text (the only place a literal is read for names).
+func (s *scanner) format(lit ast.Expr, text string, values []ast.Expr) {
+	n, last := 0, 0
+	for _, m := range verb.FindAllStringIndex(text, -1) {
+		v, before := text[m[0]:m[1]], text[last:m[0]]
+		last = m[1]
+		if v == "%%" {
+			continue
+		}
+		if strings.HasSuffix(v, "v") && strings.ContainsAny(v, "+#") {
+			s.report(lit.Pos(), "dump verb "+v)
+		}
+		if l := labelBeforeVerb.FindStringSubmatch(before); l != nil && sensitiveName(l[1]) &&
+			n < len(values) && carriesText(s.info.TypeOf(values[n])) {
+			s.report(lit.Pos(), "label "+l[1])
+		}
+		n++
 	}
 }
 

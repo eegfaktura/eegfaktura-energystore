@@ -18,9 +18,11 @@ this changelog highlights the changes relevant for overview and operations.
   A log call (glog, `internal/logging`, `log/slog`, `log`, `fmt.Print*`) fails the suite when it uses `%+v` or `%#v`,
   gets a value that prints field by field with any verb (any struct, `http.Header`, a client interface; errors and
   Stringers excepted), or has an identifier with a word of the never-log list of all services (split into camelCase
-  and snake_case words, compared as whole words; string literals are not scanned). A legitimate exception needs an
-  entry keyed by file and finding with its reason; `audit.operator` on the raw data deletion in `rest/restServer.go`
-  is the only one. Metering-point numbers are ids and may be logged.
+  and snake_case words, compared as whole words, also with a plural s; in an all-lower-case identifier a list word of
+  five or more letters also matches inside it), or such a word right before a verb of the format (`password=%s`).
+  Other string literals are not scanned. A legitimate exception needs an entry keyed by file, finding and log call
+  with its reason; `audit.operator` in `logging.AuditOperator` in `rest/restServer.go` is the only one.
+  Metering-point numbers are ids and may be logged.
 
 ### Changed
 - **`request.id` and `tenant.id` on the warn and error lines of an HTTP request** (dev#45 L12), not only on the
