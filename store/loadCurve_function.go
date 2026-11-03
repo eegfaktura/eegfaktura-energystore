@@ -37,13 +37,6 @@ func dayRawNameFunc() SeriesNameFunc {
 	}
 }
 
-var nameFunctionRepo = map[string]SeriesNameFunc{
-	"DAYRAW":    dayRawNameFunc(),
-	"MONTHYEAR": monthYearNameFunc(),
-	"WEEKYEAR":  weekYearNameFunc(),
-	"MONTHDAY":  monthDayNameFunc(),
-}
-
 type LoadCurve struct {
 	Cache
 	Result   map[string]*ReportData

@@ -380,9 +380,8 @@ func fetchLoadCurveReportV2() middleware.JWTHandlerFunc {
 		startMonitor := time.Now()
 		glog.V(4).Infof("Start Time Monitor fetchLoadCurveReport. %s\n", tenant)
 		var request struct {
-			Start int64   `json:"start"`
-			End   int64   `json:"end"`
-			Func  *string `json:"func"`
+			Start int64 `json:"start"`
+			End   int64 `json:"end"`
 		}
 
 		err := json.NewDecoder(r.Body).Decode(&request)
@@ -391,7 +390,7 @@ func fetchLoadCurveReportV2() middleware.JWTHandlerFunc {
 			return
 		}
 
-		resp, err := store.QueryLoadCurveReport(tenant, ecid, time.UnixMilli(request.Start), time.UnixMilli(request.End), request.Func)
+		resp, err := store.QueryLoadCurveReport(tenant, ecid, time.UnixMilli(request.Start), time.UnixMilli(request.End))
 		glog.V(4).Infof("Time Monitor fetchLoadCurveReport. %v\n", time.Now().Sub(startMonitor))
 		if err != nil {
 			respondWithQueryError(r.Context(), w, http.StatusBadRequest, err)
@@ -409,14 +408,12 @@ func getLoadCurveReportV2() middleware.JWTHandlerFunc {
 		startMonitor := time.Now()
 		glog.V(4).Infof("Start Time Monitor fetchLoadCurveReport. %s\n", tenant)
 		var request struct {
-			Start int64   `json:"start"`
-			End   int64   `json:"end"`
-			Func  *string `json:"func"`
+			Start int64 `json:"start"`
+			End   int64 `json:"end"`
 		}
 
 		startQuery := r.URL.Query().Get("start")
 		endQuery := r.URL.Query().Get("end")
-		funcQuery := r.URL.Query().Get("func")
 
 		var err error
 		if len(startQuery) > 0 {
@@ -426,16 +423,12 @@ func getLoadCurveReportV2() middleware.JWTHandlerFunc {
 			request.End, err = strconv.ParseInt(endQuery, 10, 64)
 		}
 
-		if len(funcQuery) > 0 {
-			request.Func = &funcQuery
-		}
-
 		if err != nil {
 			respondWithError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 
-		resp, err := store.QueryLoadCurveReport(tenant, ecid, time.UnixMilli(request.Start), time.UnixMilli(request.End), request.Func)
+		resp, err := store.QueryLoadCurveReport(tenant, ecid, time.UnixMilli(request.Start), time.UnixMilli(request.End))
 		glog.V(4).Infof("Time Monitor fetchLoadCurveReport. %v\n", time.Now().Sub(startMonitor))
 		if err != nil {
 			respondWithQueryError(r.Context(), w, http.StatusBadRequest, err)
