@@ -330,3 +330,21 @@ func TestTenantIDFollowsTheRule(t *testing.T) {
 		}
 	}
 }
+
+// A flush sends the header: a later panic aborts the connection instead of writing a second header.
+func TestAccessLineHandlerPanicAfterFlush(t *testing.T) {
+	out := capture(t)
+	h := logging.AccessLog(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.(http.Flusher).Flush()
+		panic("late")
+	}))
+	rec := httptest.NewRecorder()
+	assert.PanicsWithValue(t, http.ErrAbortHandler, func() {
+		h.ServeHTTP(rec, httptest.NewRequest("GET", "/x", nil))
+	})
+	assert.Equal(t, http.StatusOK, rec.Code, "the flushed header stays")
+	lines := out.Lines()
+	require.Len(t, lines, 2)
+	assert.Equal(t, "late", decode(t, lines[0])["error.message"])
+	assert.EqualValues(t, 500, decode(t, lines[1])["http.response.status_code"])
+}
