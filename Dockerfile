@@ -50,4 +50,4 @@ USER app
 
 EXPOSE 8080
 
-CMD ["energystore", "-configPath", "/etc/energystore/", "-logtostderr=true", "-stderrthreshold=INFO"]
+CMD ["energystore", "-configPath", "/etc/energystore/"]

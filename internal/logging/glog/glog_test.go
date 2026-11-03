@@ -86,7 +86,7 @@ func TestFatalAndExit(t *testing.T) {
 	}
 }
 
-// The deployment still passes the glog flags (gitops: -logtostderr=true -stderrthreshold=INFO -v=3);
+// The prod deployment still passes the glog flags until gitops#160 (-logtostderr=true -stderrthreshold=INFO -v=3);
 // they must not stop the start.
 func TestFormerGlogFlagsAreAccepted(t *testing.T) {
 	fs := flag.NewFlagSet("energystore", flag.ContinueOnError)
