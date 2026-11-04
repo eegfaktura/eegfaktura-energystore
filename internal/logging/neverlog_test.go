@@ -145,7 +145,7 @@ func TestSourceNeverLogs(t *testing.T) {
 	// TestNeverLogScannerFindsPlantedLines)
 	for _, site := range []string{"mqttclient/mqttClient.go: glog.Infof", "rest/common.go: glog.ErrorContextf",
 		"rest/restServer.go: logging.Event", "rest/restServer.go: logging.AuditOperator",
-		"config/config.go: log.Printf", "store/function/reset.go: fmt.Printf"} {
+		"graph/model/energy.go: log.Printf", "store/function/reset.go: fmt.Printf"} {
 		assert.True(t, s.scanned[site], "the scan did not reach %s", site)
 	}
 
