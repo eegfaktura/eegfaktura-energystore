@@ -64,6 +64,7 @@ type TopicDispatcher struct {
 	work    *sync.Cond // a tenant became ready, or the dispatcher stops
 	capFree *sync.Cond // an executor became idle or closed, or the dispatcher stops
 	open    int        // executors that exist (open or closing), at most cfg.maxOpen
+	capWait int        // lanes waiting in reserveOpen for an executor to become idle (for the tests)
 	tenants map[string]*tenantQueue
 	ready   []*tenantQueue
 	closed  bool

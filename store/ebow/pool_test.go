@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -214,7 +215,7 @@ func TestPoolCloseWakesWaitersAndRefusesGet(t *testing.T) {
 
 	got := make(chan *DbObject)
 	go func() { got <- p.Get(testRc, testEcId) }()
-	time.Sleep(50 * time.Millisecond)
+	awaitWaiting(t, p, 1)
 
 	p.Close()
 	select {
@@ -240,7 +241,7 @@ func TestFailedOpenWakesNextWaiter(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		go func() { got <- p.Get(testRc, testEcId) }()
 	}
-	time.Sleep(50 * time.Millisecond)
+	awaitWaiting(t, p, 2)
 
 	// Ab jetzt schlaegt jedes Oeffnen fehl: der Basispfad ist eine Datei.
 	notDir := filepath.Join(base, "not-a-dir")
@@ -258,4 +259,16 @@ func TestFailedOpenWakesNextWaiter(t *testing.T) {
 			t.Fatal("zweiter Wartender wurde nach fehlgeschlagenem Oeffnen nicht geweckt")
 		}
 	}
+}
+
+// awaitWaiting waits until n Get calls of testRc/testEcId wait for a free handle.
+func awaitWaiting(t *testing.T, p *Pool, n int) {
+	t.Helper()
+	obj, ok := p.lookup(testRc, testEcId)
+	require.True(t, ok)
+	require.Eventually(t, func() bool {
+		obj.mu.Lock()
+		defer obj.mu.Unlock()
+		return obj.waiting == n
+	}, 5*time.Second, time.Millisecond, "%d waiting Get", n)
 }
