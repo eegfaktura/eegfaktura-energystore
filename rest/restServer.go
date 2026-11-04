@@ -377,20 +377,16 @@ func getLoadCurveReportV2() middleware.JWTHandlerFunc {
 
 		startMonitor := time.Now()
 		glog.V(4).Infof("Start Time Monitor fetchLoadCurveReport. %s\n", tenant)
-		var request struct {
-			Start int64 `json:"start"`
-			End   int64 `json:"end"`
-		}
-
+		var start, end int64
 		startQuery := r.URL.Query().Get("start")
 		endQuery := r.URL.Query().Get("end")
 
 		var err error
 		if len(startQuery) > 0 {
-			request.Start, err = strconv.ParseInt(startQuery, 10, 64)
+			start, err = strconv.ParseInt(startQuery, 10, 64)
 		}
 		if len(endQuery) > 0 {
-			request.End, err = strconv.ParseInt(endQuery, 10, 64)
+			end, err = strconv.ParseInt(endQuery, 10, 64)
 		}
 
 		if err != nil {
@@ -398,7 +394,7 @@ func getLoadCurveReportV2() middleware.JWTHandlerFunc {
 			return
 		}
 
-		resp, err := store.QueryLoadCurveReport(tenant, ecid, time.UnixMilli(request.Start), time.UnixMilli(request.End))
+		resp, err := store.QueryLoadCurveReport(tenant, ecid, time.UnixMilli(start), time.UnixMilli(end))
 		glog.V(4).Infof("Time Monitor fetchLoadCurveReport. %v\n", time.Now().Sub(startMonitor))
 		if err != nil {
 			respondWithQueryError(r.Context(), w, http.StatusBadRequest, err)
