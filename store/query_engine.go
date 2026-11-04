@@ -98,7 +98,7 @@ func QueryIntraDayReport(tenant, ecid string, start, end time.Time) ([]interface
 	return (c.(EnergyReportConsumer)).GetResult(), nil
 }
 
-func QueryLoadCurveReport(tenant, ecid string, start, end time.Time, nameFunc *string) ([]interface{}, error) {
+func QueryLoadCurveReport(tenant, ecid string, start, end time.Time) ([]interface{}, error) {
 	tsFn, initFn, nameFn := determineTimeShiftFunction(start, end)
 	c, _ := NewLoadCurveFunction(tsFn, nameFn, initFn)
 	e := &Engine{c}
@@ -194,23 +194,6 @@ func determineTimeShiftFunction(start, end time.Time) (AddCacheTimeFunc, InitCac
 	} else {
 		return nil, InitDefault(), dayRawNameFunc()
 	}
-}
-
-func determineSeriesNameFunction(start, end time.Time, nameFunc *string) SeriesNameFunc {
-	//if nameFunc == nil {
-	if start.AddDate(0, 0, 1).Add(time.Minute).After(end) {
-		return dayRawNameFunc()
-	} else if start.AddDate(0, 1, 0).Add(time.Minute).After(end) {
-		return monthDayNameFunc()
-	} else if start.AddDate(0, 6, 0).Add(time.Minute).After(end) {
-		return weekYearNameFunc()
-	} else if start.AddDate(0, 12, 0).Add(time.Minute).After(end) {
-		return monthYearNameFunc()
-	} else {
-		return dayRawNameFunc()
-	}
-	//}
-	//return nameFunctionRepo[strings.ToUpper(*nameFunc)]
 }
 
 func parseFunction(f []string) (fn string, pa string, err error) {

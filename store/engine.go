@@ -28,8 +28,6 @@ type EngineContext struct {
 	countProd       int
 	periodsConsumer map[int]periodRange
 	periodsProducer map[int]periodRange
-	qovLogArray     []model.RawSourceLine
-	checkBegin      func(lineDate, mDate time.Time) bool
 }
 
 func createEngineContext(db ebow.IBowStorage, start, end time.Time) (*EngineContext, error) {
@@ -73,12 +71,6 @@ func createEngineContext(db ebow.IBowStorage, start, end time.Time) (*EngineCont
 		countCons:       countCons,
 		periodsConsumer: metaRangeConsumer,
 		periodsProducer: metaRangeProducer,
-		checkBegin: func(lineDate, mDate time.Time) bool {
-			if lineDate.Before(mDate) {
-				return true
-			}
-			return false
-		},
 	}, nil
 }
 
@@ -97,7 +89,6 @@ type AddTo func(*EngineContext, time.Time, *model.RawSourceLine) error
 
 type InitCacheTimeFunc func(ct CacheTime) CacheTime
 type AddCacheTimeFunc func(dir int, ct CacheTime) CacheTime
-type SubCacheTimeFunc func(ct CacheTime) CacheTime
 
 func AddDuration(d time.Duration) AddCacheTimeFunc {
 	duration := d
@@ -106,24 +97,10 @@ func AddDuration(d time.Duration) AddCacheTimeFunc {
 	}
 }
 
-func SubDuration(d time.Duration) SubCacheTimeFunc {
-	duration := d
-	return func(ct CacheTime) CacheTime {
-		return CacheTime{ct.Add(-1 * duration)}
-	}
-}
-
 func AddDate(y, m, d int) AddCacheTimeFunc {
 	year, month, day := y, m, d
 	return func(dir int, ct CacheTime) CacheTime {
 		return CacheTime{ct.AddDate(dir*year, dir*month, dir*day)}
-	}
-}
-
-func SubDate(y, m, d int) SubCacheTimeFunc {
-	year, month, day := y, m, d
-	return func(ct CacheTime) CacheTime {
-		return CacheTime{ct.AddDate(year, month, day)}
 	}
 }
 
@@ -161,10 +138,6 @@ func (ct CacheTime) AddTs(timeFunc AddCacheTimeFunc) CacheTime {
 
 func (ct CacheTime) Init(timeFunc InitCacheTimeFunc) CacheTime {
 	return timeFunc(ct)
-}
-
-func (ct CacheTime) SubTs(timeFunc AddCacheTimeFunc) CacheTime {
-	return timeFunc(-1, ct)
 }
 
 type Cache struct {
@@ -223,27 +196,19 @@ func (ca *Cache) InitCache(ctx *EngineContext) error {
 func (ca *Cache) addToCache(line *model.RawSourceLine) error {
 	ca.cache.Id = line.Id
 	for i := range line.Consumers {
-		if len(line.Consumers) > i {
-			ca.cache.Consumers[i] += line.Consumers[i]
-			if len(line.QoVConsumers) > i {
-				ca.cache.QoVConsumers[i] = calcQoV(ca.cache.QoVConsumers[i], line.QoVConsumers[i])
-			} else {
-				ca.cache.QoVConsumers[i] = calcQoV(ca.cache.QoVConsumers[i], 0)
-			}
+		ca.cache.Consumers[i] += line.Consumers[i]
+		if len(line.QoVConsumers) > i {
+			ca.cache.QoVConsumers[i] = calcQoV(ca.cache.QoVConsumers[i], line.QoVConsumers[i])
 		} else {
-			break
+			ca.cache.QoVConsumers[i] = calcQoV(ca.cache.QoVConsumers[i], 0)
 		}
 	}
 	for i := range line.Producers {
-		if len(line.Producers) > i {
-			ca.cache.Producers[i] += line.Producers[i]
-			if len(line.QoVProducers) > i {
-				ca.cache.QoVProducers[i] = calcQoV(ca.cache.QoVProducers[i], line.QoVProducers[i])
-			} else {
-				ca.cache.QoVProducers[i] = calcQoV(ca.cache.QoVProducers[i], 0)
-			}
+		ca.cache.Producers[i] += line.Producers[i]
+		if len(line.QoVProducers) > i {
+			ca.cache.QoVProducers[i] = calcQoV(ca.cache.QoVProducers[i], line.QoVProducers[i])
 		} else {
-			break
+			ca.cache.QoVProducers[i] = calcQoV(ca.cache.QoVProducers[i], 0)
 		}
 	}
 	return nil

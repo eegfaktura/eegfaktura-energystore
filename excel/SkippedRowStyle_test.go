@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"at.ourproject/energystore/internal/testsupport/logcapture"
-	"at.ourproject/energystore/store/ebow"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/xuri/excelize/v2"
@@ -42,18 +41,6 @@ func TestSkippedRowNamesTheCellStyle_New(t *testing.T) {
 	out := captureLog(t)
 
 	_ = ImportExcelEnergyFileNew(context.Background(), f, "Sheet1", setupMock()) // no energy data: error expected
-
-	assertSkippedSummary(t, out.String(), style)
-}
-
-func TestSkippedRowNamesTheCellStyle(t *testing.T) {
-	f, style := skippedRowWorkbook(t)
-	db, err := ebow.OpenStorageTest("skippedrow", "ecid", t.TempDir())
-	require.NoError(t, err)
-	defer db.CloseTestDriver()
-	out := captureLog(t)
-
-	_, _ = ImportExcelEnergyFile(f, "Sheet1", db)
 
 	assertSkippedSummary(t, out.String(), style)
 }

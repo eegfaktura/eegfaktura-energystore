@@ -105,9 +105,6 @@ type periodRange struct {
 	end   time.Time
 }
 
-// MESSUNG ONLY - nicht mergen
-var skipQoVSheet = false
-
 type Sheet interface {
 	initSheet(ctx *RunnerContext) error
 	handleLine(ctx *RunnerContext, line *model.RawSourceLine) error
@@ -277,6 +274,11 @@ func (er *EnergyRunner) run(db ebow.IBowStorage, f *excelize.File, start, end ti
 	var pt *time.Time = nil
 	for g1Ok {
 		_, t, err := utils.ConvertRowIdToTimeString("CP", _lineG1.Id, time.UTC)
+		// a row id that is no time is skipped, like the reports (store.Engine.Query) do for rows after the first
+		if err != nil {
+			g1Ok = iterCP.Next(&_lineG1)
+			continue
+		}
 		if rowOk := utils.CheckTime(pt, t); !rowOk {
 			diff := ((t.Unix() - pt.Unix()) / (60 * 15)) - 1
 			if diff > 0 {

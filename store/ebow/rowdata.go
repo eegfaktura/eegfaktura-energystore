@@ -96,24 +96,6 @@ type BowStorage struct {
 
 var turns = newTurns()
 
-//func OpenStorage(tenant, ecId string) (*BowStorage, error) {
-//	t := strings.ToLower(tenant)
-//	basePath := viper.GetString("persistence.path")
-//	unlock := turns.lock(t)
-//	db, err := ebow.Open(filepath.Join(fmt.Sprintf("%s/%s", basePath, t), ecId), ebow.SetLogger(ebowLogger{5}))
-//	if err != nil {
-//		unlock()
-//		return nil, err
-//	}
-//	return &BowStorage{db, unlock}, nil
-//}
-//
-//func (b *BowStorage) Close() {
-//	_ = b.db.Close()
-//	b.unlock()
-//	return
-//}
-
 // ErrTenantNotSupported refuses a tenant longer than 8 characters, e.g. a sub-community with a suffix (261008-ca3).
 var ErrTenantNotSupported = errors.New("tenant not supported by the energy store")
 
@@ -159,14 +141,6 @@ func (b *BowStorage) SetLines(line []*model.RawSourceLine) error {
 	return b.SetLinesRaw("rawdata", line)
 }
 
-func (b *BowStorage) SetLinesG2(line []*model.RawSourceLine) error {
-	return b.SetLinesRaw("rawdata", line)
-}
-
-func (b *BowStorage) SetLinesG3(line []*model.RawSourceLine) error {
-	return b.SetLinesRaw("rawdata", line)
-}
-
 func (b *BowStorage) SetLinesRaw(bucket string, line []*model.RawSourceLine) error {
 	i := make([]interface{}, len(line))
 	for l := range line {
@@ -177,16 +151,6 @@ func (b *BowStorage) SetLinesRaw(bucket string, line []*model.RawSourceLine) err
 
 func (b *BowStorage) SetLine(line *model.RawSourceLine) error {
 	return b.db.Bucket("rawdata").Put(line)
-}
-
-func (b *BowStorage) SetReport(line *model.EnergyReport) error {
-	return b.db.Bucket("rawdata").Put(line)
-}
-
-func (b *BowStorage) GetReport(period string) (*model.EnergyReport, error) {
-	var report model.EnergyReport = model.EnergyReport{}
-	err := b.db.Bucket("rawdata").Get(period, &report)
-	return &report, err
 }
 
 func (b *BowStorage) SetMeta(line *model.RawSourceMeta) error {
@@ -211,21 +175,7 @@ func (b *BowStorage) GetLineRange(bucket, key, until string) IRange {
 func (b *BowStorage) GetLine(line *model.RawSourceLine) error {
 	return b.db.Bucket("rawdata").Get(line.Id, line)
 }
-func (b *BowStorage) GetLineG2(line *model.RawSourceLine) error {
-	return b.db.Bucket("rawdata").Get(line.Id, line)
-}
-func (b *BowStorage) GetLineG3(line *model.RawSourceLine) error {
-	return b.db.Bucket("rawdata").Get(line.Id, line)
-}
 
 func (b *BowStorage) ListBuckets() ([]string, error) {
 	return b.db.Buckets(), nil
-}
-
-func (b *BowStorage) GetBucket(name string) (*Iter, error) {
-	return b.db.Bucket(name).Iter(), nil
-}
-
-func GenerateCPKey(year int, month int) string {
-	return fmt.Sprintf("CP/%.4d/%.2d", year, month)
 }

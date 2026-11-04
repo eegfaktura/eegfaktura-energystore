@@ -54,7 +54,7 @@ func TestS07_LoadCurveQualityOfL1Data(t *testing.T) {
 	t.Skip("known-errors #30")
 	community(t)
 	importMQTT(t, consumerMsg(june1, 96, "L1"))
-	curve, err := store.QueryLoadCurveReport(tenant, ecId, june1, june1.Add(23*time.Hour+45*time.Minute), nil)
+	curve, err := store.QueryLoadCurveReport(tenant, ecId, june1, june1.Add(23*time.Hour+45*time.Minute))
 	require.NoError(t, err)
 	require.NotEmpty(t, curve)
 	for _, e := range curve {
@@ -135,7 +135,7 @@ func TestS12_IntraDayAndLoadCurveSumToTheDay(t *testing.T) {
 	}
 	testsupport.InDelta(t, sum(values(cons, 96)), total, "intra-day")
 
-	curve, err := store.QueryLoadCurveReport(tenant, ecId, june1, end, nil)
+	curve, err := store.QueryLoadCurveReport(tenant, ecId, june1, end)
 	require.NoError(t, err)
 	total = 0
 	for _, e := range curve {
@@ -196,7 +196,7 @@ func TestS12_BucketsFollowTheRowsOverAGap(t *testing.T) {
 
 	june3 := june1.AddDate(0, 0, 2)
 	importMQTT(t, consumerMsg(june3, 96, "L1"))
-	curve, err := store.QueryLoadCurveReport(tenant, ecId, june1.AddDate(0, 0, 1), june1.AddDate(0, 0, 9), nil)
+	curve, err := store.QueryLoadCurveReport(tenant, ecId, june1.AddDate(0, 0, 1), june1.AddDate(0, 0, 9))
 	require.NoError(t, err)
 	byDay := map[string]float64{}
 	for _, e := range curve {

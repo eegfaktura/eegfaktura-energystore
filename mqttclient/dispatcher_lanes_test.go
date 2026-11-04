@@ -50,10 +50,6 @@ type fakeExecutor struct {
 	n       int // batches, only touched by the lane running this executor
 }
 
-func (f *fakeExecutor) Execute(msg mqtt.Message) {
-	f.ExecuteBatch(context.Background(), []mqtt.Message{msg})
-}
-
 func (f *fakeExecutor) ExecuteBatch(_ context.Context, msgs []mqtt.Message) []bool {
 	r := f.rec
 	r.mu.Lock()

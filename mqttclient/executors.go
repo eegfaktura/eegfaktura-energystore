@@ -20,7 +20,9 @@ func (d *TopicDispatcher) reserveOpen() bool {
 		}
 		victim := d.capVictim()
 		if victim == nil {
+			d.capWait++
 			d.capFree.Wait()
+			d.capWait--
 			continue
 		}
 		victim.busy = true

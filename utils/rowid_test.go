@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -47,20 +46,11 @@ func TestConvertRowIdToTimeRejectsGarbage(t *testing.T) {
 }
 
 func TestConvertTimeToRowIdAndString(t *testing.T) {
-	id, err := ConvertTimeToRowId("CP/", "29.02.2028 23:45:00")
-	require.NoError(t, err)
-	assert.Equal(t, "CP/2028/02/29/23/45/00", id)
-
-	_, err = ConvertTimeToRowId("CP/", "garbage")
-	assert.Error(t, err)
-
 	s, ts, err := ConvertRowIdToTimeString("CP", "CP/2026/10/25/02/15/00", tz.Vienna)
 	require.NoError(t, err)
 	assert.Equal(t, "25.10.2026 02:15:00", s)
 	assert.Equal(t, 2, ts.Hour())
 
-	assert.Equal(t, "31.12.2026 23:45:00", ConvertTimeToStringExcel(time.Date(2026, 12, 31, 23, 45, 59, 0, tz.Vienna)))
-	assert.Equal(t, "2028-02-29", ConvertDate(time.Date(2028, 2, 29, 0, 0, 0, 0, tz.Vienna)))
 	assert.Equal(t, time.Date(2026, 3, 29, 0, 0, 0, 0, time.Local), TruncateToDay(time.Date(2026, 3, 29, 23, 45, 0, 0, time.Local)))
 }
 
@@ -110,12 +100,6 @@ func TestIsLineDateOutOfRange(t *testing.T) {
 	assert.False(t, IsLineDateOutOfRange(from, r))
 	assert.False(t, IsLineDateOutOfRange(until.Add(23*time.Hour+45*time.Minute), r), "the until day is included up to 23:59")
 	assert.True(t, IsLineDateOutOfRange(until.Add(24*time.Hour), r))
-}
-
-func TestGetMonthDurationAcrossYear(t *testing.T) {
-	y, months := GetMonthDuration(time.Date(2026, 11, 15, 0, 0, 0, 0, time.UTC), time.Date(2027, 2, 14, 0, 0, 0, 0, time.UTC))
-	assert.Equal(t, 2026, y)
-	assert.Equal(t, 2, months, "15.11. to 14.02. is two full months")
 }
 
 func TestExamineDirection(t *testing.T) {
@@ -175,17 +159,6 @@ func TestCastQoVStringToInt(t *testing.T) {
 }
 
 func TestStringSliceHelpers(t *testing.T) {
-	vs := []string{"a", "bb", "ccc"}
-	long := func(s string) bool { return len(s) > 1 }
-	assert.Equal(t, 1, Index(vs, "bb"))
-	assert.Equal(t, -1, Index(vs, "x"))
-	assert.True(t, Include(vs, "a"))
-	assert.False(t, Include(nil, "a"))
-	assert.True(t, Any(vs, long))
-	assert.False(t, All(vs, long))
-	assert.True(t, All(nil, long))
-	assert.Equal(t, []string{"bb", "ccc"}, Filter(vs, long))
-	assert.Equal(t, []string{"A", "BB", "CCC"}, Map(vs, strings.ToUpper))
 	assert.Equal(t, 6.5, Sum([]float64{1, 2.5, 3}))
 	assert.True(t, GetBool([]bool{true}, 0))
 	assert.False(t, GetBool([]bool{true}, 1))

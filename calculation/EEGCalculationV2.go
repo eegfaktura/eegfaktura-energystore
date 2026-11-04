@@ -77,14 +77,12 @@ func appendResults(line *model.RawSourceLine, allocFunc AllocationHandlerV2, res
 	if results.rCons == nil {
 		results.rCons = model.NewCopiedMatrixFromElements(line.Consumers, len(line.Consumers), 1)
 	} else {
-		//results.rCons.Add(model.MakeMatrix(line.Consumers, len(line.Consumers), 1))
 		results.rCons.Add(consumed)
 	}
 
 	if results.rProd == nil {
 		results.rProd = model.NewCopiedMatrixFromElements(line.Producers, len(line.Producers), 1)
 	} else {
-		//results.rProd.Add(model.MakeMatrix(line.Producers, len(line.Producers), 1))
 		results.rProd.Add(produced)
 	}
 
@@ -115,16 +113,6 @@ type reportValues struct {
 	meters           map[string][]*model.MeterReport
 	totalProduction  *float64
 	totalConsumption *float64
-}
-
-var EnsureIntermediateSlice = func(orig []model.Recort, size int) []model.Recort {
-	l := len(orig)
-	if size > l {
-		target := make([]model.Recort, size)
-		copy(target, orig)
-		orig = target
-	}
-	return orig
 }
 
 var EnsureIntermediatValueSlice = func(orig []float64, size int) []float64 {
@@ -163,79 +151,6 @@ var ConvertToMeterMap = func(report *model.ReportResponse) reportValues {
 		}
 	}
 	return reportValues{meters: meters, totalConsumption: &report.TotalConsumption, totalProduction: &report.TotalProduction}
-}
-
-func CalculateParticipantPeriod(db *ebow.BowStorage, allocFunc AllocationHandlerV2, year, segment int, meterings map[string][]model.MeterReport) error {
-	rowPrefix := "CP"
-	month := 1
-	_, metaInfo, err := store.GetMetaInfo(db)
-	if err != nil {
-		return err
-	}
-	iter := db.GetLinePrefix(fmt.Sprintf("%s/%d/%.2d/", rowPrefix, year, month))
-	defer iter.Close()
-
-	//results := newCalcResult(metaInfo)
-	intermediate := newCalcResult(metaInfo)
-
-	dd := 1
-	var _line model.RawSourceLine
-	for iter.Next(&_line) {
-		line := _line.Copy(0)
-
-		ct, err := utils.ConvertRowIdToTime(rowPrefix, line.Id)
-		if err != nil {
-			glog.Warningf("Error converting row id to timestamp: %s", err.Error())
-			continue
-		}
-
-		cdd := ct.Day()
-		if cdd > dd {
-
-			dd = cdd
-		}
-
-		if err := appendResults(&line, allocFunc, intermediate); err != nil {
-			return err
-		}
-	}
-	return iter.Err()
-}
-
-func appendValues(line *model.RawSourceLine, lineTime time.Time, metaInfo map[string]*model.CounterPointMeta, meterpoints map[string][]*model.MeterReport, allocFunc AllocationHandlerV2, results *calcResults) error {
-	var err error
-
-	for k, v := range metaInfo {
-		participants := meterpoints[k]
-		switch v.Dir {
-		case model.CONSUMER_DIRECTION:
-			values := line.Consumers[v.SourceIdx : v.SourceIdx+3]
-			appendToMeterSummary(participants, values, v.Dir, lineTime)
-		case model.PRODUCER_DIRECTION:
-			values := line.Consumers[v.SourceIdx : v.SourceIdx+2]
-			appendToMeterSummary(participants, values, v.Dir, lineTime)
-		}
-	}
-
-	return err
-}
-
-func appendToMeterSummary(participants []*model.MeterReport, values []float64, dir model.MeterDirection, lineTime time.Time) {
-	for _, p := range participants {
-		from := time.UnixMilli(p.From)
-		until := time.UnixMilli(p.Until)
-		if from.After(lineTime) && until.Before(lineTime) {
-			switch dir {
-			case model.CONSUMER_DIRECTION:
-				p.Report.Summary.Consumption += values[0]
-				p.Report.Summary.Allocation += values[1]
-				p.Report.Summary.Utilization += values[2]
-			case model.PRODUCER_DIRECTION:
-				p.Report.Summary.Production += values[0]
-				p.Report.Summary.Allocation += values[1]
-			}
-		}
-	}
 }
 
 func calcDailyScope(iter ValueIterator, allocFunc AllocationHandlerV2, metaInfo *model.CounterPointMetaInfo,
@@ -412,14 +327,6 @@ func calcParticipantReport(iter ebow.IRange,
 						participantReport.Report.Intermediate.Allocation[idx-1] = utils.RoundToFixed(participantReport.Report.Intermediate.Allocation[idx-1]+values[1], 6)
 						participantReport.Report.Intermediate.Utilization[idx-1] = utils.RoundToFixed(participantReport.Report.Intermediate.Utilization[idx-1]+values[2], 6)
 
-						//if len(participantReport.Report.Intermediate) < idx {
-						//	participantReport.Report.Intermediate = EnsureIntermediateSlice(participantReport.Report.Intermediate, idx)
-						//}
-						//ir := &participantReport.Report.Intermediate[idx-1]
-						//ir.Consumed += values[0]
-						//ir.Allocation += values[1]
-						//ir.Utilization += values[2]
-						//ir.RoundToFixed(6)
 					case model.PRODUCER_DIRECTION:
 						idx := switchIntermediate(currentDate)
 						participantReport.Report.Intermediate.Id = "IRP/2023/01"
@@ -429,12 +336,6 @@ func calcParticipantReport(iter ebow.IRange,
 						participantReport.Report.Intermediate.Production[idx-1] += values[0]
 						participantReport.Report.Intermediate.Allocation[idx-1] += values[1]
 
-						//if len(participantReport.Report.Intermediate) < idx {
-						//	participantReport.Report.Intermediate = EnsureIntermediateSlice(participantReport.Report.Intermediate, idx)
-						//}
-						//ir := &participantReport.Report.Intermediate[idx-1]
-						//ir.Produced += values[0]
-						//ir.Allocation += values[1]
 					}
 				},
 			)
@@ -533,15 +434,11 @@ func appendEnergyToParticipantMeter(
 	lineTime time.Time,
 	appendIntermediate func(*model.MeterReport, []float64, model.MeterDirection)) error {
 
-	//for meterId, meta := range cpMeta {
-	//	meterReports := meters[meterId]
-	//	for _, p := range meterReports {
 	for meterId, meterReports := range reportValues.meters {
 		if meta, ok := cpMeta[meterId]; ok {
 			for _, p := range meterReports {
 				from := utils.TruncateToDay(time.UnixMilli(p.From))
 				until := utils.TruncateToDay(time.UnixMilli(p.Until))
-				//if lineTime.After(p.From) && lineTime.Before(p.Until) {
 				if from.Unix() <= lineTime.Unix() && lineTime.Unix() <= until.Unix() {
 					if p.Report == nil {
 						p.SetReport(&model.Report{})
@@ -560,7 +457,6 @@ func appendEnergyToParticipantMeter(
 						*reportValues.totalConsumption += values[0]
 						appendIntermediate(p, values, meta.Dir)
 					case model.PRODUCER_DIRECTION:
-						//values := dailyReport.rCons.Elements[meta.SourceIdx : meta.SourceIdx+3]
 						values := []float64{
 							dailyReport.rProd.GetElm(meta.SourceIdx, 0),
 							dailyReport.rDist.GetElm(meta.SourceIdx, 0),

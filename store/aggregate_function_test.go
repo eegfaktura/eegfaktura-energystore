@@ -70,12 +70,6 @@ func createTestEngineContext(start, end time.Time) (*EngineContext, error) {
 		countCons:       countCons,
 		periodsConsumer: metaRangeConsumer,
 		periodsProducer: metaRangeProducer,
-		checkBegin: func(lineDate, mDate time.Time) bool {
-			if lineDate.Before(mDate) {
-				return true
-			}
-			return false
-		},
 	}, nil
 }
 

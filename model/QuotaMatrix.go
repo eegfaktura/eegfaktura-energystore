@@ -248,18 +248,6 @@ func Add(A *Matrix, B *Matrix) *Matrix {
 	return result
 }
 
-func Substract(A *Matrix, B *Matrix) *Matrix {
-	result := MakeMatrix(make([]float64, A.Cols*A.Rows), A.Cols, A.Rows)
-
-	for i := 0; i < A.Rows; i++ {
-		for j := 0; j < A.Cols; j++ {
-			result.SetElm(i, j, A.GetElm(i, j)-B.GetElm(i, j))
-		}
-	}
-
-	return result
-}
-
 func Multiply(A *Matrix, B *Matrix) *Matrix {
 
 	//rRows := int(math.Max(float64(A.Rows), float64(B.Rows)))
@@ -296,63 +284,4 @@ func Merge(A *Matrix, B *Matrix) *Matrix {
 	}
 
 	return MakeMatrix(elements, A.CountRows(), A.CountCols()+B.CountCols())
-}
-
-type QuotaMatrix struct {
-	cpCatalog   map[string]int
-	prodCatalog map[string]int
-	quota       *Matrix
-}
-
-func NewQuotaMatrix(cpNames, prodNames []string) *QuotaMatrix {
-	qm := &QuotaMatrix{
-		cpCatalog:   make(map[string]int, len(cpNames)),
-		prodCatalog: make(map[string]int, len(prodNames)),
-	}
-	for i, n := range cpNames {
-		qm.cpCatalog[n] = i
-	}
-	for i, n := range prodNames {
-		qm.prodCatalog[n] = i
-	}
-	lenC := len(prodNames)
-	lenR := len(cpNames)
-	qm.quota = MakeMatrix(make([]float64, lenC*lenR), lenR, lenC)
-	return qm
-}
-
-func (q *QuotaMatrix) Add(cpName, prodName string, v float64) {
-	cpIdx, cpok := q.cpCatalog[cpName]
-	prodIdx, prodok := q.prodCatalog[prodName]
-
-	if cpok && prodok {
-		q.quota.SetElm(cpIdx, prodIdx, v)
-	}
-}
-
-func (q *QuotaMatrix) GetQuota(counterPointName, prodName string) float64 {
-	cpIdx := q.cpCatalog[counterPointName]
-	prodIdx := q.prodCatalog[prodName]
-
-	return q.quota.GetElm(cpIdx, prodIdx)
-}
-
-func (q *QuotaMatrix) GetAllocQuota(counterPointName, prodName string) float64 {
-	cpIdx := q.cpCatalog[counterPointName]
-	var v float64 = q.GetQuota(counterPointName, prodName)
-	var s float64 = 0.0
-	for i := 0; i < q.quota.Cols; i++ {
-		s = s + q.quota.GetElm(cpIdx, i)
-	}
-	return 1 / (s * 100) * (v * 100)
-}
-
-func (q *QuotaMatrix) Validate() *Matrix {
-	onesSlice := make([]float64, q.quota.Cols)
-	for i := 0; i < len(onesSlice); i++ {
-		onesSlice[i] = 1
-	}
-	tm := MakeMatrix(onesSlice, 3, 1)
-
-	return Multiply(q.quota, tm)
 }

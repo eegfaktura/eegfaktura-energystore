@@ -54,6 +54,20 @@ this changelog highlights the changes relevant for overview and operations.
   `tenant` or `X-Tenant` header or of the GraphQL argument in the line text.
 - **No dump of the MQTT client on connection loss** (dev#45 L3). The line printed paho's client with its connection
   options; it logs the error now, also as `error.type` and `error.message`. The level stays info.
+- **Excel energy export: a row with an unreadable id no longer crashes the export** (ES-CQ-26). The export skips
+  such a row, like the reports do for rows after the first; before, it dereferenced the missing time and the
+  request failed.
+
+### Removed
+- **Unused code after the code-quality review** (ES-CQ-2, -3, -4, -5, -9, -10, -13, -14, -21, -24, -27, -28, -29,
+  -32, -33, -38, -44, -45). The files `initQoV.go`, `converterV2.go`, `ebowctl.go` and `config-prod.yaml`; the
+  pre-OIDC JWT middleware; the old Excel import `ImportExcelEnergyFile`; the legacy MQTT dispatcher and
+  `MockMQTTStreamer` (`golang.org/x/net` is no longer a direct dependency); unused helpers in `config`, `store`,
+  `model`, `utils`, `calculation` and `ebow`, and commented-out code. The load-curve reports ignored their `func`
+  parameter; it is no longer read (the routes are unchanged). The unused key `mqtt.inverterSubscriptionTopic` left
+  `config.yaml`. The `Makefile` now only calls `scripts/dev/*.sh` and builds the two binaries; the README describes
+  running, building, testing and the settings as they are (ES-CQ-46). Tests restore `persistence.path` and wait for
+  the waiting state instead of sleeping (ES-CQ-40, -41).
 
 ## [1.9.0] – 2026-10-31
 
