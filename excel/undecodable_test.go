@@ -46,7 +46,7 @@ func TestExportUndecodableRowIsAnError(t *testing.T) {
 	}
 }
 
-// A row whose id is no time is skipped, as store.Engine.Query does; the export dereferenced the
+// A row whose id is no time is skipped, like the reports do for rows after the first; the export dereferenced the
 // nil time of such a row and panicked (ES-CQ-26).
 func TestExportSkipsRowWithUnparsableId(t *testing.T) {
 	export := func(entries []*model.RawSourceLine) [][]string {

@@ -55,7 +55,8 @@ this changelog highlights the changes relevant for overview and operations.
 - **No dump of the MQTT client on connection loss** (dev#45 L3). The line printed paho's client with its connection
   options; it logs the error now, also as `error.type` and `error.message`. The level stays info.
 - **Excel energy export: a row with an unreadable id no longer crashes the export** (ES-CQ-26). The export skips
-  such a row, as the reports already do; before, it dereferenced the missing time and the request failed.
+  such a row, like the reports do for rows after the first; before, it dereferenced the missing time and the
+  request failed.
 
 ### Removed
 - **Unused code after the code-quality review** (ES-CQ-2, -3, -4, -5, -9, -10, -13, -14, -21, -24, -27, -28, -29,

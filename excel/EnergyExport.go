@@ -274,7 +274,8 @@ func (er *EnergyRunner) run(db ebow.IBowStorage, f *excelize.File, start, end ti
 	var pt *time.Time = nil
 	for g1Ok {
 		_, t, err := utils.ConvertRowIdToTimeString("CP", _lineG1.Id, time.UTC)
-		if err != nil { // a row id that is no time is skipped, as store.Engine.Query does
+		// a row id that is no time is skipped, like the reports (store.Engine.Query) do for rows after the first
+		if err != nil {
 			g1Ok = iterCP.Next(&_lineG1)
 			continue
 		}
