@@ -131,6 +131,7 @@ make build
 
 - **Testing**: `make test` (`scripts/dev/test.sh`: every package except the root, with the race detector);
   `make check` runs gofmt and go vet (`scripts/dev/static-check.sh`). `go test ./...` fails on the root package.
+  The race detector needs cgo (a C compiler); without one, run `go test $(bash scripts/dev/packages.sh)`.
 - **Docker**: `docker build .` (the `Dockerfile` builds both binaries).
 
 ## Project Structure
