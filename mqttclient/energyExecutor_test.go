@@ -414,7 +414,7 @@ func TestMassImport(t *testing.T) {
 // darf die Store-Map nicht zerstoeren; die naechste Nachricht mit gueltiger ecId geht durch,
 // statt in eine nil-Map zu schreiben und den Dienst abstuerzen zu lassen.
 func TestEnsureDbInvalidThenValid(t *testing.T) {
-	viper.Set("persistence.path", t.TempDir())
+	testsupport.UseTempPersistence(t)
 
 	importer := NewTenantEnergyImporter("TE999997", &MQTTStreamer{})
 	defer importer.Close()
@@ -436,7 +436,7 @@ func TestEnsureDbInvalidThenValid(t *testing.T) {
 
 // TestEnsureDbTenantTooLong: ein zu langer Mandant liefert einen Fehler statt einer Panic.
 func TestEnsureDbTenantTooLong(t *testing.T) {
-	viper.Set("persistence.path", t.TempDir())
+	testsupport.UseTempPersistence(t)
 
 	importer := NewTenantEnergyImporter("GC100403001", &MQTTStreamer{})
 	defer importer.Close()
