@@ -36,9 +36,7 @@ func vlogGCTestConfig(base string) VlogGCConfig {
 
 func vlogGCTestBase(t *testing.T) string {
 	base := t.TempDir()
-	old := viper.Get("persistence.path")
-	viper.Set("persistence.path", base)
-	t.Cleanup(func() { viper.Set("persistence.path", old) })
+	usePath(t, base)
 	return base
 }
 

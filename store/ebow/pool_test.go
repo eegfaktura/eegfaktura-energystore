@@ -246,9 +246,7 @@ func TestFailedOpenWakesNextWaiter(t *testing.T) {
 	// Ab jetzt schlaegt jedes Oeffnen fehl: der Basispfad ist eine Datei.
 	notDir := filepath.Join(base, "not-a-dir")
 	assert.NoError(t, os.WriteFile(notDir, []byte("x"), 0o600))
-	old := viper.Get("persistence.path")
-	viper.Set("persistence.path", notDir)
-	t.Cleanup(func() { viper.Set("persistence.path", old) })
+	viper.Set("persistence.path", notDir) // vlogGCTestBase restores the old path
 
 	p.Put(testRc, testEcId, held) // letzte Rueckgabe schliesst die DB, beide Wartenden muessen oeffnen
 	for i := 0; i < 2; i++ {
