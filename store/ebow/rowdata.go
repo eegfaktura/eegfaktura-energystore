@@ -96,24 +96,6 @@ type BowStorage struct {
 
 var turns = newTurns()
 
-//func OpenStorage(tenant, ecId string) (*BowStorage, error) {
-//	t := strings.ToLower(tenant)
-//	basePath := viper.GetString("persistence.path")
-//	unlock := turns.lock(t)
-//	db, err := ebow.Open(filepath.Join(fmt.Sprintf("%s/%s", basePath, t), ecId), ebow.SetLogger(ebowLogger{5}))
-//	if err != nil {
-//		unlock()
-//		return nil, err
-//	}
-//	return &BowStorage{db, unlock}, nil
-//}
-//
-//func (b *BowStorage) Close() {
-//	_ = b.db.Close()
-//	b.unlock()
-//	return
-//}
-
 // ErrTenantNotSupported refuses a tenant longer than 8 characters, e.g. a sub-community with a suffix (261008-ca3).
 var ErrTenantNotSupported = errors.New("tenant not supported by the energy store")
 
@@ -156,14 +138,6 @@ func (b *BowStorage) LockWrites() func() {
 }
 
 func (b *BowStorage) SetLines(line []*model.RawSourceLine) error {
-	return b.SetLinesRaw("rawdata", line)
-}
-
-func (b *BowStorage) SetLinesG2(line []*model.RawSourceLine) error {
-	return b.SetLinesRaw("rawdata", line)
-}
-
-func (b *BowStorage) SetLinesG3(line []*model.RawSourceLine) error {
 	return b.SetLinesRaw("rawdata", line)
 }
 
