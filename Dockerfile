@@ -13,8 +13,8 @@ RUN go build -o /usr/local/bin/estore -ldflags="-s -w" estore.go
 # Laufzeit: schlankes Debian derselben Release wie das Build-Image (golang:1.26.10 = trixie), ohne
 # Go-Toolchain, git, ssh, curl. Die Binaries sind dynamisch gegen glibc gelinkt (cgo an), daher kein
 # scratch/static. Gebraucht werden nur CA-Zertifikate (ausgehendes HTTPS zu Keycloak) und Zonendaten
-# (TZ, time.Local). Datierter Tag = unveraenderlich; veroeffentlicht 2026-10-21.
-FROM debian:trixie-20261020-slim
+# (TZ, time.Local). Datierter Tag = unveraenderlich; veroeffentlicht 2026-10-28.
+FROM debian:trixie-20261027-slim
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates tzdata \
