@@ -26,8 +26,8 @@ import (
 	"time"
 	_ "time/tzdata" // Fenster in Europe/Vienna auch auf einem Basis-Image ohne Zonendaten
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"github.com/dgraph-io/badger/v4"
-	"github.com/golang/glog"
 	"github.com/spf13/viper"
 )
 

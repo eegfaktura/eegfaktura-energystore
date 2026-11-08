@@ -11,13 +11,13 @@ import (
 	"strings"
 	"time"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/middleware"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/ownmeters"
 	protobuf "at.ourproject/energystore/protoc"
 	"at.ourproject/energystore/services"
 	"at.ourproject/energystore/store"
-	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 )
 
@@ -43,7 +43,7 @@ func queryRawData() middleware.JWTHandlerFunc {
 		}
 
 		body, err := io.ReadAll(r.Body)
-		glog.V(4).Infof("API-DATA: %s - %v", string(body), err)
+		glog.V(4).Infof("API-DATA: %d bytes - %v", len(body), err)
 
 		err = json.Unmarshal(body, &request)
 		if err != nil {
@@ -58,9 +58,9 @@ func queryRawData() middleware.JWTHandlerFunc {
 		if len(request.Cps) == 0 {
 			start := uint64(request.Start)
 			end := uint64(request.End)
-			meters, err := services.RequestActiveMeteringPoints(tenant, &start, &end)
+			meters, err := services.RequestActiveMeteringPoints(r.Context(), tenant, &start, &end)
 			if err != nil {
-				glog.Error(err)
+				glog.ErrorContext(r.Context(), err)
 				respondWithError(w, http.StatusBadRequest, err.Error())
 				return
 			}
@@ -72,7 +72,7 @@ func queryRawData() middleware.JWTHandlerFunc {
 
 		resp, err := store.QueryRawData(tenant, request.EcId, time.UnixMilli(request.Start), time.UnixMilli(request.End), cps, r.URL.Query())
 		if err != nil {
-			respondWithQueryError(w, http.StatusBadRequest, tenant, err)
+			respondWithQueryError(r.Context(), w, http.StatusBadRequest, err)
 			return
 		}
 
@@ -108,6 +108,9 @@ func queryMetaData(restrict bool) middleware.JWTHandlerFunc {
 		}
 		resp, err := store.QueryMetaData(tenant, vars["ecid"])
 		if err != nil {
+			if refuseTenant(w, err) {
+				return
+			}
 			respondWithError(w, http.StatusBadRequest, err.Error())
 			return
 		}

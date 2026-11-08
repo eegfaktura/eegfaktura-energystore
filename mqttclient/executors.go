@@ -5,7 +5,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/golang/glog"
+	"at.ourproject/energystore/internal/logging/glog"
 )
 
 // Lifecycle of the TopicDispatcher's executors: the cap on open stores (import.maxOpen) and the janitor.
@@ -20,7 +20,9 @@ func (d *TopicDispatcher) reserveOpen() bool {
 		}
 		victim := d.capVictim()
 		if victim == nil {
+			d.capWait++
 			d.capFree.Wait()
+			d.capWait--
 			continue
 		}
 		victim.busy = true

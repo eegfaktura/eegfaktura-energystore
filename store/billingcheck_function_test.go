@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
+	"at.ourproject/energystore/internal/testsupport"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store/ebow"
 	_ "time/tzdata"
 
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -27,7 +27,7 @@ func bcDay(d int) time.Time { return time.Date(2026, 2, d, 0, 0, 0, 0, time.Loca
 // bcSeed writes February 2026 for two consumers and one producer: every quarter hour, all values
 // L1, except that the second consumer has no values after 20.02. and the given quality overrides.
 func bcSeed(t *testing.T, override func(id string, line *model.RawSourceLine)) {
-	viper.Set("persistence.path", t.TempDir())
+	testsupport.UseTempPersistence(t)
 	db, err := ebow.OpenStorage(bcTenant, bcEcId)
 	require.NoError(t, err)
 	defer db.Close()
@@ -179,7 +179,7 @@ func TestBillingCheck_GapInsidePeriodIsNoValue(t *testing.T) {
 
 // bcStore writes the given metadata and lines into a fresh store.
 func bcStore(t *testing.T, meta []*model.CounterPointMeta, lines []*model.RawSourceLine) {
-	viper.Set("persistence.path", t.TempDir())
+	testsupport.UseTempPersistence(t)
 	db, err := ebow.OpenStorage(bcTenant, bcEcId)
 	require.NoError(t, err)
 	defer db.Close()
@@ -230,7 +230,7 @@ func TestBillingCheck_InactiveDayWithClockChange(t *testing.T) {
 }
 
 func TestBillingCheck_NoDataInPeriod(t *testing.T) {
-	viper.Set("persistence.path", t.TempDir())
+	testsupport.UseTempPersistence(t)
 
 	res, err := QueryBillingCheck(bcTenant, bcEcId, bcRequest(cons(bcCons, 0, 0)))
 	require.NoError(t, err)
@@ -267,7 +267,7 @@ func TestBillingCheck_MissingQuarterHours(t *testing.T) {
 }
 
 func TestBillingCheck_MissingWithoutRows(t *testing.T) {
-	viper.Set("persistence.path", t.TempDir())
+	testsupport.UseTempPersistence(t)
 	res, err := QueryBillingCheck(bcTenant, bcEcId, bcRequest(cons(bcCons, bcDay(27).UnixMilli(), 0)))
 	require.NoError(t, err)
 	assert.Equal(t, 2*96, res.Meters[0].MissingCount)

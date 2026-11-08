@@ -44,10 +44,9 @@ module's own `LICENSE` file in the local module cache on 2026-10-02.
 | `github.com/golang-jwt/jwt/v4` | claims types | v4.5.2 | MIT |
 | `github.com/golang/glog` | logging | v1.2.5 | Apache-2.0 |
 | `github.com/spf13/viper`, `github.com/spf13/cobra` | configuration, CLI | v1.19.0, v1.9.1 | MIT, Apache-2.0 |
-| `github.com/xuri/excelize/v2` | Excel import/export | v2.11.0 | BSD-3-Clause |
+| `github.com/xuri/excelize/v2` | Excel import/export | v2.11.1-0.20261003002531-6258dcebc4e2 (commit of 2026-10-03; temporary pin until v2.12.0) | BSD-3-Clause |
 | `github.com/sony/sonyflake` | id generation | v1.2.0 | MIT |
 | `google.golang.org/grpc`, `google.golang.org/protobuf` | gRPC client to the backend's master data | v1.83.1, v1.36.11 | Apache-2.0, BSD-3-Clause |
-| `golang.org/x/net` | HTTP helpers | v0.56.0 | BSD-3-Clause |
 | `github.com/stretchr/testify` | tests only | v1.11.1 | MIT |
 
 Indirect modules are pinned by `go.mod`/`go.sum`; `go list -m all` lists them.
@@ -65,7 +64,7 @@ Indirect modules are pinned by `go.mod`/`go.sum`; `go list -m all` lists them.
 | Service | Used for | Where configured |
 |---|---|---|
 | Keycloak (realm `EEGFaktura`, clients `at.ourproject.vfeeg.app` / `.api`) | token verification (discovery and keys at start), password grant for `/query/*` | `keycloak.json` / `KEYCLOAK_CONFIG` |
-| MQTT broker (Mosquitto in the platform) | energy ingest (`mqtt.energySubscriptionTopic`), inverter topic, `cr_msg_history` replies | `config.yaml` `mqtt.*` |
+| MQTT broker (Mosquitto in the platform) | energy ingest (`mqtt.energySubscriptionTopic`), `cr_msg_history` replies | `config.yaml` `mqtt.*` |
 | eegfaktura-backend gRPC (`services.master-server`) | active metering points (`protoc/masterdata.proto`) | `config.yaml` |
 | eegfaktura-backend REST `GET /participant` (`services.backend-api`) | a member's own metering points and their participation windows (the member's token is forwarded; `meters[].meteringPoint`, `status`, `registeredSince`, `participantState.activeSince`/`inactiveSince`) | `config.yaml` |
 | Mail server gRPC (`services.mail-server`) | sending the Excel export | `config.yaml` |

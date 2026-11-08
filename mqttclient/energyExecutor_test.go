@@ -44,10 +44,12 @@ func gzipData(data []byte) ([]byte, error) {
 }
 
 func TestDecodeMessageRejectsIncompatibleTransportPayload(t *testing.T) {
-	require.Nil(t, decodeMessage([]byte("not-a-base64-cr-msg")))
+	m, _ := decodeMessageSize([]byte("not-a-base64-cr-msg"))
+	require.Nil(t, m)
 
 	notGzip := base64.StdEncoding.EncodeToString([]byte("not-gzip"))
-	require.Nil(t, decodeMessage([]byte(notGzip)))
+	m, _ = decodeMessageSize([]byte(notGzip))
+	require.Nil(t, m)
 }
 
 func TestNewMqttEnergyImporter(t *testing.T) {
@@ -305,7 +307,7 @@ func TestImportRawdataStore(t *testing.T) {
 	compressed, err := encryptMessage(jsonRaw)
 	require.NoError(t, err)
 
-	rawData := decodeMessage(compressed)
+	rawData, _ := decodeMessageSize(compressed)
 	require.NotNil(t, rawData)
 
 	importer := NewTenantEnergyImporter("te100190", &MQTTStreamer{})
@@ -412,7 +414,7 @@ func TestMassImport(t *testing.T) {
 // darf die Store-Map nicht zerstoeren; die naechste Nachricht mit gueltiger ecId geht durch,
 // statt in eine nil-Map zu schreiben und den Dienst abstuerzen zu lassen.
 func TestEnsureDbInvalidThenValid(t *testing.T) {
-	viper.Set("persistence.path", t.TempDir())
+	testsupport.UseTempPersistence(t)
 
 	importer := NewTenantEnergyImporter("TE999997", &MQTTStreamer{})
 	defer importer.Close()
@@ -434,7 +436,7 @@ func TestEnsureDbInvalidThenValid(t *testing.T) {
 
 // TestEnsureDbTenantTooLong: ein zu langer Mandant liefert einen Fehler statt einer Panic.
 func TestEnsureDbTenantTooLong(t *testing.T) {
-	viper.Set("persistence.path", t.TempDir())
+	testsupport.UseTempPersistence(t)
 
 	importer := NewTenantEnergyImporter("GC100403001", &MQTTStreamer{})
 	defer importer.Close()

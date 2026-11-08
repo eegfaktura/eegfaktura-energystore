@@ -8,6 +8,90 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Security
+- **`/query` API for admins only** (energystore 261025-ca1): security relevant — details not published.
+  `/query/rawdata` and `/query/{ecid}/metadata` answer 403 unless the account is in `/EEG_ADMIN` or `/EEG_OWNER`
+  (the API client's tokens must carry the `access_groups` group mapper). Every account that used the API in
+  production is an admin. A superuser without one of these groups is refused: the realm role is not in the
+  API's tokens.
+- **Member access needs a verified e-mail address** (energystore 261025-ca1): security relevant — details not
+  published. Rollout: a member login whose e-mail address is not confirmed gets 403 on per-meter energy until the
+  address is confirmed; community totals, admin and owner logins are unaffected.
+
+### Changed
+- **CI: no image build for a commit that only changes `CHANGELOG.md`** (platform#239): pushes and pull requests whose
+  only change is the CHANGELOG, such as the release PR, skip the image build and the checks (PR checks, security
+  scan, Snyk Code; the weekly schedules still run). Tag pushes still build. A release promotes
+  the image of the last commit before the release PR; it has the same content.
+
+## [1.10.0] – 2026-11-06
+
+### Security
+- **Base image `debian:trixie-20261027-slim`** (published 2026-10-28) instead of `trixie-20261020-slim`: current Debian security updates of the runtime image.
+
+### Added
+- **Start-up line and `deployment.environment`** (dev#45 L14, Q8). At start the service writes one line with the
+  message `service start`, `event.action` = `service.start`, `service.version` and `log.effective_level` (the root
+  level, one plain value as in all services), at info whatever `LOG_LEVEL` says and without any other setting. The new environment
+  variable `DEPLOYMENT_ENVIRONMENT` sets `deployment.environment` on every line; unset or blank, the field is left
+  out. It is set per zone in the deployment.
+- **Never-log test** (dev#45 L11, Q2). `internal/logging` reads the source of every package with the Go type checker.
+  A log call (glog, `internal/logging`, `log/slog`, `log`, `fmt.Print*`) fails the suite when it uses `%+v` or `%#v`,
+  gets a value that prints field by field with any verb (any struct, `http.Header`, a client interface; errors and
+  Stringers excepted), or has an identifier with a word of the never-log list of all services (split into camelCase
+  and snake_case words, compared as whole words, also with a plural s; in an all-lower-case identifier a list word of
+  five or more letters also matches inside it), or such a word right before a verb of the format (`password=%s`).
+  Other string literals are not scanned. A legitimate exception needs an entry keyed by file, finding and log call
+  with its reason; `audit.operator` in `logging.AuditOperator` in `rest/restServer.go` is the only one.
+  Metering-point numbers are ids and may be logged.
+
+### Changed
+- **`request.id` and `tenant.id` on the warn and error lines of an HTTP request** (dev#45 L12), not only on the
+  access line, so such a line can be joined to its request. `tenant.id` appears once the token check passed. For a
+  superuser that value is the unchecked header, so for everyone it is written only in the form agreed for all
+  services, `^[A-Z0-9][A-Z0-9_-]{0,63}$` after upper-casing (GEA `GC123456-001` passes); otherwise there is no
+  `tenant.id`. The access line follows the same rule. This covers `middleware`, `rest`, `graph`, `services` and the Excel import and export, HTTP only: no
+  propagation over MQTT or gRPC. Not covered yet: the lines in `store/ebow` and `calculation`, which have no request
+  context, and info, debug and trace lines.
+- **Some log texts changed** (dev#45 L11): lines that printed a struct now name its id or a count, e.g. the dispatcher
+  start, the mail server reply, `Update Metadata`, `Update Source Line`, and the error `Energie Values ... different
+  ...`, now `Energie Values <code>: source <n> not in the <m> data blocks`. Lines that used `%+v` on plain values keep
+  their output.
+
+- **Logging clean-up after the code-quality review** (dev#45 Q1, Q4, Q5, Q9). `tenant.id`, `request.id`,
+  `trace.id` and `span.id` come only from the request context: a caller can no longer set them, so a line never
+  carries them twice, and the tenant rule is applied in one place, where the field is written. Request lines no
+  longer repeat the tenant in the text (`tenant=...` in query errors, the billing check, the member metering points,
+  the export write error and the `RAWDATA-DELETE` audit line), it is in `tenant.id` (261102-mm1). The image no longer
+  passes `-logtostderr=true -stderrthreshold=INFO`; the flags are still accepted (prod gitops passes them until
+  gitops#160). The operator commands `move` and the reset function print the metering point name and index instead
+  of the whole meta record.
+
+### Fixed
+- **A flushed response counts as begun** (dev#45 Q6). A handler that flushed and then panicked got a second
+  `WriteHeader(500)`; the connection is aborted now, as after a write.
+- **Start without the `api` Keycloak client panics with the reason** (dev#45 Q7), not with `nil`.
+- **No client-chosen tenant in the refusal lines** (dev#45 L2). A refused request no longer repeats the tenant of the
+  `tenant` or `X-Tenant` header or of the GraphQL argument in the line text.
+- **No dump of the MQTT client on connection loss** (dev#45 L3). The line printed paho's client with its connection
+  options; it logs the error now, also as `error.type` and `error.message`. The level stays info.
+- **Excel energy export: a row with an unreadable id no longer crashes the export** (ES-CQ-26). The export skips
+  such a row, like the reports do for rows after the first; before, it dereferenced the missing time and the
+  request failed.
+
+### Removed
+- **Unused code after the code-quality review** (ES-CQ-2, -3, -4, -5, -9, -10, -13, -14, -21, -24, -27, -28, -29,
+  -32, -33, -38, -44, -45). The files `initQoV.go`, `converterV2.go`, `ebowctl.go` and `config-prod.yaml`; the
+  pre-OIDC JWT middleware; the old Excel import `ImportExcelEnergyFile`; the legacy MQTT dispatcher and
+  `MockMQTTStreamer` (`golang.org/x/net` is no longer a direct dependency); unused helpers in `config`, `store`,
+  `model`, `utils`, `calculation` and `ebow`, and commented-out code. The load-curve reports ignored their `func`
+  parameter; it is no longer read (the routes are unchanged). The unused key `mqtt.inverterSubscriptionTopic` left
+  `config.yaml`. The `Makefile` now only calls `scripts/dev/*.sh` and builds the two binaries; the README describes
+  running, building, testing and the settings as they are (ES-CQ-46). Tests restore `persistence.path` and wait for
+  the waiting state instead of sleeping (ES-CQ-40, -41).
+
+## [1.9.0] – 2026-10-31
+
 ### Added
 - **Health endpoints `GET /healthz` and `GET /readyz`** (also `HEAD`) for Kubernetes probes, on the HTTP port
   (8080), without a token (the only unauthenticated endpoints). `/healthz` (liveness) always answers 200 `ok` and
@@ -19,6 +103,61 @@ this changelog highlights the changes relevant for overview and operations.
   an error is logged), so a fresh volume reports ready. The public ingress blocks `/energystore/healthz` and
   `/energystore/readyz` (vfeeg-development/eegfaktura-gitops#159); kubelet probes reach the pods directly.
 
+### Changed
+- **Log output is now JSON on stdout** (logging concept W-261008-ca2, ES-5) — this changes what operators,
+  `kubectl logs` and Dynatrace receive. Every line (the former glog calls, the standard `log` package, the MQTT
+  publish error) goes through one module, `internal/logging`: one JSON object per line on **stdout** (glog wrote
+  text to stderr) with the ECS fields `@timestamp` (UTC, ms), `log.level`, `message`, `service.name`
+  (`eegfaktura-energystore`), `service.version`, `log.origin.file.name`/`.line` and, for errors, `error.type`/
+  `error.message`. Only whitelisted fields are written. New environment variables:
+  - `LOG_FORMAT` = `json` (default) or `text` (key=value, for local reading);
+  - `LOG_LEVEL` = `trace`, `debug`, `info` (default), `warn` or `error`; an unknown value stops the start, an empty
+    `LOG_LEVEL`/`LOG_FORMAT` is the default (same rule as the backend);
+  - `LOG_LEVEL_<PKG>` (optional) for one package, e.g. `LOG_LEVEL_MQTTCLIENT=debug`, `LOG_LEVEL_EBOW=trace`; an empty
+    value is no override;
+  - `SERVICE_VERSION` — set by the image build (release workflow: the commit, or the version for a `v*` tag build),
+    default `dev`. A promoted prod/pilot image keeps its commit: the release version is the image tag.
+  The operator CLI `estore` writes its log lines to **stderr**, so its tables on stdout stay clean, and stops with
+  exit code 2 on an invalid `LOG_*` value.
+- **The glog flags no longer set anything.** `-v`, `-vmodule`, `-logtostderr`, `-stderrthreshold` and the other
+  glog flags are still accepted (the prod deployment still passes them, pilot no longer does), `-v`/`-vmodule` with a
+  warning at start. The former
+  `V(1..3)` lines are now `debug`, `V(4)` and above `trace`. **Operations:** prod runs with `-v=3` today, so the
+  `V(3)` diagnostics (start-up steps, import counts, timings) disappear at the default `info`; set `LOG_LEVEL=debug`
+  to keep them. The former `V(3)` lines that report a failure are now `warn` and stay visible: the row-id
+  conversion error of the energy calculation (261008-ca1) and the skipped Excel import rows (now **one** warning per
+  sheet with the number of skipped rows, the first skipped row number and its cell style; before, one line per row
+  with the whole row).
+- **Access line per HTTP request** (`event.action=http.access`; info, warn for 401/403), written after the token check of the REST
+  routes, `/query` (GraphQL) and the Basic-auth `/query/*` API: `http.request.method`, `http.route` (the route
+  template, no ids; missing for unmatched paths), `http.response.status_code`, `event.duration` (ns),
+  `event.outcome` (`success`, `refused` for 401/403, `failure`), `request.id`, `trace.id`/`span.id` (from a valid W3C
+  `traceparent`), `tenant.id` (the tenant the check accepted), `client.id` (the token's `azp`; for Basic auth the API
+  client id) and `graphql.operation.name` (unset for an anonymous operation). Message `<METHOD> <route> <status>`
+  with the numeric status, `-` for an unmatched path (same convention as the backend). No user, e-mail, name, IP,
+  user agent, query value or body (DSGVO). **Known limit:** GraphQL answers a refused or failed operation with HTTP 200
+  and an `errors` array; its access line says `event.outcome=success` — the outcome reflects the HTTP status only (same
+  in the backend). More known limits (follow-ups, unchanged now): CORS preflights (`OPTIONS`, answered by the CORS
+  wrapper outside the access log) get no access line and no `X-Request-Id`; `X-Request-Id` is not an exposed CORS
+  header and `X-Request-Id`/`traceparent` are not in the allowed request headers, so browsers cannot send or read them;
+  the GraphQL websocket transport on `/query` is logged as one line with status 200 and the socket's lifetime as
+  duration, and operations on one socket share the operation name.
+- **A panic in a REST handler** is logged as one error line (`event.action=http.panic`, `error.type`, `error.message`,
+  `error.stack_trace`) and answered with 500; the access line says 500. Before, net/http logged `http: panic serving
+  <remote address>` with a plain stack (an IP in the log) and there was no access line. If the response had already
+  begun, the connection is aborted.
+  `/healthz` and `/readyz` are not logged. `X-Request-Id` is taken when it matches `[A-Za-z0-9._:-]{1,128}`,
+  otherwise a UUIDv4 (32 hex) is generated, and it is returned as a response header; `X-Request-Id` and a child
+  `traceparent` (same trace id, a new span id) are passed on to the backend call for the metering points of a member.
+  energystore had no access log before (none with IP or user agent to switch off).
+- **A panic in a GraphQL resolver is logged as one error line** (`event.action=graphql.panic`, `error.type`,
+  `error.message`, `error.stack_trace`) through the logging module, instead of gqlgen's plain-text stack on stderr.
+  The client gets the same generic `internal system error` as before.
+- **Raw-data deletion audit line** (`POST /eeg/v2/{ecid}/rawdata/delete`, superuser only): now
+  `event.action=rawdata.delete.done` (warn) or `rawdata.delete.failed` (error, newly logged) with `tenant.id` and the
+  operator's user name in `audit.operator`. Documented exception to 'no persons in logs' (decision 2026-10-30):
+  accountability over anonymity for this destructive ops tool; `audit.operator` is written on these two events only.
+
 ### Security
 - **Basic authentication of the `/query` API** (energystore #39): security relevant — details not published.
   Compatibility: clients that send Basic credentials as standard base64 (RFC 7617) are unaffected; a client that
@@ -27,7 +166,8 @@ this changelog highlights the changes relevant for overview and operations.
 - **Sample `keycloak.json`** (energystore #15): security relevant — details not published.
 - **Energy routes for member tokens** (energystore 261025-ca1): security relevant — details not published.
   Operations: new setting `services.backend-api` (the backend's HTTP address, e.g.
-  `http://eegfaktura-backend-service.eegfaktura:8080`); set it before rolling out this version. energystore now
+  `http://eegfaktura-backend-service.eegfaktura:8080`); set it before rolling out this version, and roll out backend
+  1.14.0 first (an older backend refuses tokens with `aud` as a list with 401, which reads as 503 here). energystore now
   calls the backend's `GET /participant` (contract: `meters[].meteringPoint`, `meters[].status`, `meters[].registeredSince`,
   `meters[].participantState.activeSince`/`inactiveSince`) and needs network access to the backend on port 8080.
   Without the setting energystore logs a warning at start. Logins without admin or owner rights get 503 on
@@ -37,16 +177,61 @@ this changelog highlights the changes relevant for overview and operations.
 - **Member access by metering point status** (energystore 261025-ca1): security relevant — details not published.
   Member logins get 403 for metering points whose participation has no usable start or end date in the backend;
   admin and owner logins are unchanged.
-- **`/query` API for admins only** (energystore 261025-ca1): security relevant — details not published.
-  `/query/rawdata` and `/query/{ecid}/metadata` answer 403 unless the account is in `/EEG_ADMIN` or `/EEG_OWNER`
-  (the API client's tokens must carry the `access_groups` group mapper). Every account that used the API in
-  production is an admin. A superuser without one of these groups is refused: the realm role is not in the
-  API's tokens.
-- **Member access needs a verified e-mail address** (energystore 261025-ca1): security relevant — details not
-  published. Rollout: a member login whose e-mail address is not confirmed gets 403 on per-meter energy until the
-  address is confirmed; community totals, admin and owner logins are unaffected.
+- **excelize pinned to a pseudo-version until v2.12.0**: `github.com/xuri/excelize/v2` v2.11.0 →
+  `v2.11.1-0.20261003002531-6258dcebc4e2` (commit `6258dceb`, published 2026-10-03; the latest release v2.11.0 of
+  2026-07-06 lacks the fixes). Closes Dependabot alerts #21–#35 (GHSA-5h23-36rv-pm65, GHSA-fw94-4wwp-w8pw,
+  GHSA-fq3v-74gv-27gm, GHSA-rxcj-4pj5-74gr, GHSA-8mcq-6wmr-jrjv, GHSA-g27h-8qhm-6pff, GHSA-jrfj-fhj2-jjvm,
+  GHSA-8jjq-8j9w-m2v6, GHSA-c85p-xxjj-2r75, GHSA-wp2g-vpjj-g53r, GHSA-x2q3-8cjh-766f, GHSA-2j4c-ffch-9f23,
+  GHSA-r7x5-4969-99p7, GHSA-jw42-f3rr-4cc3, GHSA-mx22-3794-2vpv): panics, hangs and unbounded allocations on
+  malformed workbooks, reachable through the Excel upload. Indirect modules follow: `richardlehane/mscfb` 1.0.7 →
+  1.0.8 (2026-08-19), `xuri/efp` 0.0.1 → 0.0.2 (2026-09-21); `go.sum` also records `golang.org/x/image` 0.44.0
+  (2026-07-08). Return to a release tag once v2.12.0 is out. The new excelize writes numbers with at most 15
+  significant digits and cuts off the rest. So that the export does not change because of this, the five totals of the
+  summary sheet (B5–B9: Gesamtverbrauch, Anteil, Eigendeckung, Überschuss, Gesamte Erzeugung) are now rounded to
+  6 decimals, like the per-meter cells. The stored value is what Excel displayed before (e.g. `21547.977599`
+  instead of the float noise `21547.977598999998`), and the displayed values are unchanged. The balance in B10 is
+  computed from these rounded totals, matching its formula `ROUND(B9-B8-B7,3)`. The energy sheet and the per-meter
+  rows were already rounded to 6 decimals and are unaffected.
+- `github.com/go-jose/go-jose/v4` 4.1.4 → 4.1.6 (indirect, Dependabot).
 
 ### Fixed
+- **A tenant with a suffix (`GC100403-001`) gets a clear refusal** (261008-ca3). Every read of the store answered it with
+  an error: `/report`, the Excel download and the billing check with a 500, a member with a 503, `lastRecordDate` with a
+  404 and a second body. All of them now answer **422** with the text `tenant not supported by the energy store`, also
+  the metadata read and the other reports. Nothing else changes: such a tenant still cannot read its data, and an MQTT message
+  for it is still not stored. Callers: eegfaktura-web.
+- **An ecId with dashes inside (`AT00300000000GC90001000000000-001`) is accepted again** (261016-ca1). The path check
+  refused it; a CR_MSG with such an ecId was acked, logged as ERROR, not stored and not confirmed, and is not
+  redelivered. EDA's schema allows no dash in an ECID, so this concerns other feeds (eegfaktura-v3's test feed). Leading,
+  trailing and double dashes, dots and slashes stay refused.
+- **`intra-day-report` and the `intraday` part of `combined-report`: every hour now holds its own hour** (known-errors
+  #26). The hours were shifted by one: index 0 held 01:00–01:45, index 12 held 13:00–13:45, index 23 held 00:00–00:45. If the
+  first stored row lay inside the period (a community's first day), rows also landed in the night hours before it.
+  **Reported values change:** the web's "Tagesverlauf" chart labels the index as the hour, so every bar moves one hour
+  later (the midday peak was shown an hour early). The sum of the day, stored data and all other reports stay the same.
+- **`/raw` with aggregation and the load curve keep a row in its own bucket after a gap in the rows** (#26). The bucket
+  moved one step per bucket, so after a gap all following values were reported too early, e.g. the values of 3 June under
+  2 June. **Reported values change** only for periods with such a gap; totals stay the same. An hour step below 15 minutes
+  in `agg(...)` (also 0 and negative) is now refused. Callers: eegfaktura-web, eegfaktura-v3 (`/raw`).
+- **MQTT import: a message over a DST switch is cut at local midnight, and no value is lost** (known-errors #42).
+  `SplitEnergyByDay` stepped by a fixed 24 h, so the blocks after the switch started at 01:00 (spring) or 23:00 (autumn).
+  If such a message did not end at midnight, the last slots were dropped silently: `30.03. 00:00–02:00` lost
+  `01:00–02:00` (4 slots), `26.10. 23:00–23:30` lost its 2 slots, and the message was still confirmed. These slots are now
+  stored. Rows and keys do not change; data already stored is not touched, a lost slot comes in when the day is requested
+  again. Messages of quarter-hour values that end at midnight store the same values as before.
+- **`service.version` in the log names the build.** Images built from a branch carried the branch name (`main`), which
+  cannot tell builds apart, and a promoted prod/pilot image keeps what was set at build time. It is now the commit, or
+  the version without `v` for a `v*` tag build; same as billing.
+- **Image build blocked by data races in the logging tests** (since energystore#102): the race detector in the
+  image CI reported two races. The handler of the logging module is now swapped atomically, so reconfiguring it
+  while other goroutines log is safe (in the service it is only configured at start, before any goroutine runs);
+  the Hijack test waits for its server handler over a channel. No change to the log output.
+- **No personal data or payloads in the log** (logging concept, never-log list): the request body of
+  `POST /query/rawdata` (energystore #38), MQTT message payloads (261008-ca2), the energy values when GraphQL
+  marshalling fails (261030-mm3), the recipient e-mail address of the mail export (261030-mm4) and the backend's
+  metering-point list (with addresses, 261030-mm5) are no longer logged — sizes, counts or the tenant instead.
+- **Excel import: the warning about a skipped row names the cell style of the row's first cell** (energystore
+  261030-mm2); before, it always said 0 and a lookup error was lost.
 - **Gap filling: no phantom quarter hours on the summer-time day, fill rows in their own slot** (energystore #22).
   **This changes values in reports, raw-data queries and Excel exports.** Where the store has no row for a
   quarter hour, the reports insert an empty row (0 kWh, quality L0). Two errors are fixed:

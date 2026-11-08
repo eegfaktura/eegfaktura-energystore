@@ -102,8 +102,7 @@ type heldExecutor struct {
 	tenant  string
 }
 
-func (h heldExecutor) Execute(mqtt.Message) {}
-func (h heldExecutor) Close()               {}
+func (h heldExecutor) Close() {}
 func (h heldExecutor) ExecuteBatch(ctx context.Context, msgs []mqtt.Message) []bool {
 	h.started <- h.tenant
 	select {
@@ -160,7 +159,11 @@ func TestDispatcherCloseWhileWaitingAtCap(t *testing.T) {
 	}
 	third := laneMsg("TE100003", 0)
 	d.Submit(third)
-	time.Sleep(50 * time.Millisecond) // the third lane is waiting at the cap
+	require.Eventually(t, func() bool { // the third lane is waiting at the cap
+		d.mu.Lock()
+		defer d.mu.Unlock()
+		return d.capWait == 1
+	}, 5*time.Second, time.Millisecond)
 
 	closed := make(chan struct{})
 	go func() {

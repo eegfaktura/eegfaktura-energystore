@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"strings"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
 	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
-	"github.com/golang/glog"
 )
 
 //const StorageException = errors.New()
@@ -76,11 +76,11 @@ func EnergyReportV2(tenant, ecid string, participants []model.ParticipantReport,
 		return nil, err
 	} else {
 		for _, m := range meta.CounterPoints {
-			glog.V(6).Infof("Meta: %+v\n", m)
+			glog.V(6).Infof("Meta: %s %s\n", m.ID, m.Dir)
 			if m.Dir == "CONSUMPTION" || m.Dir == "GENERATION" {
 				response.Meta = append(response.Meta, m)
 			} else {
-				glog.V(6).Infof("Omitted Meta: %+v\n", m)
+				glog.V(6).Infof("Omitted Meta: %s %s\n", m.ID, m.Dir)
 			}
 		}
 	}

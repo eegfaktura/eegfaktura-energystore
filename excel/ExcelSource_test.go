@@ -3,6 +3,7 @@ package excel
 import (
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store/ebow"
+	"context"
 	"fmt"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -47,7 +48,7 @@ func TestImportExcelEnergyFile(t *testing.T) {
 	require.NoError(t, err)
 	defer excelFile.Close()
 
-	err = ImportExcelEnergyFileNew(excelFile, "Energiedaten", db)
+	err = ImportExcelEnergyFileNew(context.Background(), excelFile, "Energiedaten", db)
 	require.NoError(t, err)
 
 	iter := db.GetLinePrefix("CP")

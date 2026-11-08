@@ -4,6 +4,7 @@ import (
 	"at.ourproject/energystore/mocks"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/utils"
+	"context"
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -37,7 +38,7 @@ func TestImportExcelEnergyFileNew(t *testing.T) {
 		expectedLines = append(expectedLines, &model.RawSourceLine{Id: "CP/2023/07/09/13/30/00", Consumers: []float64{0, 0, 0, 0.008, 0.087296, 0.008, 0.264, 2.880768, 0.264, 0.459, 5.008608, 0.459, 0, 0, 0, 0.019, 0.207328, 0.019}, Producers: []float64{7.307738, 8.045, 0.126262, 0.139}, QoVConsumers: []int{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}, QoVProducers: []int{1, 1, 1, 1}})
 
 		mockBow := setupMock()
-		err = ImportExcelEnergyFileNew(excelFile, "Energiedaten", mockBow)
+		err = ImportExcelEnergyFileNew(context.Background(), excelFile, "Energiedaten", mockBow)
 
 		for _, c := range mockBow.Calls {
 			fmt.Printf("Call %s: %+v\n", c.Method, c.Arguments.Get(0))
@@ -66,7 +67,7 @@ func TestImportExcelEnergyFileNew(t *testing.T) {
 		expectedLines = append(expectedLines, &model.RawSourceLine{Id: "CP/2023/01/01/00/30/00", Consumers: []float64{0.005 * 2, 0.001077 * 2, 0.001077 * 2, 0.002 * 2, 0.000431 * 2, 0.000431 * 2, 0.058 * 2, 0.012492 * 2, 0.012492 * 2, 0, 0, 0, 0, 0, 0, 0, 0, 0}, Producers: []float64{0.014 * 2, 0, 0, 0}, QoVConsumers: []int{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}, QoVProducers: []int{1, 1, 1, 1}})
 
 		mockBow := setupMock()
-		err = ImportExcelEnergyFileNew(excelFile, "Energiedaten", mockBow)
+		err = ImportExcelEnergyFileNew(context.Background(), excelFile, "Energiedaten", mockBow)
 
 		for _, c := range mockBow.Calls {
 			fmt.Printf("Call %s: %+v\n", c.Method, c.Arguments.Get(0))
@@ -100,7 +101,7 @@ func TestImportExcelEnergyFileNew(t *testing.T) {
 		expectedLines = append(expectedLines, &model.RawSourceLine{Id: "CP/2024/04/01/09/00/00", Consumers: []float64{1.712, 2.069223, 1.712, 0.977, 1.180859, 0.977, 0.833, 1.006812, 0.833, 0.074, 0.089441, 0.074, 9.255, 11.186131, 9.255, 7.8, 9.427534, 7.8}, Producers: []float64{24.96, 4.309}, QoVConsumers: []int{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}, QoVProducers: []int{1, 1}})
 
 		mockBow := setupMock()
-		err = ImportExcelEnergyFileNew(excelFile, "Energiedaten", mockBow)
+		err = ImportExcelEnergyFileNew(context.Background(), excelFile, "Energiedaten", mockBow)
 
 		var line []*model.RawSourceLine
 		for _, c := range mockBow.Calls {
@@ -135,7 +136,7 @@ func TestImportExcelEnergyFileNew(t *testing.T) {
 		expectedLines = append(expectedLines, &model.RawSourceLine{Id: "CP/2024/04/01/09/00/00", Consumers: []float64{1.712, 2.069223, utils.RoundToFixed(1.712*0.8, 7), 0.977, 1.180859, 0.977, 0.833, 1.006812, 0.833, 0.074, 0.089441, 0.074, 9.255, 11.186131, 9.255, 7.8, 9.427534, 7.8}, Producers: []float64{24.96, 4.309}, QoVConsumers: []int{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}, QoVProducers: []int{1, 1}})
 
 		mockBow := setupMock()
-		err = ImportExcelEnergyFileNew(excelFile, "Energiedaten-TF", mockBow)
+		err = ImportExcelEnergyFileNew(context.Background(), excelFile, "Energiedaten-TF", mockBow)
 
 		var line []*model.RawSourceLine
 		for _, c := range mockBow.Calls {
@@ -174,7 +175,7 @@ func TestImportExcelEnergyFileNew(t *testing.T) {
 		expectedLines = append(expectedLines, &model.RawSourceLine{Id: "CP/2024/04/01/09/00/00", Consumers: []float64{utils.RoundToFixed(1.712*0.6, 7), 2.069223, utils.RoundToFixed(1.712*0.8, 7), 0.977, 1.180859, 0.977, 0.833, 1.006812, 0.833, 0.074, 0.089441, 0.074, 9.255, 11.186131, 9.255, 7.8, 9.427534, 7.8}, Producers: []float64{utils.RoundToFixed(24.96*0.4, 7), utils.RoundToFixed(4.309*0.9, 7)}, QoVConsumers: []int{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}, QoVProducers: []int{1, 1}})
 
 		mockBow := setupMock()
-		err = ImportExcelEnergyFileNew(excelFile, "Energiedaten-TF-BEG", mockBow)
+		err = ImportExcelEnergyFileNew(context.Background(), excelFile, "Energiedaten-TF-BEG", mockBow)
 
 		var line []*model.RawSourceLine
 		for _, c := range mockBow.Calls {

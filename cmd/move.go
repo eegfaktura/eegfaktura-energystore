@@ -56,8 +56,8 @@ func handleMove(cmd *cobra.Command, args []string) error {
 	targetIdx := targetMeta.SourceIdx
 
 	fmt.Printf("Move B: %s E:%s (%d, %d)\n", beginDate, endDate, sourceIdx, targetIdx)
-	fmt.Printf("Source Meta %v\n", sourceMeta)
-	fmt.Printf("Target Meta %v\n", targetMeta)
+	fmt.Printf("Source Meta %s idx %d dir %v\n", sourceMeta.Name, sourceMeta.SourceIdx, sourceMeta.Dir)
+	fmt.Printf("Target Meta %s idx %d dir %v\n", targetMeta.Name, targetMeta.SourceIdx, targetMeta.Dir)
 
 	iter := db.GetLineRange("CP", beginDate, endDate)
 	defer iter.Close()

@@ -5,7 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/golang/glog"
+	"at.ourproject/energystore/internal/logging"
+	"at.ourproject/energystore/internal/logging/glog"
 )
 
 var (
@@ -44,25 +45,27 @@ func ProtectApi(handler JWTHandlerFunc) http.HandlerFunc {
 
 		idToken, err := kcClientAPI.AuthenticateUserWithPassword(creds[0], creds[1])
 		if err != nil {
-			glog.Errorf("%v", err)
+			glog.ErrorContextf(r.Context(), "%v", err)
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
 
 		claims := PlatformClaims{}
 		if err := idToken.Claims(&claims); err != nil {
-			glog.Errorf("%v", err)
+			glog.ErrorContextf(r.Context(), "%v", err)
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
 
 		tenant := r.Header.Get("X-Tenant")
 		if contains(claims.Tenants, tenant) == false {
-			glog.Errorf("Unauthorized access with tenant %s", tenant)
+			glog.ErrorContext(r.Context(), "Unauthorized access: tenant check failed")
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
 
+		// client.id is the API client; the Basic user is not logged
+		logging.SetCaller(r.Context(), tenant, kcClientAPI.clientID)
 		handler(w, r, &claims, strings.ToUpper(tenant))
 	}
 }

@@ -11,8 +11,7 @@ type run struct {
 
 // splitRuns cuts the messages of one ecId into runs in which no metering point has two messages with
 // overlapping periods (Start inclusive, End exclusive as in a CR_MSG: back-to-back days share a run). A run is stored day by day; a later message for the same quarter hours must still
-// overwrite an earlier one, also where SplitEnergyByDay cut their days differently (after a DST change the
-// days of a longer message start at 23:00).
+// overwrite an earlier one.
 func splitRuns(msgs []*model.MqttEnergyMessage, idx []int) []run {
 	var runs []run
 	var cur run

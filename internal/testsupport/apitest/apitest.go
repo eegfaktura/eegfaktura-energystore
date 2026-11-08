@@ -18,6 +18,7 @@ import (
 
 	"at.ourproject/energystore/graph"
 	"at.ourproject/energystore/graph/generated"
+	"at.ourproject/energystore/internal/logging"
 	"at.ourproject/energystore/internal/testsupport/fakeoidc"
 	"at.ourproject/energystore/middleware"
 	protobuf "at.ourproject/energystore/protoc"
@@ -29,10 +30,12 @@ import (
 )
 
 // Router returns rest.NewRestServer() with /query behind GQLProtect, as server.go wires it
-// (without the CORS wrapper).
+// (without the CORS wrapper and without logging.AccessLog around it).
 func Router() *mux.Router {
 	r := rest.NewRestServer()
 	srv := handler.NewDefaultServer(generated.NewExecutableSchema(generated.Config{Resolvers: &graph.Resolver{}}))
+	srv.SetRecoverFunc(logging.GQLRecover)
+	srv.AroundOperations(logging.GQLOperation)
 	r.Handle("/query", middleware.GQLProtect(srv))
 	return r
 }

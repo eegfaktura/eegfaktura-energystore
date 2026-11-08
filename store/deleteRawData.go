@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"time"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
-	"github.com/golang/glog"
 )
 
 // deleteWriteBatch bounds how many rewritten RawSourceLines are flushed per PutBatch.

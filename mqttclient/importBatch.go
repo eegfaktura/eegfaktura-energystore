@@ -7,11 +7,11 @@ import (
 	"sort"
 	"time"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
 	"at.ourproject/energystore/store/ebow"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/golang/glog"
 )
 
 // errStopped: the import of the message was stopped because the dispatcher closes; it stays unacked and
@@ -20,7 +20,18 @@ var errStopped = errors.New("import stopped, energystore shuts down")
 
 // ExecuteBatch decodes, stores and confirms a batch of CR_MSG of this tenant. The day blocks of all messages
 // of an ecId are stored together, one store.StoreDayBatch per day. Outcome, log line and cr_msg_history reply
-// are per message as in Execute. It returns which messages were processed; the caller acks those (#19).
+// are per message. It returns which messages were processed; the caller acks those after it returns
+// (executeBatch), whatever the outcome (#19):
+//   - stored: the cr_msg_history reply goes to the backend ("Energiedaten empfangen").
+//   - store error (open store, meta record, a corrupt row, Badger write; could succeed later): ERROR log,
+//     no reply. The data is not in the store, the gap shows in the check before billing (#148) and the
+//     day is requested again. The message is still acked: mosquitto redelivers an unacked message only
+//     when the session reconnects, and until then it holds one of the client's inflight slots
+//     (max_inflight_messages, 20 by default) for every tenant.
+//   - undecodable payload (Base64, gzip, larger than mqtt.maxDecompressedMB, JSON): permanent, ERROR log,
+//     no reply.
+//
+// Only a message whose processing did not finish (crash, OOM, shutdown) stays unacked and is redelivered.
 // When ctx ends it stops between messages, runs and days; the messages not finished by then are not.
 func (tmw *TenantEnergyImporter) ExecuteBatch(ctx context.Context, msgs []mqtt.Message) []bool {
 	return tmw.executeParts(ctx, msgs, maxDecompressedBytes())

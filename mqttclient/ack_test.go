@@ -81,8 +81,8 @@ func TestExecuteDropsUndecodablePayload(t *testing.T) {
 	defer imp.Close()
 
 	assert.NotPanics(t, func() {
-		imp.Execute(testsupport.CrMsgMessage(ackTenant, []byte("not base64 %%%")))
-		imp.Execute(testsupport.CrMsgMessage(ackTenant, testsupport.EncodeCrMsg(t, []byte(`{"ecId":`))))
+		imp.ExecuteBatch(context.Background(), []mqtt.Message{testsupport.CrMsgMessage(ackTenant, []byte("not base64 %%%"))})
+		imp.ExecuteBatch(context.Background(), []mqtt.Message{testsupport.CrMsgMessage(ackTenant, testsupport.EncodeCrMsg(t, []byte(`{"ecId":`)))})
 	})
 	assert.Empty(t, client.PublishedMessages(), "no reply for a message that was not stored")
 }
@@ -97,7 +97,7 @@ func TestImportStoreErrorIsReturned(t *testing.T) {
 	imp := NewTenantEnergyImporter(ackTenant, &MQTTStreamer{client: client})
 	defer imp.Close()
 	assert.Error(t, imp.Import(ackCrMsg(ackEcId, ackMeter).Message()))
-	imp.Execute(testsupport.CrMsgMessage(ackTenant, ackCrMsg(ackEcId, ackMeter).Payload(t)))
+	imp.ExecuteBatch(context.Background(), []mqtt.Message{testsupport.CrMsgMessage(ackTenant, ackCrMsg(ackEcId, ackMeter).Payload(t))})
 	assert.Empty(t, client.PublishedMessages())
 }
 
@@ -151,7 +151,6 @@ func TestWorkerAcksStoreErrorWithoutReply(t *testing.T) {
 
 type panicExecutor struct{ executed bool }
 
-func (p *panicExecutor) Execute(mqtt.Message) { p.executed = true; panic("boom") }
 func (p *panicExecutor) ExecuteBatch(context.Context, []mqtt.Message) []bool {
 	p.executed = true
 	panic("boom")
@@ -211,4 +210,20 @@ func TestDispatcherAcksOnlyAfterExecute(t *testing.T) {
 		t.Fatal("no reply")
 	}
 	require.Eventually(t, func() bool { return msg.Acks() == 1 }, 10*time.Second, 10*time.Millisecond)
+}
+
+// 261016-ca1: an ecId with a dash is stored and confirmed like any other.
+func TestDashedEcIdIsStoredAndConfirmed(t *testing.T) {
+	testsupport.UseTempPersistence(t)
+	const ecId = "AT00300000000GC90001000000000-001"
+	client := testsupport.NewFakeClient()
+	imp := NewTenantEnergyImporter(ackTenant, &MQTTStreamer{client: client})
+	defer imp.Close()
+
+	msg := testsupport.CrMsgMessage(ackTenant, ackCrMsg(ecId, ackMeter).Payload(t))
+	executeOne(imp, msg)
+
+	assert.Equal(t, 1, msg.Acks())
+	assert.Len(t, client.PublishedMessages(), 1)
+	assert.Len(t, ackStored(t, ackTenant, ecId, ackMeter), 96)
 }

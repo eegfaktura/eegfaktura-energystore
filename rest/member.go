@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"strings"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/middleware"
 	"at.ourproject/energystore/ownmeters"
 	"at.ourproject/energystore/store"
-	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 	"github.com/spf13/viper"
 )
@@ -45,7 +45,7 @@ func ownMeters(w http.ResponseWriter, r *http.Request, claims *middleware.Platfo
 	}
 	if strings.TrimSpace(claims.Email) == "" {
 		// the backend finds the member by the token's email; without one there is nothing to match
-		glog.Warningf("member token without email claim: own metering points not available tenant=%s", tenant)
+		glog.WarningContextf(r.Context(), "member token without email claim: own metering points not available")
 		respondWithError(w, http.StatusServiceUnavailable, "metering points of the member not available")
 		return nil, false
 	}
@@ -54,8 +54,11 @@ func ownMeters(w http.ResponseWriter, r *http.Request, claims *middleware.Platfo
 		own, err = inCommunity(all, tenant, mux.Vars(r)["ecid"])
 	}
 	if err != nil {
+		if refuseTenant(w, err) {
+			return nil, false
+		}
 		if !errors.Is(err, ownmeters.ErrNotConfigured) {
-			glog.Errorf("own metering points of a member: %v tenant=%s", err, tenant)
+			glog.ErrorContextf(r.Context(), "own metering points of a member: %v", err)
 		}
 		respondWithError(w, http.StatusServiceUnavailable, "metering points of the member not available")
 		return nil, false

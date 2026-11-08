@@ -1,43 +1,13 @@
-# Go parameters
-GOCMD=go
-GOBUILD=$(GOCMD) build
-GOCLEAN=$(GOCMD) clean
-GOTEST=$(GOCMD) test
-GOGET=$(GOCMD) get
-DOCKER=docker
+# Shortcuts for the scripts CI runs (scripts/dev/*.sh). The root package holds two func main
+# (known-errors #1), so each binary is built from its file.
+.PHONY: build test check generate
 
-GOPATH := ${PWD}/..:${GOPATH}
-export GOPATH
-
-DOCKER_TAG=v0.3.05-1
-BINARY_NAME=energy-store
-ORGANISATION=vfeeg-development
-GLOBAL_ORG=eegfaktura
-
-all: test build
 build:
-	$(GOBUILD) -o $(BINARY_NAME) -v -ldflags="-s -w"
-estore:
-	$(GOBUILD) -o estore -v -ldflags="-s -w" estore.go
+	go build -o energystore -ldflags="-s -w" server.go
+	go build -o estore -ldflags="-s -w" estore.go
 test:
-	$(GOTEST) -v ./...
-clean:
-	$(GOCLEAN)
-	rm -f $(BINARY_NAME)
-run:
-	$(GOBUILD) -o $(BINARY_NAME) -v ./...
-	./$(BINARY_NAME)
-
-docker-clean:
-	$(DOCKER) rmi ghcr.io/$(ORGANISATION)/energy-store:$(DOCKER_TAG)
-
-docker:
-	$(DOCKER) build --no-cache -t ghcr.io/$(ORGANISATION)/energy-store:$(DOCKER_TAG) .
-	$(DOCKER) image tag ghcr.io/$(ORGANISATION)/energy-store:$(DOCKER_TAG) ghcr.io/$(GLOBAL_ORG)/energy-store:latest
-
-push: docker
-	$(DOCKER) push ghcr.io/$(ORGANISATION)/energy-store:$(DOCKER_TAG)
-#	$(DOCKER) push ghcr.io/$(GLOBAL_ORG)/energy-store:latest
-
-protoc: protoc/masterdata.proto protoc/excel.proto
-	protoc --experimental_allow_proto3_optional=true --proto_path=. --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative ./protoc/*.proto
+	bash scripts/dev/test.sh
+check:
+	bash scripts/dev/static-check.sh
+generate:
+	bash scripts/dev/generate.sh

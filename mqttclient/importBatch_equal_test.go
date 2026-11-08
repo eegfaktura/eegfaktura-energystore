@@ -68,8 +68,7 @@ func TestImportBatchMatchesImport(t *testing.T) {
 			}
 		},
 	}, {
-		// A day, then a month over the DST change of the same metering point: SplitEnergyByDay cuts the month's
-		// days after the change from 23:00, so its block for the 27th belongs to the 26th; the month must win.
+		// A day, then a month over the DST change of the same metering point: the month must win.
 		name: "month after a day over the DST change", from: vienna(2026, 10, 1), until: vienna(2026, 10, 31),
 		msgs: func() []*model.MqttEnergyMessage {
 			return []*model.MqttEnergyMessage{

@@ -64,22 +64,6 @@ type RawSourceMeta struct {
 	NumberOfMetering int                 `bow:"numberOfMetering"`
 }
 
-func (rsm RawSourceMeta) Copy() RawSourceMeta {
-	r := RawSourceMeta{Id: rsm.Id, CounterPoints: []*CounterPointMeta{}, NumberOfMetering: rsm.NumberOfMetering}
-	for i := 0; i < len(rsm.CounterPoints); i++ {
-		r.CounterPoints = append(r.CounterPoints,
-			&CounterPointMeta{ID: rsm.CounterPoints[i].ID,
-				Name: rsm.CounterPoints[i].Name,
-				//Idx:         rsm.CounterPoints[i].Idx,
-				Dir:         rsm.CounterPoints[i].Dir,
-				Count:       rsm.CounterPoints[i].Count,
-				PeriodStart: rsm.CounterPoints[i].PeriodStart,
-				PeriodEnd:   rsm.CounterPoints[i].PeriodEnd,
-			})
-	}
-	return r
-}
-
 /*
 CounterPointMeta describe the raw data source in db. Be aware, the meta data are just applicable for one year.
 */

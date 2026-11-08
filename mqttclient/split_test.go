@@ -83,7 +83,6 @@ func TestSplitEnergyByDayKeepsEveryValueOverDST(t *testing.T) {
 
 // After a DST switch the day blocks must still start at local midnight (F27).
 func TestSplitEnergyByDayBlocksOnLocalDays(t *testing.T) {
-	t.Skip("known-errors #42")
 	for _, start := range []time.Time{
 		time.Date(2026, 3, 28, 0, 0, 0, 0, testsupport.Vienna),
 		time.Date(2026, 10, 24, 0, 0, 0, 0, testsupport.Vienna),
@@ -99,7 +98,6 @@ func TestSplitEnergyByDayBlocksOnLocalDays(t *testing.T) {
 
 // A message that does not end at local midnight after the autumn switch loses no value (F27).
 func TestSplitEnergyByDayEndNotAtMidnight(t *testing.T) {
-	t.Skip("known-errors #42")
 	start := time.Date(2026, 10, 24, 0, 0, 0, 0, testsupport.Vienna)
 	end := time.Date(2026, 10, 26, 23, 30, 0, 0, testsupport.Vienna)
 	n := int(end.Sub(start) / (15 * time.Minute))
@@ -108,13 +106,43 @@ func TestSplitEnergyByDayEndNotAtMidnight(t *testing.T) {
 	testsupport.InDelta(t, gauss(n), sum)
 }
 
+// The same after the spring switch: a block of a message ending after 01:00 stops at midnight, not at 01:00 (F27).
+func TestSplitEnergyByDayEndAfterMidnightInSpring(t *testing.T) {
+	start := time.Date(2026, 3, 28, 0, 0, 0, 0, testsupport.Vienna)
+	end := time.Date(2026, 3, 30, 2, 0, 0, 0, testsupport.Vienna)
+	n := int(end.Sub(start) / (15 * time.Minute))
+	count, sum, starts := splitSummary(SplitEnergyByDay(block(start, n)))
+	assert.Equal(t, n, count)
+	testsupport.InDelta(t, gauss(n), sum)
+	require.Len(t, starts, 3)
+	assert.Equal(t, time.Date(2026, 3, 30, 0, 0, 0, 0, testsupport.Vienna), starts[2])
+}
+
+// The days of the DST switch hold all their slots in one block: 92 and 100.
+func TestSplitEnergyByDayDSTDayIsOneBlock(t *testing.T) {
+	for _, tc := range []struct {
+		day   time.Time
+		slots int
+	}{
+		{time.Date(2026, 3, 29, 0, 0, 0, 0, testsupport.Vienna), 92},
+		{time.Date(2026, 10, 25, 0, 0, 0, 0, testsupport.Vienna), 100},
+	} {
+		blocks := SplitEnergyByDay(block(tc.day.AddDate(0, 0, -1), 96+tc.slots+96))
+		require.Len(t, blocks, 3)
+		count, _, starts := splitSummary(blocks[1:2])
+		assert.Equal(t, tc.slots, count)
+		assert.Equal(t, tc.day, starts[0])
+		assert.Equal(t, tc.day.AddDate(0, 0, 1).Add(-15*time.Minute).UnixMilli(), blocks[1].End)
+	}
+}
+
 func TestDecodeMessage(t *testing.T) {
 	b := testsupport.CrMsg("RC100001", "AT0030000000000000000000000000001").
 		Energy(time.Date(2026, 6, 1, 0, 0, 0, 0, testsupport.Vienna), "L1",
 			map[model.MeterCodeValue][]float64{model.CODE_CON: {0.5, 0.25}})
 	valid := b.Payload(t)
 
-	got := decodeMessage(valid)
+	got, _ := decodeMessageSize(valid)
 	require.NotNil(t, got)
 	assert.Equal(t, b.Message(), got)
 
@@ -130,7 +158,33 @@ func TestDecodeMessage(t *testing.T) {
 		"energy not list": testsupport.EncodeCrMsg(t, []byte(`{"energy":{"start":0}}`)),
 	} {
 		t.Run(name, func(t *testing.T) {
-			assert.NotPanics(t, func() { assert.Nil(t, decodeMessage(payload)) })
+			assert.NotPanics(t, func() {
+				m, _ := decodeMessageSize(payload)
+				assert.Nil(t, m)
+			})
 		})
+	}
+}
+
+// A zone whose DST gap falls at midnight: the split must still end (security review of #107).
+func TestSplitEnergyByDayEndsOnADSTGapAtMidnight(t *testing.T) {
+	havana, err := time.LoadLocation("America/Havana")
+	if err != nil {
+		t.Skip("no time zone data")
+	}
+	old := time.Local
+	time.Local = havana
+	defer func() { time.Local = old }()
+
+	const slots = 192
+	src := block(time.Date(2026, 3, 7, 12, 0, 0, 0, havana), slots)
+	done := make(chan []model.MqttEnergy, 1)
+	go func() { done <- SplitEnergyByDay(src) }()
+	select {
+	case got := <-done:
+		_, sum, _ := splitSummary(got)
+		assert.InDelta(t, gauss(slots), sum, 1e-6, "every value in exactly one block")
+	case <-time.After(3 * time.Second):
+		t.Fatal("SplitEnergyByDay did not end")
 	}
 }

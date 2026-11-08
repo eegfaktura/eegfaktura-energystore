@@ -3,8 +3,8 @@ package rest
 import (
 	"net/http"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/store/ebow"
-	"github.com/golang/glog"
 )
 
 // healthz is the liveness probe: no dependency checks, so a storage problem never restarts the pod.

@@ -42,12 +42,14 @@ Eclipse Paho (MQTT) · Viper · Cobra · Keycloak/OIDC (JWT).
 
 ### Configuration
 
-Configuration is handled via `config.yaml` or environment variables. You can specify the config file path using the `-configPath` flag.
+Configuration is handled via `config.yaml` or environment variables (prefix `ENERGYSTORE_`, `.` becomes `_`). The
+`-configPath` flag names the **directory** that holds `config.yaml` (default `.`).
 
 Key settings: `persistence.path` (BadgerDB directory), `mqtt.host` / `mqtt.id` /
-`mqtt.qos`, the subscription topics `mqtt.energySubscriptionTopic`
-(e.g. `eda/response/+/protocol/cr_msg`) and `mqtt.inverterSubscriptionTopic`,
-`jwt.pubKeyFile`, and `services.mail-server`. Exposed port: **8080** (HTTP).
+`mqtt.qos`, the subscription topic `mqtt.energySubscriptionTopic`
+(e.g. `eda/response/+/protocol/cr_msg`), and `services.mail-server`. The Keycloak configuration is read from the
+file in the environment variable `KEYCLOAK_CONFIG` (default `./keycloak.json`). Exposed port: **8080** (HTTP),
+changed with the environment variable `PORT`.
 
 **Dependencies:** an MQTT broker (mosquitto) for data ingestion, Keycloak for JWT
 validation, and on-disk BadgerDB storage.
@@ -104,43 +106,33 @@ billing).
 
 ### Running the Service
 
-You can run the server using the provided `Makefile`:
-
 ```bash
-make run
+go run server.go -configPath .
 ```
 
-Or manually:
-
-```bash
-go run server.go -configPath ./config.yaml
-```
+The root package holds two `func main` (`server.go`, `estore.go`), so each is built or run by its file name.
 
 The service will be available at `http://localhost:8080`.
 
 ### Building
 
-To build the project binary:
+To build the service binary `energystore` and the `estore` CLI tool:
 
 ```bash
 make build
 ```
 
-To build the `estore` CLI tool:
-
-```bash
-make estore
-```
-
 ## API Documentation
 
-- **GraphQL**: Access the GraphQL playground at `http://localhost:8080/query` (requires proper authentication headers if enabled).
+- **GraphQL**: `POST http://localhost:8080/query` with a bearer token (there is no playground).
 - **REST**: Endpoints are defined in the `rest` package.
 
 ## Development
 
-- **Testing**: Run tests using `make test` or `go test ./...`.
-- **Docker**: Build the Docker image using `make docker`.
+- **Testing**: `make test` (`scripts/dev/test.sh`: every package except the root, with the race detector);
+  `make check` runs gofmt and go vet (`scripts/dev/static-check.sh`). `go test ./...` fails on the root package.
+  The race detector needs cgo (a C compiler); without one, run `go test $(bash scripts/dev/packages.sh)`.
+- **Docker**: `docker build .` (the `Dockerfile` builds both binaries).
 
 ## Project Structure
 

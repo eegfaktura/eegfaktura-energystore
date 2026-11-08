@@ -3,7 +3,6 @@ package mqttclient
 import (
 	"bytes"
 	"compress/gzip"
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -13,11 +12,11 @@ import (
 	"sync"
 	"time"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
 	"at.ourproject/energystore/store/ebow"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/golang/glog"
 	"github.com/spf13/viper"
 )
 
@@ -78,24 +77,6 @@ func (tmw *TenantEnergyImporter) ensureDb(ecId string) (*ebow.BowStorage, error)
 	return st, nil
 }
 
-// Execute decodes, stores and confirms one CR_MSG: ExecuteBatch with this one message, the path the
-// dispatcher takes. It acks the message after ExecuteBatch returns (executeBatch), whatever the outcome (#19):
-//   - stored: the cr_msg_history reply goes to the backend ("Energiedaten empfangen").
-//   - store error (open store, meta record, a corrupt row, Badger write; could succeed later): ERROR log,
-//     no reply. The data is not in the store, the gap shows in the check before billing (#148) and the
-//     day is requested again. The message is still acked: mosquitto redelivers an unacked message only
-//     when the session reconnects, and until then it holds one of the client's inflight slots
-//     (max_inflight_messages, 20 by default) for every tenant.
-//   - undecodable payload (Base64, gzip, larger than mqtt.maxDecompressedMB, JSON): permanent, ERROR log,
-//     no reply.
-//
-// Only a message whose processing did not finish (crash, OOM, shutdown) stays unacked and is redelivered.
-func (tmw *TenantEnergyImporter) Execute(msg mqtt.Message) {
-	tmw.ExecuteBatch(context.Background(), []mqtt.Message{msg})
-}
-
-const daySeconds = int64(24 * 60 * 60 * 1000)
-
 func dayStart(ts int64) int64 {
 	t := time.UnixMilli(ts).In(time.Local)
 	return time.Date(
@@ -105,15 +86,25 @@ func dayStart(ts int64) int64 {
 	).UnixMilli()
 }
 
+// nextDayStart is the following local midnight. A day has 23, 24 or 25 hours (known-errors #42).
+func nextDayStart(ts int64) int64 {
+	t := time.UnixMilli(ts).In(time.Local)
+	next := time.Date(t.Year(), t.Month(), t.Day()+1, 0, 0, 0, 0, t.Location())
+	if !next.After(t) { // a DST gap at midnight: 00:00 does not exist that day
+		next = next.Add(time.Hour)
+	}
+	return next.UnixMilli()
+}
+
 func SplitEnergyByDay(src model.MqttEnergy) []model.MqttEnergy {
 	var result []model.MqttEnergy
 
 	startDay := dayStart(src.Start)
 	endDay := dayStart(src.End)
 
-	for day := startDay; day <= endDay; day += daySeconds {
+	for day, next := startDay, nextDayStart(startDay); day <= endDay; day, next = next, nextDayStart(next) {
 		dayStartTs := max(day, src.Start)
-		dayEndTs := min(day+daySeconds, src.End)
+		dayEndTs := min(next, src.End)
 
 		var dayData []model.MqttEnergyData
 
@@ -233,17 +224,12 @@ func (tmw *TenantEnergyImporter) Import(data *model.MqttEnergyMessage) error {
 	return errs.err()
 }
 
-func decodeMessage(msg []byte) *model.MqttEnergyMessage {
-	m, _ := decodeMessageSize(msg)
-	return m
-}
-
 // decodeMessageSize also returns the size of the unpacked JSON (the decoded message on the heap is several
 // times larger).
 func decodeMessageSize(msg []byte) (*model.MqttEnergyMessage, int64) {
 	decompressed, err := decryptMessage(msg)
 	if err != nil {
-		glog.Errorf("Error decoding CR_MSG transport payload. %s", err.Error())
+		glog.Errorf("Error decoding CR_MSG transport payload. %v", err)
 		return nil, 0
 	}
 

@@ -1,6 +1,7 @@
 package scenario_test
 
 import (
+	"context"
 	"strconv"
 	"testing"
 	"time"
@@ -27,7 +28,7 @@ func TestS01_ExportWorkbook(t *testing.T) {
 	community(t)
 	importMQTT(t, consumerMsg(june1, 96, "L1"), producerMsg(june1, 96, "L1"))
 	active := june1.AddDate(1, 0, 0).UnixMilli()
-	b, err := excel.ExportEnergyToExcel(tenant, ecId, june1, june1, &excel.ExportParticipantEnergy{
+	b, err := excel.ExportEnergyToExcel(context.Background(), tenant, ecId, june1, june1, &excel.ExportParticipantEnergy{
 		Start: june1.UnixMilli(), End: june1.UnixMilli(), CommunityId: ecId,
 		Cps: []excel.ParticipantCp{
 			{MeteringPoint: consumer, Direction: model.CONSUMER_DIRECTION, ActiveSince: june1.UnixMilli(), InactiveSince: active},
@@ -67,7 +68,7 @@ func exportConsumerDay(t *testing.T, day time.Time) ([][]string, excel.Participa
 	cps := &excel.ExportParticipantEnergy{Start: day.UnixMilli(), End: day.UnixMilli(), CommunityId: ecId,
 		Cps: []excel.ParticipantCp{{MeteringPoint: consumer, Direction: model.CONSUMER_DIRECTION,
 			ActiveSince: day.AddDate(0, -1, 0).UnixMilli(), InactiveSince: day.AddDate(1, 0, 0).UnixMilli()}}}
-	b, err := excel.ExportEnergyToExcel(tenant, ecId, day, day, cps)
+	b, err := excel.ExportEnergyToExcel(context.Background(), tenant, ecId, day, day, cps)
 	require.NoError(t, err)
 	f, err := excelize.OpenReader(b)
 	require.NoError(t, err)

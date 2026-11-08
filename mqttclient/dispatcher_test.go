@@ -9,6 +9,7 @@ import (
 	"at.ourproject/energystore/internal/testsupport"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
+	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -42,7 +43,7 @@ func stored(t *testing.T, tenant, ecId, meter string) []store.RawData {
 	return resp[meter].Data
 }
 
-// await waits for n cr_msg_history replies of the fake client (the end of n Execute calls).
+// await waits for n cr_msg_history replies of the fake client (the end of n processed messages).
 func await(t *testing.T, c *testsupport.FakeClient, n int) []testsupport.Published {
 	t.Helper()
 	var got []testsupport.Published
@@ -65,7 +66,7 @@ func TestExecuteStoresAndReplies(t *testing.T) {
 	defer imp.Close()
 
 	b := crMsg(m5EcId, m5Meter)
-	imp.Execute(testsupport.CrMsgMessage(m5Tenant, b.Payload(t)))
+	imp.ExecuteBatch(context.Background(), []mqtt.Message{testsupport.CrMsgMessage(m5Tenant, b.Payload(t))})
 
 	assert.Len(t, stored(t, m5Tenant, m5EcId, m5Meter), 96)
 	pub := client.PublishedMessages()

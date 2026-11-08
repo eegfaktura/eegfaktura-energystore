@@ -5,81 +5,16 @@ import (
 	"sync"
 	"time"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/golang/glog"
 	"github.com/spf13/viper"
 )
 
-type TagValue struct {
-	Topic string `json:"topic"`
-	Value []byte `json:"value"`
-}
-
 type Executor interface {
-	Execute(msg mqtt.Message)
 	// ExecuteBatch processes messages of one tenant in their order (TopicDispatcher) and returns which of
 	// them it finished; after ctx ends it may leave the rest unfinished (not acked, redelivered).
 	ExecuteBatch(ctx context.Context, msgs []mqtt.Message) []bool
 	Close()
-}
-
-type Worker struct {
-}
-
-func (w *Worker) Execute(msg mqtt.Message) {
-
-}
-
-type Subscriber struct {
-	workerChan chan TagValue
-	worker     *Worker
-	receiver   mqtt.MessageHandler
-}
-
-func NewSubscriber(ctx context.Context, streamer *MQTTStreamer, topic string, worker Executor) *Subscriber {
-	sub := &Subscriber{}
-	sub.receiver = func(client mqtt.Client, msg mqtt.Message) {
-		glog.V(5).Infof("Receive msg from topic %s - %v", msg.Topic(), string(msg.Payload()))
-		defer msg.Ack() // auto-ack is off (#19)
-		worker.Execute(msg)
-	}
-	//streamer.SubscribeTopic(ctx, topic, sub.receiver)
-	streamer.AddRoutes(MqttRoutes{
-		topic:    topic,
-		callback: sub.receiver,
-	})
-	return sub
-}
-
-type Dispatcher struct {
-	subscriber map[string]*Subscriber
-	quitChan   chan struct{}
-}
-
-func NewDispatcher(ctx context.Context, streamer *MQTTStreamer, worker map[string]Executor) *Dispatcher {
-	quitChan := make(chan struct{})
-	disp := &Dispatcher{quitChan: quitChan}
-	disp.subscriber = make(map[string]*Subscriber, len(worker))
-	glog.Infof("Start Dispatcher with %d worker(s): %+v\n", len(worker), worker)
-
-	for topic, worker := range worker {
-		glog.Infof("Start Worker %s\n", topic)
-		disp.subscriber[topic] = NewSubscriber(ctx, streamer, topic, worker)
-	}
-	return disp
-}
-
-func (d *Dispatcher) Stop() {
-	close(d.quitChan)
-}
-
-type TopicValue struct {
-	Topic string `json:"topic"`
-	Value []byte `json:"value"`
-}
-
-type TenantSubscriber struct {
-	receiver mqtt.MessageHandler
 }
 
 // Settings of the TopicDispatcher: import.parallel lanes import at the same time (env
@@ -129,6 +64,7 @@ type TopicDispatcher struct {
 	work    *sync.Cond // a tenant became ready, or the dispatcher stops
 	capFree *sync.Cond // an executor became idle or closed, or the dispatcher stops
 	open    int        // executors that exist (open or closing), at most cfg.maxOpen
+	capWait int        // lanes waiting in reserveOpen for an executor to become idle (for the tests)
 	tenants map[string]*tenantQueue
 	ready   []*tenantQueue
 	closed  bool
@@ -160,14 +96,12 @@ func NewTopicDispatcher(ctx context.Context, topic string, streamer *MQTTStreame
 		newExecutor: func(tenant string) Executor { return NewTenantEnergyImporter(tenant, streamer) },
 	})
 
-	sub := &TenantSubscriber{}
-	sub.receiver = func(client mqtt.Client, msg mqtt.Message) {
-		glog.V(5).Infof("Receive msg from topic %s - %v", msg.Topic(), string(msg.Payload()))
-		dispatcher.Submit(msg)
-	}
 	streamer.AddRoutes(MqttRoutes{
-		topic:    topic,
-		callback: sub.receiver,
+		topic: topic,
+		callback: func(client mqtt.Client, msg mqtt.Message) {
+			glog.V(5).Infof("Receive msg from topic %s - %d bytes", msg.Topic(), len(msg.Payload()))
+			dispatcher.Submit(msg)
+		},
 	})
 	return dispatcher
 }

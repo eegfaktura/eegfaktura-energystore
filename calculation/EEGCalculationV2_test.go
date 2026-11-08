@@ -5,6 +5,7 @@ import (
 	model "at.ourproject/energystore/model"
 	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/stretchr/testify/assert"
@@ -23,7 +24,7 @@ func TestCalculateBiAnnualParticipantReport(t *testing.T) {
 	require.NoError(t, err)
 	defer excelFile.Close()
 
-	err = excel.ImportExcelEnergyFileNew(excelFile, "ConsumptionDataReport", db)
+	err = excel.ImportExcelEnergyFileNew(context.Background(), excelFile, "ConsumptionDataReport", db)
 	require.NoError(t, err)
 
 	var report model.ReportResponse

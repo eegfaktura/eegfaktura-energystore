@@ -26,13 +26,13 @@ func TestBillingCheckRejectsInvalidRequest(t *testing.T) {
 	}
 }
 
-// An ecId the store refuses (rowdata.go idPattern) is refused (400 or 500 depending on where, as
+// An ecId the store refuses (rowdata.go ecIdPattern) is refused (400 or 500 depending on where, as
 // for the other routes in TestInvalidEcIdCreatesNoDirectory), and no directory is created.
 func TestBillingCheckRefusesInvalidEcId(t *testing.T) {
 	seed(t)
 	before := dirs(t)
 	body := fmt.Sprintf(`{"start":%d,"end":%d,"cps":[]}`, ms(day), ms(day.Add(23*time.Hour)))
-	rec := apitest.Do(apitest.Router(), apitest.Request{Method: "POST", Path: "/eeg/v2/a-b/billing-check", Header: appHeader(), Body: body})
+	rec := apitest.Do(apitest.Router(), apitest.Request{Method: "POST", Path: "/eeg/v2/-ab/billing-check", Header: appHeader(), Body: body})
 	assert.Contains(t, []int{400, 500}, rec.Code, rec.Body.String())
 	assert.Equal(t, before, dirs(t))
 }

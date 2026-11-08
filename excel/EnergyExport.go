@@ -2,15 +2,16 @@ package excel
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"time"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
 	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
-	"github.com/golang/glog"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -80,9 +81,9 @@ func returnFloatValue(array []float64, idx int) float64 {
 	return 0
 }
 
-func ExportEnergyDataToMail(tenant, ecid, to string, year, month int, cps *ExportParticipantEnergy) error {
+func ExportEnergyDataToMail(ctx context.Context, tenant, ecid, to string, year, month int, cps *ExportParticipantEnergy) error {
 
-	buf, err := ExportExcel(tenant, ecid, year, month, cps)
+	buf, err := ExportExcel(ctx, tenant, ecid, year, month, cps)
 	if err != nil {
 		return err
 	}
@@ -91,21 +92,18 @@ func ExportEnergyDataToMail(tenant, ecid, to string, year, month int, cps *Expor
 	return utils.SendMail(tenant, to, fmt.Sprintf("EEG (%s) - Excel Report", tenant), nil, &filename, buf)
 }
 
-func ExportExcel(tenant, ecid string, year, month int, cps *ExportParticipantEnergy) (*bytes.Buffer, error) {
+func ExportExcel(ctx context.Context, tenant, ecid string, year, month int, cps *ExportParticipantEnergy) (*bytes.Buffer, error) {
 	start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.Local)
 	end := time.Date(year, time.Month(month)+1, 0, 0, 0, 0, 0, time.Local)
 
 	//return CreateExcelFile(tenant, start, end, cps)
-	return ExportEnergyToExcel(tenant, ecid, start, end, cps)
+	return ExportEnergyToExcel(ctx, tenant, ecid, start, end, cps)
 }
 
 type periodRange struct {
 	start time.Time
 	end   time.Time
 }
-
-// MESSUNG ONLY - nicht mergen
-var skipQoVSheet = false
 
 type Sheet interface {
 	initSheet(ctx *RunnerContext) error
@@ -276,6 +274,11 @@ func (er *EnergyRunner) run(db ebow.IBowStorage, f *excelize.File, start, end ti
 	var pt *time.Time = nil
 	for g1Ok {
 		_, t, err := utils.ConvertRowIdToTimeString("CP", _lineG1.Id, time.UTC)
+		// a row id that is no time is skipped, like the reports (store.Engine.Query) do for rows after the first
+		if err != nil {
+			g1Ok = iterCP.Next(&_lineG1)
+			continue
+		}
 		if rowOk := utils.CheckTime(pt, t); !rowOk {
 			diff := ((t.Unix() - pt.Unix()) / (60 * 15)) - 1
 			if diff > 0 {
@@ -315,7 +318,7 @@ func (er *EnergyRunner) run(db ebow.IBowStorage, f *excelize.File, start, end ti
 	return f.WriteToBuffer()
 }
 
-func ExportEnergyToExcel(tenant, ecid string, start, end time.Time, cps *ExportParticipantEnergy) (*bytes.Buffer, error) {
+func ExportEnergyToExcel(ctx context.Context, tenant, ecid string, start, end time.Time, cps *ExportParticipantEnergy) (*bytes.Buffer, error) {
 	if cps == nil { // the export lists only the given metering points (#53)
 		return nil, errors.New("no metering points given for the export")
 	}
@@ -328,7 +331,7 @@ func ExportEnergyToExcel(tenant, ecid string, start, end time.Time, cps *ExportP
 	f := excelize.NewFile()
 	defer func() {
 		if err := f.Close(); err != nil {
-			glog.Errorf("tenant=%s err: %v", tenant, err)
+			glog.ErrorContextf(ctx, "err: %v", err) // the tenant is in tenant.id
 		}
 	}()
 
