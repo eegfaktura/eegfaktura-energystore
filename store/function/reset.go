@@ -20,6 +20,7 @@ func Reset(db ebow.IBowStorage, timeRange *DataTimeRange, meter string) error {
 
 	var lines []*model.RawSourceLine
 	iter := db.GetLineRange("CP", timeRange.key, timeRange.until)
+	defer iter.Close()
 	var _line model.RawSourceLine
 	var affected bool
 	for iter.Next(&_line) {
@@ -44,10 +45,13 @@ func Reset(db ebow.IBowStorage, timeRange *DataTimeRange, meter string) error {
 			lines = append(lines, &line)
 		}
 	}
+	if err := iter.Err(); err != nil {
+		return err
+	}
 	fmt.Printf("Count %d, lines affected \n", len(lines))
 	for i, line := range lines {
 		if meterMeta.Dir == model.CONSUMER_DIRECTION {
-			fmt.Printf("L:%.3d Meta: %+v I:%s D:%v\n", i, meterMeta, line.Id, line.Consumers[meterMeta.SourceIdx*3:(meterMeta.SourceIdx*3)+3])
+			fmt.Printf("L:%.3d Meta: %s idx %d I:%s D:%v\n", i, meterMeta.Name, meterMeta.SourceIdx, line.Id, line.Consumers[meterMeta.SourceIdx*3:(meterMeta.SourceIdx*3)+3])
 		} else {
 			fmt.Printf("L:%.3d ID: %s I:%.3d D:%v\n", i, meterMeta.Name, meterMeta.SourceIdx, line.Producers[meterMeta.SourceIdx*2:(meterMeta.SourceIdx*2)+2])
 		}

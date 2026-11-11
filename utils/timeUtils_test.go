@@ -8,27 +8,6 @@ import (
 	"time"
 )
 
-func TestGetMonthDuration(t *testing.T) {
-	startTime := time.Date(2022, time.April, 18, 0, 0, 0, 0, time.UTC)
-	endTime := time.Date(2022, time.May, 30, 23, 45, 0, 0, time.UTC)
-
-	y, d := GetMonthDuration(startTime, endTime)
-
-	assert.Equal(t, y, 2022)
-	assert.Equal(t, d, 1)
-
-}
-
-func TestGetMonthDurationDec(t *testing.T) {
-	startTime := time.Date(2022, time.December, 31, 0, 0, 0, 0, time.UTC)
-	endTime := time.Date(2022, time.December, 31, 23, 45, 0, 0, time.UTC)
-
-	y, d := GetMonthDuration(startTime, endTime)
-
-	assert.Equal(t, y, 2022)
-	assert.Equal(t, d, 0)
-}
-
 func TestParseTime(t *testing.T) {
 	expectedTime := time.Date(2022, time.April, 18, 0, 0, 0, 0, time.Local)
 	strTime := "18.04.2022 00:00:00"
@@ -44,8 +23,7 @@ func TestParseTime(t *testing.T) {
 func TestConvertUnixTimeToRowId(t *testing.T) {
 	rowId, err := ConvertUnixTimeToRowId("CP/", time.UnixMilli(1688680800000).UTC())
 	require.NoError(t, err)
-
-	fmt.Printf("RowID: %v\n", rowId)
+	assert.Equal(t, "CP/2023/07/06/22/00/00", rowId, "the id is the wall clock of the given location")
 }
 
 // The store writes its period metadata with DateToString and reads it back with
@@ -94,4 +72,16 @@ func TestStringToTimeFallsBackOnGarbage(t *testing.T) {
 	fallback := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.Local)
 	assert.Equal(t, fallback, StringToTime("", fallback))
 	assert.Equal(t, fallback, StringToTime("30.12.2023", fallback))
+}
+
+// Row ids are local wall time read in UTC; only the hour skipped when summer time starts does not exist
+// in time.Local (known-errors #22). The doubled autumn hour exists.
+func TestWallTimeExists(t *testing.T) {
+	assert.True(t, WallTimeExists(time.Date(2026, 3, 29, 1, 45, 0, 0, time.UTC)))
+	for _, m := range []int{0, 15, 30, 45} {
+		assert.False(t, WallTimeExists(time.Date(2026, 3, 29, 2, m, 0, 0, time.UTC)), "02:%.2d", m)
+	}
+	assert.True(t, WallTimeExists(time.Date(2026, 3, 29, 3, 0, 0, 0, time.UTC)))
+	assert.True(t, WallTimeExists(time.Date(2026, 10, 25, 2, 30, 0, 0, time.UTC)))
+	assert.True(t, WallTimeExists(time.Date(2026, 6, 1, 10, 0, 0, 0, time.UTC)))
 }

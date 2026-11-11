@@ -37,13 +37,6 @@ func dayRawNameFunc() SeriesNameFunc {
 	}
 }
 
-var nameFunctionRepo = map[string]SeriesNameFunc{
-	"DAYRAW":    dayRawNameFunc(),
-	"MONTHYEAR": monthYearNameFunc(),
-	"WEEKYEAR":  weekYearNameFunc(),
-	"MONTHDAY":  monthDayNameFunc(),
-}
-
 type LoadCurve struct {
 	Cache
 	Result   map[string]*ReportData
@@ -88,9 +81,6 @@ func (lc *LoadCurve) GetResult() []interface{} {
 
 func (lc *LoadCurve) addToResult(ctx *EngineContext, t time.Time, line *model.RawSourceLine) error {
 	start := t
-	//if lc.cacheTsFn != nil {
-	//	start = CacheTime{t}.SubTs(lc.cacheTsFn).Time
-	//}
 	sn := lc.NameFunc(start)
 
 	if _, ok := lc.Result[sn]; !ok {

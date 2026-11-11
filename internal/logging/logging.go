@@ -1,0 +1,352 @@
+// Package logging is the one place every log line of energystore goes through (logging concept,
+// W-261008-ca2): one slog handler that writes one JSON object per line (or key=value text) on
+// stdout with the common ECS fields. The glog-shaped package internal/logging/glog and the
+// standard library's log package both end up here.
+//
+// Settings (read from the environment when the package is initialised, so the init() of other
+// packages already logs through it):
+//
+//	LOG_FORMAT        json (default) | text
+//	LOG_LEVEL         trace | debug | info (default) | warn | error
+//	LOG_LEVEL_<PKG>   the same levels for one package, <PKG> = last element of the import path in
+//	                  upper case, e.g. LOG_LEVEL_MQTTCLIENT=debug, LOG_LEVEL_EBOW=trace
+//	SERVICE_VERSION   service.version (set by the image build), default dev
+//	DEPLOYMENT_ENVIRONMENT  deployment.environment on every line; the field is left out when unset
+//
+// An unknown value is reported by Check; main refuses to start on it.
+package logging
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"log/slog"
+	"os"
+	"path"
+	"runtime"
+	"strings"
+	"sync/atomic"
+	"time"
+)
+
+// ServiceName is service.name in every line.
+const ServiceName = "eegfaktura-energystore"
+
+// LevelTrace is below slog's debug: payload shapes, only locally.
+const LevelTrace = slog.Level(-8)
+
+var (
+	startErr error
+	// cur is the handler in use; atomic, so Configure may run while other goroutines log.
+	cur atomic.Pointer[handler]
+)
+
+func init() {
+	startErr = Configure(os.Environ(), os.Stdout)
+}
+
+// Check returns the configuration error found at start (unknown LOG_FORMAT or LOG_LEVEL*).
+func Check() error { return startErr }
+
+// Snapshot returns a func that puts the configuration in use now back (for tests that call
+// Configure; see internal/testsupport/logcapture).
+func Snapshot() (restore func()) {
+	h, d := cur.Load(), slog.Default()
+	return func() {
+		cur.Store(h)
+		slog.SetDefault(d)
+	}
+}
+
+// Configure builds the handler from env (KEY=VALUE entries, as os.Environ) and makes it the default
+// for slog and the standard log package. On an invalid setting it still installs a handler (json,
+// info), so the error can be logged, and returns the error.
+func Configure(env []string, out io.Writer) error {
+	var errs []string
+	vars := map[string]string{}
+	for _, kv := range env {
+		k, v, _ := strings.Cut(kv, "=")
+		vars[k] = v
+	}
+	// service.version: SERVICE_VERSION, set by the image build (Dockerfile ARG/ENV from the release
+	// workflow), default "dev".
+	version := "dev"
+	if v := strings.TrimSpace(vars["SERVICE_VERSION"]); v != "" {
+		version = v
+	}
+	format := strings.ToLower(strings.TrimSpace(vars["LOG_FORMAT"]))
+	if format == "" {
+		format = "json"
+	}
+	if format != "json" && format != "text" {
+		errs = append(errs, fmt.Sprintf("LOG_FORMAT=%q: want json or text", format))
+		format = "json"
+	}
+	global, err := parseLevel(vars["LOG_LEVEL"])
+	if err != nil {
+		errs = append(errs, "LOG_LEVEL: "+err.Error())
+		global = slog.LevelInfo
+	}
+	overrides := map[string]slog.Level{}
+	for name, value := range vars {
+		pkg, ok := strings.CutPrefix(name, "LOG_LEVEL_")
+		if !ok || pkg == "" || strings.TrimSpace(value) == "" { // empty: no override
+			continue
+		}
+		l, err := parseLevel(value)
+		if err != nil {
+			errs = append(errs, name+": "+err.Error())
+			continue
+		}
+		overrides[strings.ToLower(pkg)] = l
+	}
+
+	opts := &slog.HandlerOptions{Level: LevelTrace, ReplaceAttr: replaceAttr}
+	var inner slog.Handler
+	if format == "json" {
+		inner = slog.NewJSONHandler(out, opts)
+	} else {
+		inner = slog.NewTextHandler(out, opts)
+	}
+	base := []slog.Attr{
+		slog.String("service.name", ServiceName),
+		slog.String("service.version", version),
+	}
+	if v := strings.TrimSpace(vars["DEPLOYMENT_ENVIRONMENT"]); v != "" {
+		base = append(base, slog.String("deployment.environment", v))
+	}
+	inner = inner.WithAttrs(base)
+	lowest := global
+	for _, l := range overrides {
+		lowest = min(lowest, l)
+	}
+	h := &handler{inner: inner, global: global, min: lowest, overrides: overrides}
+	cur.Store(h)
+	slog.SetDefault(slog.New(h))
+	if len(errs) > 0 {
+		return fmt.Errorf("logging: %s", strings.Join(errs, "; "))
+	}
+	return nil
+}
+
+func parseLevel(s string) (slog.Level, error) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "trace":
+		return LevelTrace, nil
+	case "debug":
+		return slog.LevelDebug, nil
+	case "", "info":
+		return slog.LevelInfo, nil
+	case "warn", "warning":
+		return slog.LevelWarn, nil
+	case "error":
+		return slog.LevelError, nil
+	}
+	return 0, fmt.Errorf("%q: want trace, debug, info, warn or error", s)
+}
+
+func levelName(l slog.Level) string {
+	switch {
+	case l < slog.LevelDebug:
+		return "trace"
+	case l < slog.LevelInfo:
+		return "debug"
+	case l < slog.LevelWarn:
+		return "info"
+	case l < slog.LevelError:
+		return "warn"
+	}
+	return "error"
+}
+
+// replaceAttr renames slog's built-in keys to the ECS names.
+func replaceAttr(groups []string, a slog.Attr) slog.Attr {
+	if len(groups) > 0 {
+		return a
+	}
+	switch a.Key {
+	case slog.TimeKey:
+		return slog.String("@timestamp", a.Value.Time().UTC().Format("2006-01-02T15:04:05.000Z"))
+	case slog.LevelKey:
+		l, _ := a.Value.Any().(slog.Level)
+		return slog.String("log.level", levelName(l))
+	case slog.MessageKey:
+		a.Key = "message"
+	}
+	return a
+}
+
+// Enabled reports whether a line at level l would be written for the function skip frames above
+// the caller of Enabled (glog.V passes 1: its own caller). The stack is read only when a package
+// override could change the answer, since V is called on hot paths.
+func Enabled(l slog.Level, skip int) bool {
+	h := cur.Load()
+	if l < h.min {
+		return false
+	}
+	if len(h.overrides) == 0 {
+		return true // min is the global level
+	}
+	var pcs [1]uintptr
+	runtime.Callers(skip+2, pcs[:]) // Callers, Enabled
+	return h.levelOf(function(pcs[0])) <= l
+}
+
+// handler applies LOG_LEVEL and the per-package overrides, and adds log.origin and the request
+// ids carried in the context.
+type handler struct {
+	inner     slog.Handler
+	global    slog.Level
+	min       slog.Level // the lowest of global and the overrides
+	overrides map[string]slog.Level
+}
+
+func (h *handler) Enabled(_ context.Context, l slog.Level) bool { return l >= h.min }
+
+// allowed are the only fields a caller may put on a line besides @timestamp, log.level, message,
+// service.* and deployment.environment (never-log rule: an unknown attribute is dropped, not
+// written). tenant.id, request.id, trace.id and span.id are not among them: only Handle adds them,
+// from the request context.
+var allowed = map[string]bool{
+	"log.origin.file.name": true, "log.origin.file.line": true, "log.logger": true,
+	"log.effective_level": true,
+	"event.action":        true, "event.outcome": true, "event.duration": true,
+	"http.request.method": true, "http.route": true, "http.response.status_code": true,
+	"graphql.operation.name": true, "client.id": true,
+	"error.type": true, "error.message": true, "error.stack_trace": true,
+}
+
+// auditOperator names the person who ran a destructive ops tool. Documented exception to "no persons
+// in logs" (decision 2026-10-30): the superuser-only raw-data deletion keeps the operator for
+// accountability. The field is written only on the events in auditEvents and dropped everywhere else.
+const auditOperator = "audit.operator"
+
+var auditEvents = map[string]bool{"rawdata.delete.done": true, "rawdata.delete.failed": true}
+
+func (h *handler) Handle(ctx context.Context, r slog.Record) error {
+	var origin runtime.Frame // resolved once: for the package level and log.origin
+	if r.PC != 0 {
+		origin, _ = runtime.CallersFrames([]uintptr{r.PC}).Next()
+	}
+	if r.Level < h.levelOf(origin.Function) {
+		return nil
+	}
+	if r.NumAttrs() > 0 {
+		audit := false
+		r.Attrs(func(a slog.Attr) bool {
+			if a.Key == "event.action" && auditEvents[a.Value.String()] {
+				audit = true
+			}
+			return true
+		})
+		kept := slog.NewRecord(r.Time, r.Level, r.Message, r.PC)
+		r.Attrs(func(a slog.Attr) bool {
+			if allowed[a.Key] || (audit && a.Key == auditOperator) {
+				kept.AddAttrs(a)
+			}
+			return true
+		})
+		r = kept
+	}
+	if origin.File != "" {
+		r.AddAttrs(slog.String("log.origin.file.name", path.Base(path.Dir(origin.File))+"/"+path.Base(origin.File)),
+			slog.Int("log.origin.file.line", origin.Line))
+	}
+	if ids := idsFrom(ctx); ids != nil {
+		r.AddAttrs(slog.String("request.id", ids.requestID))
+		// The tenant rule of all services, applied here and nowhere else: upper-cased, and only a
+		// value of the agreed form (a superuser's tenant is the unchecked header).
+		if t := strings.ToUpper(ids.tenant); tenantPattern.MatchString(t) {
+			r.AddAttrs(slog.String("tenant.id", t))
+		}
+		if ids.traceID != "" {
+			r.AddAttrs(slog.String("trace.id", ids.traceID), slog.String("span.id", ids.spanID))
+		}
+	}
+	return h.inner.Handle(ctx, r)
+}
+
+func (h *handler) WithAttrs(as []slog.Attr) slog.Handler {
+	c := *h
+	var kept []slog.Attr
+	for _, a := range as {
+		if allowed[a.Key] {
+			kept = append(kept, a)
+		}
+	}
+	c.inner = h.inner.WithAttrs(kept)
+	return &c
+}
+
+func (h *handler) WithGroup(name string) slog.Handler {
+	c := *h
+	c.inner = h.inner.WithGroup(name)
+	return &c
+}
+
+// levelOf is the level that applies to the package of fn ("" : the global level).
+func (h *handler) levelOf(fn string) slog.Level {
+	if len(h.overrides) == 0 || fn == "" {
+		return h.global
+	}
+	if l, ok := h.overrides[packageOf(fn)]; ok {
+		return l
+	}
+	return h.global
+}
+
+// function is the name of the function at pc.
+func function(pc uintptr) string {
+	f, _ := runtime.CallersFrames([]uintptr{pc}).Next()
+	return f.Function
+}
+
+// packageOf is the last element of the import path of function fn, in lower case
+// ("at.ourproject/energystore/store/ebow.(*DB).Get" → "ebow").
+func packageOf(fn string) string {
+	name := fn
+	if i := strings.LastIndex(name, "/"); i >= 0 {
+		name = name[i+1:]
+	}
+	if i := strings.Index(name, "."); i >= 0 {
+		name = name[:i]
+	}
+	return strings.ToLower(name)
+}
+
+// Log writes one line through the module with the caller pc (0: none).
+func Log(ctx context.Context, pc uintptr, l slog.Level, msg string, attrs ...slog.Attr) {
+	h := cur.Load()
+	if !h.Enabled(ctx, l) {
+		return
+	}
+	r := slog.NewRecord(time.Now(), l, msg, pc)
+	r.AddAttrs(attrs...)
+	_ = h.Handle(ctx, r)
+}
+
+// Event writes one line with event.action = action and the caller as log.origin.
+func Event(ctx context.Context, l slog.Level, action, msg string, attrs ...slog.Attr) {
+	var pcs [1]uintptr
+	runtime.Callers(2, pcs[:]) // Callers, Event
+	Log(ctx, pcs[0], l, msg, append([]slog.Attr{slog.String("event.action", action)}, attrs...)...)
+}
+
+// Started writes the one start-up line, the same in all services: message "service start",
+// event.action service.start, service.version (on every line) and log.effective_level, the root
+// level. It is written at info whatever LOG_LEVEL says, so a deployment can always be told from
+// the log.
+func Started() {
+	h := cur.Load()
+	r := slog.NewRecord(time.Now(), slog.LevelInfo, "service start", 0)
+	r.AddAttrs(slog.String("event.action", "service.start"), slog.String("log.effective_level", levelName(h.global)))
+	_ = h.inner.Handle(context.Background(), r)
+}
+
+// AuditOperator is the audit.operator field; it is written only on the events allowed for it.
+func AuditOperator(name string) slog.Attr { return slog.String(auditOperator, name) }
+
+// ErrorAttrs are error.type and error.message of err.
+func ErrorAttrs(err error) []slog.Attr {
+	return []slog.Attr{slog.String("error.type", fmt.Sprintf("%T", err)), slog.String("error.message", err.Error())}
+}

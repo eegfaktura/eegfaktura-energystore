@@ -1,6 +1,4 @@
-FROM golang:1.26.9
-
-ENV TZ="Europe/Berlin"
+FROM golang:1.26.10 AS builder
 
 WORKDIR /usr/src/app
 
@@ -10,13 +8,28 @@ RUN go mod download && go mod verify
 
 COPY . .
 RUN go build -o /usr/local/bin/energystore -ldflags="-s -w" server.go
-# RUN go build -o /usr/local/bin/initQoV -ldflags="-s -w" initQoV.go
-# RUN go build -o /usr/local/bin/ebowctl -ldflags="-s -w" ebowctl.go
 RUN go build -o /usr/local/bin/estore -ldflags="-s -w" estore.go
 
-COPY config.yaml /etc/energystore/
+# Laufzeit: schlankes Debian derselben Release wie das Build-Image (golang:1.26.10 = trixie), ohne
+# Go-Toolchain, git, ssh, curl. Die Binaries sind dynamisch gegen glibc gelinkt (cgo an), daher kein
+# scratch/static. Gebraucht werden nur CA-Zertifikate (ausgehendes HTTPS zu Keycloak) und Zonendaten
+# (TZ, time.Local). Datierter Tag = unveraenderlich; veroeffentlicht 2026-10-28.
+FROM debian:trixie-20261104-slim
 
-RUN rm -r ./*
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates tzdata \
+ && rm -rf /var/lib/apt/lists/*
+
+ENV TZ="Europe/Berlin"
+
+# service.version in every log line (internal/logging); the release workflow passes the commit (the version for a tag build).
+ARG SERVICE_VERSION=dev
+ENV SERVICE_VERSION=${SERVICE_VERSION}
+
+WORKDIR /usr/src/app
+
+COPY --from=builder /usr/local/bin/energystore /usr/local/bin/estore /usr/local/bin/
+COPY config.yaml /etc/energystore/
 
 # Nicht als root laufen (Befund A06 der Altsystem-Analyse).
 # Der Dienst lauscht auf 8080, also oberhalb von 1024, und braucht keine
@@ -35,4 +48,4 @@ USER app
 
 EXPOSE 8080
 
-CMD ["energystore", "-configPath", "/etc/energystore/", "-logtostderr=true", "-stderrthreshold=INFO"]
+CMD ["energystore", "-configPath", "/etc/energystore/"]

@@ -1,11 +1,12 @@
 package excel
 
 import (
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
+	"context"
 	"fmt"
-	"github.com/golang/glog"
 	"github.com/xuri/excelize/v2"
 	"math"
 	"strings"
@@ -30,7 +31,7 @@ func calcRawDataMatrixLen(a []float64, step int) int {
 	return int(math.Ceil(float64(l) / float64(step)))
 }
 
-func ImportExcelEnergyFileNew(f *excelize.File, sheet string, db ebow.IBowStorage) error {
+func ImportExcelEnergyFileNew(ctx context.Context, f *excelize.File, sheet string, db ebow.IBowStorage) error {
 
 	exp := "DD.MM.YYYY HH:MM:SS"
 	style, err := f.NewStyle(&excelize.Style{CustomNumFmt: &exp})
@@ -38,7 +39,7 @@ func ImportExcelEnergyFileNew(f *excelize.File, sheet string, db ebow.IBowStorag
 
 	rows, err := f.Rows(sheet)
 	if err != nil {
-		glog.Error(err)
+		glog.ErrorContext(ctx, err)
 		return err
 	}
 	defer rows.Close()
@@ -56,6 +57,7 @@ func ImportExcelEnergyFileNew(f *excelize.File, sheet string, db ebow.IBowStorag
 
 	t := time.Now()
 	totalRowCols := 0
+	skippedRows, firstSkippedRow, firstSkippedStyle := 0, 0, 0
 	for rows.Next() {
 		totalRowCols = totalRowCols + 1
 		if cols, err := rows.Columns(excelize.Options{RawCellValue: true}); err == nil && len(cols) > 0 {
@@ -100,7 +102,13 @@ func ImportExcelEnergyFileNew(f *excelize.File, sheet string, db ebow.IBowStorag
 						if err != nil {
 							return err
 						}
+						if len(excelCpMeta) == 0 {
+							return fmt.Errorf("no metering point with 'MeteringpointID' and 'Metercode' header found in sheet %s", sheet)
+						}
 						excelHeaderInitialized = true
+					}
+					if err := checkMeterValues(cols, excelCpMeta); err != nil {
+						return err
 					}
 
 					//
@@ -169,14 +177,27 @@ func ImportExcelEnergyFileNew(f *excelize.File, sheet string, db ebow.IBowStorag
 					rowIdVisited[rawDataId] = &model.RawSourceLine{Id: rawData.Id, Consumers: consumerMatrix.Elements, Producers: producerMatrix.Elements,
 						QoVConsumers: rawData.QoVConsumers, QoVProducers: rawData.QoVProducers}
 				} else {
-					s, e := f.GetCellStyle(sheet, cols[0])
-					if err != nil {
-						glog.Errorf("Error get cell format %+v", e)
+					skippedRows++
+					if skippedRows == 1 {
+						firstSkippedRow = totalRowCols
+						cell, _ := excelize.CoordinatesToCellName(1, totalRowCols)
+						s, e := f.GetCellStyle(sheet, cell)
+						if e != nil {
+							glog.ErrorContextf(ctx, "Error get cell format %v", e)
+						}
+						firstSkippedStyle = s
 					}
-					glog.V(3).Infof("Could not handle row format (%d). Cols %+v <%v>", s, cols, cols[0])
 				}
 			}
 		}
+	}
+
+	if skippedRows > 0 { // one line per sheet, no cell content
+		glog.WarningContextf(ctx, "Could not handle row format, %d rows skipped; first skipped row %d (cell style %d)",
+			skippedRows, firstSkippedRow, firstSkippedStyle)
+	}
+	if !excelHeaderInitialized {
+		return fmt.Errorf("no energy data found in sheet %s", sheet)
 	}
 
 	for _, v := range rowIdVisited {
@@ -190,7 +211,7 @@ func ImportExcelEnergyFileNew(f *excelize.File, sheet string, db ebow.IBowStorag
 	rawMeta := &model.RawSourceMeta{Id: fmt.Sprintf("cpmeta/%d", 0), CounterPoints: updatedCpMeta, NumberOfMetering: rIdx}
 	err = db.SetMeta(rawMeta)
 	if err != nil {
-		glog.Error(err.Error())
+		glog.ErrorContext(ctx, err.Error())
 		return err
 	}
 	glog.V(4).Infof("Import %d lines", len(rawDatas))

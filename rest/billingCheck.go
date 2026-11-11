@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/middleware"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
-	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 )
 
@@ -30,10 +30,26 @@ func fetchBillingCheck() middleware.JWTHandlerFunc {
 			respondWithError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		meters := make([]string, len(request.Cps))
+		for i, cp := range request.Cps {
+			meters[i] = cp.MeteringPoint
+		}
+		own, ok := allowMeters(w, r, claims, tenant, meters)
+		if !ok {
+			return
+		}
+		for i := range request.Cps {
+			if !clampDays(w, own, request.Cps[i].MeteringPoint, &request.Cps[i].ActiveSince, &request.Cps[i].InactiveSince) {
+				return
+			}
+		}
 
 		resp, err := store.QueryBillingCheck(tenant, ecid, &request)
 		if err != nil {
-			glog.Errorf("billing check failed: %v tenant=%s", err, tenant)
+			if refuseTenant(w, err) {
+				return
+			}
+			glog.ErrorContextf(r.Context(), "billing check failed: %v", err)
 			respondWithError(w, http.StatusInternalServerError, "billing check failed")
 			return
 		}

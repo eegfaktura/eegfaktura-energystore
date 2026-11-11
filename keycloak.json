@@ -8,7 +8,7 @@
     "verify-token-audience": true,
     "use-resource-role-mappings": true,
     "confidential-port": 0,
-    "secret": "LxUXJLXP2Ra57y4RcIzXPYgNHvJF7H1j"
+    "secret": "CHANGE_ME"
   },
   "admin" : {
     "realm": "EEGFaktura",
@@ -19,7 +19,7 @@
     "verify-token-audience": true,
     "use-resource-role-mappings": true,
     "confidential-port": 0,
-    "secret": "LxUXJLXP2Ra57y4RcIzXPYgNHvJF7H1j"
+    "secret": "CHANGE_ME"
   },
   "api" : {
     "realm": "EEGFaktura",
@@ -30,6 +30,6 @@
     "verify-token-audience": true,
     "use-resource-role-mappings": true,
     "confidential-port": 0,
-    "secret": "ZZPTHDQcu2cR9Tvix0DsFQSrQbSv01aL"
+    "secret": "CHANGE_ME"
   }
 }

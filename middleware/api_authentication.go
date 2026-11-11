@@ -5,7 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/golang/glog"
+	"at.ourproject/energystore/internal/logging"
+	"at.ourproject/energystore/internal/logging/glog"
 )
 
 var (
@@ -28,8 +29,13 @@ func ProtectApi(handler JWTHandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		uDec, _ := base64.URLEncoding.DecodeString(basicAuth)
-		creds := strings.Split(string(uDec), ":")
+		uDec, err := base64.StdEncoding.DecodeString(basicAuth)
+		if err != nil {
+			glog.Info("Authorization: Basic credentials are not valid base64")
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		creds := strings.SplitN(string(uDec), ":", 2)
 
 		if len(creds) < 2 {
 			glog.Info("No User:Password in request!")
@@ -39,25 +45,27 @@ func ProtectApi(handler JWTHandlerFunc) http.HandlerFunc {
 
 		idToken, err := kcClientAPI.AuthenticateUserWithPassword(creds[0], creds[1])
 		if err != nil {
-			glog.Errorf("%v", err)
+			glog.ErrorContextf(r.Context(), "%v", err)
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
 
 		claims := PlatformClaims{}
 		if err := idToken.Claims(&claims); err != nil {
-			glog.Errorf("%v", err)
+			glog.ErrorContextf(r.Context(), "%v", err)
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
 
 		tenant := r.Header.Get("X-Tenant")
 		if contains(claims.Tenants, tenant) == false {
-			glog.Errorf("Unauthorized access with tenant %s", tenant)
+			glog.ErrorContext(r.Context(), "Unauthorized access: tenant check failed")
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
 
+		// client.id is the API client; the Basic user is not logged
+		logging.SetCaller(r.Context(), tenant, kcClientAPI.clientID)
 		handler(w, r, &claims, strings.ToUpper(tenant))
 	}
 }

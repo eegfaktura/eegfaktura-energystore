@@ -2,52 +2,13 @@ package model
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/assert"
-	"os"
 	"testing"
+
+	"at.ourproject/energystore/internal/testsupport/tz"
+	"github.com/stretchr/testify/assert"
 )
 
-/*
-	 Matrix Quota
-
-	       |-P1|-P2|-P3|
-		ZP1|0.4|0.5|0.1|
-		ZP2|0.1|0.3|0.4|
-		ZP3|0.5|0.2|0.3|
-*/
-func TestMain(m *testing.M) {
-	os.Exit(m.Run())
-}
-
-func TestMakeQuotaMatrix(t *testing.T) {
-	cpNames := []string{"ZP1", "ZP2", "ZP3"}
-	prodNames := []string{"P1", "P2", "P3"}
-
-	qoutamatrix := NewQuotaMatrix(cpNames, prodNames)
-
-	qoutamatrix.Add("ZP1", "P1", 0.4)
-	qoutamatrix.Add("ZP1", "P2", 0.5)
-	qoutamatrix.Add("ZP1", "P3", 0.1)
-	qoutamatrix.Add("ZP2", "P1", 0.1)
-	qoutamatrix.Add("ZP2", "P2", 0.3)
-	qoutamatrix.Add("ZP2", "P3", 0.45)
-	qoutamatrix.Add("ZP3", "P1", 0.5)
-	qoutamatrix.Add("ZP3", "P2", 0.2)
-	qoutamatrix.Add("ZP3", "P3", 0.3)
-
-	v := qoutamatrix.GetQuota("ZP2", "P3")
-	println(v)
-	assert.Equal(t, float64(0.45), v)
-
-	v = qoutamatrix.GetAllocQuota("ZP2", "P3")
-	println(v)
-	assert.Equal(t, float64(0.5294117647058822), v)
-
-	ts := [7]int{1}
-
-	fmt.Printf("Test Slice: %+v\n", ts)
-	qoutamatrix.Validate()
-}
+func TestMain(m *testing.M) { tz.Main(m) }
 
 func TestMerge(t *testing.T) {
 	m1 := MakeMatrix([]float64{1, 2, 5, 6}, 2, 2)

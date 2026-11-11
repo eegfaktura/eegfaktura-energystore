@@ -5,8 +5,8 @@ import (
 	"strings"
 	"sync"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"github.com/dgraph-io/badger/v4"
-	"github.com/golang/glog"
 	"github.com/spf13/viper"
 )
 
@@ -40,11 +40,12 @@ type DbObject struct {
 // Put die DB schliessen konnte, waehrend ein Get sie gerade ausgegeben hatte -- der Aufrufer
 // schrieb dann in eine geschlossene DB.
 type DbPoolObject struct {
-	mu     sync.Mutex
-	freed  *sync.Cond // signalisiert, dass ein Handle zurueckgegeben wurde
-	size   int        // hoechstens so viele Handles gleichzeitig
-	inUse  int
-	closed bool // nach shutdown: kein Get mehr, die DB bleibt zu
+	mu      sync.Mutex
+	freed   *sync.Cond // signalisiert, dass ein Handle zurueckgegeben wurde
+	size    int        // hoechstens so viele Handles gleichzeitig
+	inUse   int
+	waiting int  // Get, die auf ein freies Handle warten (fuer die Tests)
+	closed  bool // nach shutdown: kein Get mehr, die DB bleibt zu
 
 	db     *DB
 	ecId   string
@@ -65,7 +66,9 @@ func (dpo *DbPoolObject) Get() *DbObject {
 	defer dpo.mu.Unlock()
 
 	for !dpo.closed && dpo.inUse >= dpo.size {
+		dpo.waiting++
 		dpo.freed.Wait()
+		dpo.waiting--
 	}
 	if dpo.closed {
 		return nil

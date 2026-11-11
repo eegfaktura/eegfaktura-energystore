@@ -5,10 +5,10 @@ import (
 	"math"
 	"time"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
-	"github.com/golang/glog"
 )
 
 // BillingCheck evaluates the checks before a billing run (platform#148) in one pass over the

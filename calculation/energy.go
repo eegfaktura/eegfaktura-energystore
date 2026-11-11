@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"strings"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
 	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
-	"github.com/golang/glog"
 )
 
 //const StorageException = errors.New()
@@ -64,16 +64,23 @@ func EnergyReportV2(tenant, ecid string, participants []model.ParticipantReport,
 		}
 	}
 
+	// "meta" is a list, never null (also without any CONSUMPTION/GENERATION entry).
+	response.Meta = []*model.CounterPointMeta{}
 	var meta *model.RawSourceMeta
 	if meta, err = db.GetMeta(fmt.Sprintf("cpmeta/%d", 0)); err != nil {
+		// No meta record: no energy data was ever imported for the community. That is an empty
+		// report, not an error (web#191 mapped the 500 "Record doesn't exist" to one).
+		if errors.Is(err, ebow.ErrNotFound) {
+			return response, nil
+		}
 		return nil, err
 	} else {
 		for _, m := range meta.CounterPoints {
-			glog.V(6).Infof("Meta: %+v\n", m)
+			glog.V(6).Infof("Meta: %s %s\n", m.ID, m.Dir)
 			if m.Dir == "CONSUMPTION" || m.Dir == "GENERATION" {
 				response.Meta = append(response.Meta, m)
 			} else {
-				glog.V(6).Infof("Omitted Meta: %+v\n", m)
+				glog.V(6).Infof("Omitted Meta: %s %s\n", m.ID, m.Dir)
 			}
 		}
 	}

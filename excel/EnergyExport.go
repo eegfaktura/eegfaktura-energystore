@@ -2,15 +2,16 @@ package excel
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"time"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
 	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
-	"github.com/golang/glog"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -80,9 +81,9 @@ func returnFloatValue(array []float64, idx int) float64 {
 	return 0
 }
 
-func ExportEnergyDataToMail(tenant, ecid, to string, year, month int, cps *ExportParticipantEnergy) error {
+func ExportEnergyDataToMail(ctx context.Context, tenant, ecid, to string, year, month int, cps *ExportParticipantEnergy) error {
 
-	buf, err := ExportExcel(tenant, ecid, year, month, cps)
+	buf, err := ExportExcel(ctx, tenant, ecid, year, month, cps)
 	if err != nil {
 		return err
 	}
@@ -91,21 +92,18 @@ func ExportEnergyDataToMail(tenant, ecid, to string, year, month int, cps *Expor
 	return utils.SendMail(tenant, to, fmt.Sprintf("EEG (%s) - Excel Report", tenant), nil, &filename, buf)
 }
 
-func ExportExcel(tenant, ecid string, year, month int, cps *ExportParticipantEnergy) (*bytes.Buffer, error) {
+func ExportExcel(ctx context.Context, tenant, ecid string, year, month int, cps *ExportParticipantEnergy) (*bytes.Buffer, error) {
 	start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.Local)
 	end := time.Date(year, time.Month(month)+1, 0, 0, 0, 0, 0, time.Local)
 
 	//return CreateExcelFile(tenant, start, end, cps)
-	return ExportEnergyToExcel(tenant, ecid, start, end, cps)
+	return ExportEnergyToExcel(ctx, tenant, ecid, start, end, cps)
 }
 
 type periodRange struct {
 	start time.Time
 	end   time.Time
 }
-
-// MESSUNG ONLY - nicht mergen
-var skipQoVSheet = false
 
 type Sheet interface {
 	initSheet(ctx *RunnerContext) error
@@ -167,15 +165,18 @@ func createRunnerContext(db ebow.IBowStorage, start, end time.Time, cps *ExportP
 	var producers []*ParticipantCp
 	var consumers []*ParticipantCp
 	for i, _ := range cps.Cps {
+		_cps = append(_cps, &cps.Cps[i])
+		// A metering point without stored data has no meta entry: no columns for it (the energy
+		// sheet dereferenced the missing meta and panicked); the summary sheet skips it as well.
+		if _, ok := metaMap[cps.Cps[i].MeteringPoint]; !ok {
+			continue
+		}
+		cps.Cps[i].QoV = true
 		if cps.Cps[i].Direction == model.PRODUCER_DIRECTION {
 			producers = append(producers, &cps.Cps[i])
 		} else {
 			consumers = append(consumers, &cps.Cps[i])
 		}
-		if _, ok := metaMap[cps.Cps[i].MeteringPoint]; ok {
-			cps.Cps[i].QoV = true
-		}
-		_cps = append(_cps, &cps.Cps[i])
 	}
 
 	return &RunnerContext{
@@ -263,6 +264,9 @@ func (er *EnergyRunner) run(db ebow.IBowStorage, f *excelize.File, start, end ti
 	g1Ok := iterCP.Next(&_lineG1)
 
 	if !g1Ok {
+		if err := iterCP.Err(); err != nil {
+			return nil, err
+		}
 		return nil, model.ErrNoEntries(errors.New("no Rows found"))
 	}
 
@@ -270,11 +274,19 @@ func (er *EnergyRunner) run(db ebow.IBowStorage, f *excelize.File, start, end ti
 	var pt *time.Time = nil
 	for g1Ok {
 		_, t, err := utils.ConvertRowIdToTimeString("CP", _lineG1.Id, time.UTC)
+		// a row id that is no time is skipped, like the reports (store.Engine.Query) do for rows after the first
+		if err != nil {
+			g1Ok = iterCP.Next(&_lineG1)
+			continue
+		}
 		if rowOk := utils.CheckTime(pt, t); !rowOk {
 			diff := ((t.Unix() - pt.Unix()) / (60 * 15)) - 1
 			if diff > 0 {
 				for i := int64(0); i < diff; i += 1 {
 					nTime := pt.Add(time.Minute * time.Duration(15*(int(i)+1)))
+					if !utils.WallTimeExists(nTime) { // the hour skipped when summer time starts is no gap (#22)
+						continue
+					}
 					newId, _ := utils.ConvertUnixTimeToRowId("CP/", nTime)
 					fillLine := model.MakeRawSourceLine(newId,
 						rCxt.countCons*3, rCxt.countProd*2).Copy(rCxt.countCons * 3)
@@ -292,6 +304,10 @@ func (er *EnergyRunner) run(db ebow.IBowStorage, f *excelize.File, start, end ti
 		}
 		g1Ok = iterCP.Next(&_lineG1)
 	}
+	// #31: a row that cannot be read ends the loop like the end of the data; no truncated export.
+	if err = iterCP.Err(); err != nil {
+		return nil, err
+	}
 
 	if err = er.closeSheets(rCxt); err != nil {
 		return nil, err
@@ -302,7 +318,10 @@ func (er *EnergyRunner) run(db ebow.IBowStorage, f *excelize.File, start, end ti
 	return f.WriteToBuffer()
 }
 
-func ExportEnergyToExcel(tenant, ecid string, start, end time.Time, cps *ExportParticipantEnergy) (*bytes.Buffer, error) {
+func ExportEnergyToExcel(ctx context.Context, tenant, ecid string, start, end time.Time, cps *ExportParticipantEnergy) (*bytes.Buffer, error) {
+	if cps == nil { // the export lists only the given metering points (#53)
+		return nil, errors.New("no metering points given for the export")
+	}
 	db, err := ebow.OpenStorage(tenant, ecid)
 	if err != nil {
 		return nil, err
@@ -312,7 +331,7 @@ func ExportEnergyToExcel(tenant, ecid string, start, end time.Time, cps *ExportP
 	f := excelize.NewFile()
 	defer func() {
 		if err := f.Close(); err != nil {
-			glog.Errorf("tenant=%s err: %v", tenant, err)
+			glog.ErrorContextf(ctx, "err: %v", err) // the tenant is in tenant.id
 		}
 	}()
 

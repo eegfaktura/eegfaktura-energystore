@@ -13,12 +13,13 @@ import (
 
 	"at.ourproject/energystore/graph"
 	"at.ourproject/energystore/graph/generated"
+	"at.ourproject/energystore/internal/logging"
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/middleware"
 	"at.ourproject/energystore/mqttclient"
 	"at.ourproject/energystore/rest"
 	"at.ourproject/energystore/store/ebow"
 	"github.com/99designs/gqlgen/graphql/handler"
-	"github.com/golang/glog"
 	"github.com/gorilla/handlers"
 	"github.com/spf13/viper"
 
@@ -53,9 +54,20 @@ func main() {
 
 	var configPath = flag.String("configPath", ".", "Configfile Path")
 	flag.Parse()
+	if err := logging.Check(); err != nil {
+		glog.Exitf("%v", err)
+	}
+	for _, f := range glog.IgnoredFlags() {
+		glog.Warningf("flag -%s is ignored: the log level is set with LOG_LEVEL", f)
+	}
+	logging.Started()
 
 	glog.V(3).Info("-> Read Config")
 	config.ReadConfig(*configPath)
+	// Ein frisches Volume hat persistence.path noch nicht; ohne das Verzeichnis meldet /readyz 503.
+	if err := ebow.EnsurePersistencePath(); err != nil {
+		glog.Errorf("persistence.path cannot be created, /readyz stays unavailable: %v", err)
+	}
 	quit := captureOsInterrupt()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -70,9 +82,9 @@ func main() {
 	waitVlogGC := ebow.StartVlogGC(ctx, gcConfig)
 
 	r := rest.NewRestServer()
-	//r.Use(middleware.GQLMiddleware(viper.GetString("jwt.pubKeyFile")))
 	srv := handler.NewDefaultServer(generated.NewExecutableSchema(generated.Config{Resolvers: &graph.Resolver{}}))
-	//r.Handle("/", playground.Handler("GraphQL playground", "/query"))
+	srv.SetRecoverFunc(logging.GQLRecover)
+	srv.AroundOperations(logging.GQLOperation)
 	r.Handle("/query", middleware.GQLProtect(srv))
 
 	allowedOrigins := handlers.AllowedOrigins([]string{"*"})
@@ -99,12 +111,8 @@ func main() {
 	allowedMethods := handlers.AllowedMethods([]string{"GET", "HEAD", "POST", "PUT", "OPTIONS", "DELETE"})
 	allowedCredentials := handlers.AllowCredentials()
 
-	glog.Infof("connect to http://localhost:%s/ for GraphQL playground", port)
-
-	//log.Fatal(http.ListenAndServe(":"+port, handlers.CORS(allowedOrigins, allowedHeaders, allowedMethods, allowedCredentials)(r)))
-
 	server := &http.Server{
-		Handler: handlers.CORS(allowedOrigins, allowedHeaders, allowedMethods, allowedCredentials)(r),
+		Handler: handlers.CORS(allowedOrigins, allowedHeaders, allowedMethods, allowedCredentials)(logging.AccessLog(r)),
 		Addr:    fmt.Sprintf("0.0.0.0:%s", port),
 		// Good practice: enforce timeouts for servers you create!
 		//

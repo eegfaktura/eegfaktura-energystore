@@ -28,8 +28,6 @@ type EngineContext struct {
 	countProd       int
 	periodsConsumer map[int]periodRange
 	periodsProducer map[int]periodRange
-	qovLogArray     []model.RawSourceLine
-	checkBegin      func(lineDate, mDate time.Time) bool
 }
 
 func createEngineContext(db ebow.IBowStorage, start, end time.Time) (*EngineContext, error) {
@@ -73,12 +71,6 @@ func createEngineContext(db ebow.IBowStorage, start, end time.Time) (*EngineCont
 		countCons:       countCons,
 		periodsConsumer: metaRangeConsumer,
 		periodsProducer: metaRangeProducer,
-		checkBegin: func(lineDate, mDate time.Time) bool {
-			if lineDate.Before(mDate) {
-				return true
-			}
-			return false
-		},
 	}, nil
 }
 
@@ -97,7 +89,6 @@ type AddTo func(*EngineContext, time.Time, *model.RawSourceLine) error
 
 type InitCacheTimeFunc func(ct CacheTime) CacheTime
 type AddCacheTimeFunc func(dir int, ct CacheTime) CacheTime
-type SubCacheTimeFunc func(ct CacheTime) CacheTime
 
 func AddDuration(d time.Duration) AddCacheTimeFunc {
 	duration := d
@@ -106,24 +97,10 @@ func AddDuration(d time.Duration) AddCacheTimeFunc {
 	}
 }
 
-func SubDuration(d time.Duration) SubCacheTimeFunc {
-	duration := d
-	return func(ct CacheTime) CacheTime {
-		return CacheTime{ct.Add(-1 * duration)}
-	}
-}
-
 func AddDate(y, m, d int) AddCacheTimeFunc {
 	year, month, day := y, m, d
 	return func(dir int, ct CacheTime) CacheTime {
 		return CacheTime{ct.AddDate(dir*year, dir*month, dir*day)}
-	}
-}
-
-func SubDate(y, m, d int) SubCacheTimeFunc {
-	year, month, day := y, m, d
-	return func(ct CacheTime) CacheTime {
-		return CacheTime{ct.AddDate(year, month, day)}
 	}
 }
 
@@ -163,14 +140,6 @@ func (ct CacheTime) Init(timeFunc InitCacheTimeFunc) CacheTime {
 	return timeFunc(ct)
 }
 
-func (ct CacheTime) SubTs(timeFunc AddCacheTimeFunc) CacheTime {
-	return timeFunc(-1, ct)
-}
-
-func (ct CacheTime) GetDuration(cacheTs AddCacheTimeFunc) time.Duration {
-	return ct.AddTs(cacheTs).Sub(ct.Time)
-}
-
 type Cache struct {
 	cacheTsFn AddCacheTimeFunc
 	initTsFn  InitCacheTimeFunc
@@ -193,7 +162,12 @@ func (ca *Cache) CacheLine(ctx *EngineContext, ts time.Time, line *model.RawSour
 	}
 
 	ca.cache = line.DeepCopy(ctx.countCons, ctx.countProd)
+	// After a gap in the rows the row lies more than one step ahead: the bucket has to be the row's.
+	// A step of 0 from agg(0d) moves nothing, so it ends here too.
 	ca.cacheTime = ca.cacheTime.AddTs(ca.cacheTsFn)
+	for next := ca.cacheTime.AddTs(ca.cacheTsFn); !ts.Before(next.Time) && next.After(ca.cacheTime.Time); next = next.AddTs(ca.cacheTsFn) {
+		ca.cacheTime = next
+	}
 	return nil
 }
 
@@ -222,27 +196,19 @@ func (ca *Cache) InitCache(ctx *EngineContext) error {
 func (ca *Cache) addToCache(line *model.RawSourceLine) error {
 	ca.cache.Id = line.Id
 	for i := range line.Consumers {
-		if len(line.Consumers) > i {
-			ca.cache.Consumers[i] += line.Consumers[i]
-			if len(line.QoVConsumers) > i {
-				ca.cache.QoVConsumers[i] = calcQoV(ca.cache.QoVConsumers[i], line.QoVConsumers[i])
-			} else {
-				ca.cache.QoVConsumers[i] = calcQoV(ca.cache.QoVConsumers[i], 0)
-			}
+		ca.cache.Consumers[i] += line.Consumers[i]
+		if len(line.QoVConsumers) > i {
+			ca.cache.QoVConsumers[i] = calcQoV(ca.cache.QoVConsumers[i], line.QoVConsumers[i])
 		} else {
-			break
+			ca.cache.QoVConsumers[i] = calcQoV(ca.cache.QoVConsumers[i], 0)
 		}
 	}
 	for i := range line.Producers {
-		if len(line.Producers) > i {
-			ca.cache.Producers[i] += line.Producers[i]
-			if len(line.QoVProducers) > i {
-				ca.cache.QoVProducers[i] = calcQoV(ca.cache.QoVProducers[i], line.QoVProducers[i])
-			} else {
-				ca.cache.QoVProducers[i] = calcQoV(ca.cache.QoVProducers[i], 0)
-			}
+		ca.cache.Producers[i] += line.Producers[i]
+		if len(line.QoVProducers) > i {
+			ca.cache.QoVProducers[i] = calcQoV(ca.cache.QoVProducers[i], line.QoVProducers[i])
 		} else {
-			break
+			ca.cache.QoVProducers[i] = calcQoV(ca.cache.QoVProducers[i], 0)
 		}
 	}
 	return nil
@@ -269,6 +235,9 @@ func (e *Engine) Query(tenant, ecid string, start, end time.Time) error {
 	var _lineG1 model.RawSourceLine
 	g1Ok := iterCP.Next(&_lineG1)
 	if !g1Ok {
+		if err := iterCP.Err(); err != nil {
+			return err
+		}
 		return ebow.ErrNoRows
 	}
 
@@ -298,7 +267,12 @@ func (e *Engine) Query(tenant, ecid string, start, end time.Time) error {
 			if diff > 0 {
 				for i := int64(0); i < diff; i += 1 {
 					nTime := pt.Add(time.Minute * time.Duration(15*(int(i)+1)))
-					newId, _ := utils.ConvertUnixTimeToRowId("CP/", nTime.Local())
+					// pt and t are row ids read in UTC: the fill id stays in that wall-clock time (no
+					// .Local()), and the hour skipped when summer time starts is no gap (#22).
+					if !utils.WallTimeExists(nTime) {
+						continue
+					}
+					newId, _ := utils.ConvertUnixTimeToRowId("CP/", nTime)
 					fillLine := model.MakeRawSourceLine(newId,
 						ctx.countCons*3, ctx.countProd*2).Copy(ctx.countCons * 3)
 					if err = e.Consumer.HandleLine(ctx, &fillLine); err != nil {
@@ -314,6 +288,10 @@ func (e *Engine) Query(tenant, ecid string, start, end time.Time) error {
 			return err
 		}
 		g1Ok = iterCP.Next(&_lineG1)
+	}
+	// #31: a row that cannot be read ends the loop like the end of the data; no truncated result.
+	if err := iterCP.Err(); err != nil {
+		return err
 	}
 
 	return e.Consumer.HandleEnd(ctx)

@@ -3,9 +3,9 @@ package excel
 import (
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store/ebow"
+	"context"
 	"fmt"
 	"github.com/stretchr/testify/require"
-	"os"
 	"testing"
 )
 
@@ -40,18 +40,15 @@ import (
 //}
 
 func TestImportExcelEnergyFile(t *testing.T) {
-	db, err := ebow.OpenStorageTest("dashboard", "ecid", "../test/rawdata")
+	db, err := ebow.OpenStorageTest("dashboard", "ecid", t.TempDir())
 	require.Nil(t, err)
-	defer func() {
-		db.CloseTestDriver()
-		os.RemoveAll("../test/rawdata/dashboard")
-	}()
+	defer db.CloseTestDriver()
 
 	excelFile, err := OpenExceFile("../test/221220 Testdaten Energiegemeinschaft 04-10 bis 18-12.xlsx")
 	require.NoError(t, err)
 	defer excelFile.Close()
 
-	err = ImportExcelEnergyFileNew(excelFile, "Energiedaten", db)
+	err = ImportExcelEnergyFileNew(context.Background(), excelFile, "Energiedaten", db)
 	require.NoError(t, err)
 
 	iter := db.GetLinePrefix("CP")
@@ -85,12 +82,9 @@ func TestImportExcelEnergyFile(t *testing.T) {
 func TestBuildMatixMetaStruct(t *testing.T) {
 
 	t.Run("Initiate Meta Struct", func(t *testing.T) {
-		db, err := ebow.OpenStorageTest("excelsource1", "ecid", "../test/rawdata")
+		db, err := ebow.OpenStorageTest("excelsource1", "ecid", t.TempDir())
 		require.NoError(t, err)
-		defer func() {
-			db.CloseTestDriver()
-			os.RemoveAll("../test/rawdata/excelsource1")
-		}()
+		defer db.CloseTestDriver()
 
 		header := excelHeader{
 			meteringPointId: map[int]string{
@@ -244,12 +238,9 @@ func TestBuildMatixMetaStruct(t *testing.T) {
 	})
 
 	t.Run("Check MetaStruct", func(t *testing.T) {
-		db, err := ebow.OpenStorageTest("excelsource2", "ecid", "../test/rawdata")
+		db, err := ebow.OpenStorageTest("excelsource2", "ecid", t.TempDir())
 		require.NoError(t, err)
-		defer func() {
-			db.CloseTestDriver()
-			os.RemoveAll("../test/rawdata/excelsource2")
-		}()
+		defer db.CloseTestDriver()
 		header := excelHeader{
 			meteringPointId: map[int]string{
 				0:  "AT0030000000000000000000000000015", // 0
@@ -407,12 +398,9 @@ func TestBuildMatixMetaStruct(t *testing.T) {
 	})
 
 	t.Run("Initiate Metadata with 32 consumers and 1 producer", func(t *testing.T) {
-		db, err := ebow.OpenStorageTest("excelsource3", "ecid", "../test/rawdata")
+		db, err := ebow.OpenStorageTest("excelsource3", "ecid", t.TempDir())
 		require.NoError(t, err)
-		defer func() {
-			db.CloseTestDriver()
-			os.RemoveAll("../test/rawdata/excelsource3")
-		}()
+		defer db.CloseTestDriver()
 		header := excelHeader{
 			meteringPointId: map[int]string{
 				0:  "AT003000000000000000000Zaehlpkt01",
@@ -682,12 +670,9 @@ func TestBuildMatixMetaStruct(t *testing.T) {
 	})
 
 	t.Run("Initiate Metadata extended MM field", func(t *testing.T) {
-		db, err := ebow.OpenStorageTest("excelsource3", "ecid", "../test/rawdata")
+		db, err := ebow.OpenStorageTest("excelsource3", "ecid", t.TempDir())
 		require.NoError(t, err)
-		defer func() {
-			db.CloseTestDriver()
-			os.RemoveAll("../test/rawdata/excelsource3")
-		}()
+		defer db.CloseTestDriver()
 		header := excelHeader{
 			meteringPointId: map[int]string{
 				0:  "AT003000000000000000000Zaehlpkt01",

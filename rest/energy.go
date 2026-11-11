@@ -11,19 +11,23 @@ import (
 	"strings"
 	"time"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/middleware"
 	"at.ourproject/energystore/model"
+	"at.ourproject/energystore/ownmeters"
+	protobuf "at.ourproject/energystore/protoc"
 	"at.ourproject/energystore/services"
 	"at.ourproject/energystore/store"
-	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 )
 
 func InitQueryApiRouter(r *mux.Router) *mux.Router {
 	s := r.PathPrefix("/query").Subrouter()
 
-	s.HandleFunc("/rawdata", middleware.ProtectApi(queryRawData())).Methods("POST")
-	s.HandleFunc("/{ecid}/metadata", middleware.ProtectApi(queryMetaData())).Methods("POST")
+	// admin, owner and superuser only (energystore 261025-ca1): there is no bearer token to look up a
+	// member's own metering points with
+	s.HandleFunc("/rawdata", middleware.ProtectApi(noMembers(queryRawData()))).Methods("POST")
+	s.HandleFunc("/{ecid}/metadata", middleware.ProtectApi(noMembers(queryMetaData(false)))).Methods("POST")
 	return r
 }
 
@@ -39,7 +43,7 @@ func queryRawData() middleware.JWTHandlerFunc {
 		}
 
 		body, err := io.ReadAll(r.Body)
-		glog.V(4).Infof("API-DATA: %s - %v", string(body), err)
+		glog.V(4).Infof("API-DATA: %d bytes - %v", len(body), err)
 
 		err = json.Unmarshal(body, &request)
 		if err != nil {
@@ -54,24 +58,21 @@ func queryRawData() middleware.JWTHandlerFunc {
 		if len(request.Cps) == 0 {
 			start := uint64(request.Start)
 			end := uint64(request.End)
-			meters, err := services.RequestActiveMeteringPoints(tenant, &start, &end)
+			meters, err := services.RequestActiveMeteringPoints(r.Context(), tenant, &start, &end)
 			if err != nil {
-				glog.Error(err)
+				glog.ErrorContext(r.Context(), err)
 				respondWithError(w, http.StatusBadRequest, err.Error())
 				return
 			}
 
-			cps = make([]store.TargetMP, len(meters))
-			for _, meter := range meters {
-				cps = append(cps, store.TargetMP{MeteringPoint: meter.MeteringPointId})
-			}
+			cps = targetsOf(meters)
 		} else {
 			cps = request.Cps
 		}
 
 		resp, err := store.QueryRawData(tenant, request.EcId, time.UnixMilli(request.Start), time.UnixMilli(request.End), cps, r.URL.Query())
 		if err != nil {
-			respondWithError(w, http.StatusBadRequest, err.Error())
+			respondWithQueryError(r.Context(), w, http.StatusBadRequest, err)
 			return
 		}
 
@@ -84,13 +85,42 @@ func queryRawData() middleware.JWTHandlerFunc {
 	}
 }
 
-func queryMetaData() middleware.JWTHandlerFunc {
+// targetsOf lists the community's metering points as query targets.
+func targetsOf(meters []*protobuf.MeteringPoint) []store.TargetMP {
+	cps := make([]store.TargetMP, 0, len(meters))
+	for _, meter := range meters {
+		cps = append(cps, store.TargetMP{MeteringPoint: meter.MeteringPointId})
+	}
+	return cps
+}
+
+// queryMetaData lists the meta data of the community's metering points; with restrict a member sees its
+// own metering points only (bearer route; the Basic-auth /query API is admin-only and passes false).
+func queryMetaData(restrict bool) middleware.JWTHandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request, claims *middleware.PlatformClaims, tenant string) {
 		vars := mux.Vars(r)
+		var own ownmeters.Meters
+		if restrict {
+			var ok bool
+			if own, ok = ownMeters(w, r, claims, tenant); !ok {
+				return
+			}
+		}
 		resp, err := store.QueryMetaData(tenant, vars["ecid"])
 		if err != nil {
+			if refuseTenant(w, err) {
+				return
+			}
 			respondWithError(w, http.StatusBadRequest, err.Error())
 			return
+		}
+		if own != nil {
+			// a member sees the meta data of its own metering points only
+			for k := range resp {
+				if !own.Owns(k) {
+					delete(resp, k)
+				}
+			}
 		}
 
 		respondWithJSON(w, http.StatusOK, &resp)

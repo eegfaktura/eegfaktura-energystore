@@ -44,6 +44,9 @@ func parseArgument(arg string) (AddCacheTimeFunc, error) {
 		if err != nil {
 			return nil, err
 		}
+		if duration < 15*time.Minute { // below a row's quarter hour CacheLine would step many times per row
+			return nil, fmt.Errorf("aggregation step %q is below 15 minutes", arg)
+		}
 		return AddDuration(duration), nil
 	case 'd':
 		v, err := strconv.ParseInt(arg[:len(arg)-1], 10, 16)

@@ -1,15 +1,16 @@
 package excel
 
 import (
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
 	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
 	"errors"
 	"fmt"
-	"github.com/golang/glog"
 	"github.com/xuri/excelize/v2"
 	"io"
+	"math"
 	"os"
 	"regexp"
 	"sort"
@@ -81,8 +82,8 @@ func OpenReader(r io.Reader, filename string) (*excelize.File, func(), error) {
 	}
 	f.Path = filename
 
-	if glog.V(3) {
-		glog.Infof("Read Excel File with Sheets %+v", f.GetSheetList())
+	if glog.V(3).Enabled() {
+		glog.Infof("Read Excel File with Sheets %v", f.GetSheetList())
 	}
 	keepTmpDir = true
 	return f, func() {
@@ -122,185 +123,6 @@ type excelCounterPointMeta struct {
 	IdxG1TF int
 	IdxG2TF int
 	IdxG3TF int
-}
-
-func ImportExcelEnergyFile(f *excelize.File, sheet string, db *ebow.BowStorage) ([]int, error) {
-
-	exp := "DD.MM.YYYY HH:MM:SS"
-	style, err := f.NewStyle(&excelize.Style{CustomNumFmt: &exp})
-	err = f.SetCellStyle("Sheet1", "A12", "A15", style)
-
-	rows, err := f.Rows(sheet)
-	if err != nil {
-		glog.Error(err)
-		return []int{}, err
-	}
-	glog.Infof("Rows Error: %+v", rows.Error())
-
-	var rIdx int = 1
-	var rawDatas []*model.RawSourceLine = []*model.RawSourceLine{}
-	var rawDatasG2 []*model.RawSourceLine = []*model.RawSourceLine{}
-	var rawDatasG3 []*model.RawSourceLine = []*model.RawSourceLine{}
-
-	var excelHeader excelHeader
-	excelHeaderInitialized := false
-
-	var excelCpMeta map[int]*excelCounterPointMeta
-	var updatedCpMeta []*model.CounterPointMeta
-	var yearSet map[int]bool = make(map[int]bool)
-
-	t := time.Now()
-	totalRowCols := 0
-	for rows.Next() {
-		totalRowCols = totalRowCols + 1
-		if cols, err := rows.Columns(excelize.Options{RawCellValue: true}); err == nil && len(cols) > 0 {
-			switch cols[0] {
-			case "MeteringpointID":
-				excelHeader.meteringPointId = make(map[int]string, len(cols)-1)
-				for i, c := range cols[1:] {
-					excelHeader.meteringPointId[i] = c
-				}
-			case "Spaltensumme", "Metering Interval", "Name", "MeteringReason", "Number of Metering Intervals":
-				continue
-			case "Energy direction":
-				excelHeader.energyDirection = make(map[int]model.MeterDirection, len(cols)-1)
-				for i, c := range cols[1:] {
-					excelHeader.energyDirection[i] = model.MeterDirection(c)
-				}
-			case "Period end", "Data Period end":
-				excelHeader.periodEnd = make(map[int]string, len(cols)-1)
-				for i, c := range cols[1:] {
-					excelHeader.periodEnd[i] = excelDateToString(c)
-				}
-			case "Period start", "Data Period start":
-				excelHeader.periodStart = make(map[int]string, len(cols)-1)
-				for i, c := range cols[1:] {
-					excelHeader.periodStart[i] = excelDateToString(c)
-				}
-			case "Metercode":
-				excelHeader.meterCode = make(map[int]MeterCodeType, len(cols)-1)
-				for i, c := range cols[1:] {
-					excelHeader.meterCode[i] = returnMeterCode(strings.ToUpper(c))
-				}
-			default:
-				if isDate(cols[0]) {
-					d, m, y, hh, mm, ss := getExcelDate(cols[0])
-					yearSet[y] = true
-					if !excelHeaderInitialized {
-						excelCpMeta, updatedCpMeta, err = buildMatrixMetaStruct(db, excelHeader)
-						excelHeaderInitialized = true
-					}
-
-					//
-					// Insert G1 values
-					//
-					rawData := &model.RawSourceLine{Consumers: []float64{}, Producers: []float64{}, QoVConsumers: []int{}, QoVProducers: []int{}}
-					rawData.Id = fmt.Sprintf("CP-G.01/%d/%.2d/%.2d/%.2d/%.2d/%.2d", y, m, d, hh, mm, ss)
-					_ = db.GetLine(rawData)
-					for i := 0; i < len(excelCpMeta); i++ {
-						v := excelCpMeta[i]
-						value := returnFloat(cols[v.Idx+1])
-						switch v.Dir {
-						case "CONSUMPTION":
-							rawData.Consumers = utils.Insert(rawData.Consumers, v.SourceIdx, value)
-							v.Count += 1
-						case "GENERATION":
-							rawData.Producers = utils.Insert(rawData.Producers, v.SourceIdx, value)
-							v.Count += 1
-						}
-					}
-					rawDatas = append(rawDatas, rawData)
-
-					//
-					// Insert G2 values
-					//
-					rawDataG2 := &model.RawSourceLine{Consumers: []float64{}, Producers: []float64{}}
-					rawDataG2.Id = fmt.Sprintf("CP-G.02/%d/%.2d/%.2d/%.2d/%.2d/%.2d", y, m, d, hh, mm, ss)
-					_ = db.GetLineG2(rawDataG2)
-					for i := 0; i < len(excelCpMeta); i++ {
-						v := excelCpMeta[i]
-						if v.IdxG2 < 0 {
-							continue
-						}
-						value := returnFloat(cols[v.IdxG2+1])
-						switch v.Dir {
-						case "CONSUMPTION":
-							rawDataG2.Consumers = utils.Insert(rawDataG2.Consumers, v.SourceIdx, value)
-							v.Count += 1
-						case "GENERATION":
-							rawDataG2.Producers = utils.Insert(rawDataG2.Producers, v.SourceIdx, value)
-							v.Count += 1
-						}
-					}
-					rawDatasG2 = append(rawDatasG2, rawDataG2)
-
-					//
-					// Insert G3 values
-					//
-					rawDataG3 := &model.RawSourceLine{Consumers: []float64{}, Producers: []float64{}}
-					rawDataG3.Id = fmt.Sprintf("CP-G.03/%d/%.2d/%.2d/%.2d/%.2d/%.2d", y, m, d, hh, mm, ss)
-					_ = db.GetLineG3(rawData)
-					for i := 0; i < len(excelCpMeta); i++ {
-						v := excelCpMeta[i]
-						if v.IdxG3 < 0 {
-							continue
-						}
-						value := returnFloat(cols[v.IdxG3+1])
-						switch v.Dir {
-						case "CONSUMPTION":
-							rawDataG3.Consumers = utils.Insert(rawDataG3.Consumers, v.SourceIdx, value)
-							v.Count += 1
-						case "GENERATION":
-							rawDataG3.Producers = utils.Insert(rawDataG3.Producers, v.SourceIdx, value)
-							v.Count += 1
-						}
-					}
-					rawDatasG3 = append(rawDatasG3, rawDataG3)
-					//
-					//
-					//
-					rIdx += 1
-				} else {
-					s, e := f.GetCellStyle(sheet, cols[0])
-					if err != nil {
-						glog.Errorf("Error get cell format %+v", e)
-					}
-					glog.V(3).Infof("Could not handle row format (%d). Cols %+v <%v>", s, cols, cols[0])
-				}
-			}
-		}
-	}
-	glog.Infof("Time taken via read file: %v (%d Rows)", time.Since(t), totalRowCols)
-	if err := db.SetLines(rawDatas); err != nil {
-		return []int{}, err
-	}
-	if err := db.SetLinesG2(rawDatasG2); err != nil {
-		return []int{}, err
-	}
-	if err := db.SetLinesG3(rawDatasG3); err != nil {
-		return []int{}, err
-	}
-
-	glog.V(3).Infof("Import <%d> G1 lines", len(rawDatas))
-	glog.V(3).Infof("Import <%d> G2 lines", len(rawDatasG2))
-	glog.V(3).Infof("Import <%d> G3 lines", len(rawDatasG3))
-
-	rawMeta := &model.RawSourceMeta{Id: fmt.Sprintf("cpmeta/%d", 0), CounterPoints: updatedCpMeta, NumberOfMetering: rIdx}
-	err = db.SetMeta(rawMeta)
-
-	glog.V(3).Infof("Update Metadata: %+v", rawMeta)
-
-	if err != nil {
-		glog.Error(err.Error())
-		return []int{}, err
-	}
-	glog.V(3).Infof("Time taken via write batch: %v", time.Since(t))
-
-	years := []int{}
-	for k, _ := range yearSet {
-		years = append(years, k)
-	}
-	return years, nil
 }
 
 func buildMatrixMetaStruct(db ebow.IBowStorage, excelHeader excelHeader) (map[int]*excelCounterPointMeta, []*model.CounterPointMeta, error) {
@@ -452,6 +274,8 @@ func buildMatrixMetaStruct(db ebow.IBowStorage, excelHeader excelHeader) (map[in
 					PeriodStart: kv.begin,
 					PeriodEnd:   kv.end,
 				}
+			default:
+				return nil, nil, fmt.Errorf("'Energy direction' missing or unknown for metering point %s: %q", meterpoint, kv.dir)
 			}
 		}
 		storedMeta := storedCpMeta[kv.key]
@@ -496,11 +320,11 @@ func buildMatrixMetaStruct(db ebow.IBowStorage, excelHeader excelHeader) (map[in
 	})
 	glog.V(4).Info("ExcelMeta:")
 	for k, v := range excelCpMeta {
-		glog.V(4).Infof("Key: %+v Value: %+v\n", k, *v.CounterPointMeta)
+		glog.V(4).Infof("Key: %d Value: %s %s\n", k, v.CounterPointMeta.ID, v.CounterPointMeta.Dir)
 	}
 	glog.V(4).Info("UpdateMeta:")
 	for i, v := range updateCpMeta {
-		glog.V(4).Infof("Idx: %+v Value: %+v\n", i, v)
+		glog.V(4).Infof("Idx: %d Value: %s %s\n", i, v.ID, v.Dir)
 	}
 	return excelCpMeta, updateCpMeta, nil
 }
@@ -516,15 +340,48 @@ func returnInt(c string) int {
 	return i
 }
 
-func returnFloat(c string) float64 {
+// parseExcelFloat reads a value cell: surrounding whitespace (also a non-breaking space) is ignored, empty
+// is 0, a decimal comma ("1,5") is accepted. NaN and infinities are refused.
+func parseExcelFloat(c string) (float64, error) {
+	c = strings.TrimSpace(c) // unicode.IsSpace: includes U+00A0
 	if len(c) == 0 {
-		return 0
+		return 0, nil
+	}
+	if strings.Contains(c, ",") && !strings.Contains(c, ".") {
+		c = strings.Replace(c, ",", ".", 1)
 	}
 	f, err := strconv.ParseFloat(c, 64)
+	if err != nil {
+		return 0, err
+	}
+	if math.IsNaN(f) || math.IsInf(f, 0) {
+		return 0, fmt.Errorf("not a finite number: %q", c)
+	}
+	return f, nil
+}
+
+func returnFloat(c string) float64 {
+	f, err := parseExcelFloat(c)
 	if err != nil {
 		return 0
 	}
 	return f
+}
+
+// checkMeterValues refuses a data row with a value cell that is not a number; returnMeterValue
+// would read it as 0.
+func checkMeterValues(cols []string, excelCpMeta map[int]*excelCounterPointMeta) error {
+	for _, v := range excelCpMeta {
+		for _, idx := range []int{v.Idx, v.IdxG2, v.IdxG3, v.IdxG1TF, v.IdxG2TF, v.IdxG3TF} {
+			if idx < 0 || len(cols) <= (idx+1) {
+				continue
+			}
+			if _, err := parseExcelFloat(cols[idx+1]); err != nil {
+				return fmt.Errorf("row %s, metering point %s: value %q is not a number", cols[0], v.Name, cols[idx+1])
+			}
+		}
+	}
+	return nil
 }
 
 func returnMeterValue(cols []string, idx int) float64 {

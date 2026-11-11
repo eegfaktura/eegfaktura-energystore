@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"time"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
-	"github.com/golang/glog"
 )
 
 // deleteWriteBatch bounds how many rewritten RawSourceLines are flushed per PutBatch.
@@ -92,6 +92,11 @@ func DeleteRawDataForMeteringPoint(tenant, ecid, meteringPoint string, from, to 
 		return 0, 0, err
 	}
 	defer db.Close()
+	if !dryRun {
+		// The rows are read and written back whole: an import of the same store in between would be
+		// overwritten (#34). A dry run only reads.
+		defer db.LockWrites()()
+	}
 
 	meta, _, err := GetMetaInfo(db)
 	if err != nil {

@@ -1,17 +1,23 @@
 package store
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"time"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store/ebow"
 	"at.ourproject/energystore/utils"
-	"github.com/golang/glog"
 )
 
+// ErrMetaRecord: the meta record cpmeta/0 of the store could not be read or updated. It affects every
+// store into this community, so an importer stops at it instead of trying the next day (#19).
+var ErrMetaRecord = errors.New("meta record cpmeta/0")
+
 func StoreEnergyV2(db *ebow.BowStorage, meteringPoint string, data *model.MqttEnergy) error {
+	defer db.LockWrites()() // cpmeta/0 and the rows are read, changed and written back (#33)
 
 	defaultDirection := utils.ExamineDirection(data.Data)
 
@@ -34,7 +40,7 @@ func StoreEnergyV2(db *ebow.BowStorage, meteringPoint string, data *model.MqttEn
 
 	//// GetRawDataStructur from Period xxxx -> yyyy
 	if err := determineMeta(); err != nil {
-		return err
+		return fmt.Errorf("%w: %w", ErrMetaRecord, err)
 	}
 
 	var resources *map[string]*model.RawSourceLine = &map[string]*model.RawSourceLine{}
@@ -42,7 +48,11 @@ func StoreEnergyV2(db *ebow.BowStorage, meteringPoint string, data *model.MqttEn
 	end := time.UnixMilli(data.End)
 
 	monitorStart := time.Now()
-	fetchSourceRange(db, "CP", begin.Local(), end.Local(), resources)
+	// A read error must abort the store (#31): the rows after a corrupt one would be missing from
+	// resources, rebuilt from scratch below and written back without the other metering points' values.
+	if err := fetchSourceRange(db, "CP", begin.Local(), end.Local(), resources); err != nil {
+		return fmt.Errorf("read stored rows: %w", err)
+	}
 	glog.V(4).Infof("Fetching source takes %v", time.Since(monitorStart).Milliseconds())
 
 	var err error
@@ -63,9 +73,9 @@ func StoreEnergyV2(db *ebow.BowStorage, meteringPoint string, data *model.MqttEn
 		time.UnixMilli(data.End).Format(time.RFC822))
 
 	// Store updated RawDataStructure
-	glog.V(5).Infof("Update/Override CP %s (%+v) energy values (%d) from %s to %s",
+	glog.V(5).Infof("Update/Override CP %s (%d meter codes) energy values (%d) from %s to %s",
 		meteringPoint,
-		metaMeter,
+		len(metaMeter),
 		len(*resources),
 		time.UnixMilli(data.Start).Format(time.RFC822),
 		time.UnixMilli(data.End).Format(time.RFC822))
@@ -76,7 +86,7 @@ func StoreEnergyV2(db *ebow.BowStorage, meteringPoint string, data *model.MqttEn
 		updated[i] = v
 		i += 1
 
-		glog.V(4).Infof("Update Source Line %+v", v)
+		glog.V(4).Infof("Update Source Line %s", v.Id)
 	}
 
 	sort.Slice(updated, func(i, j int) bool {
@@ -93,9 +103,11 @@ func StoreEnergyV2(db *ebow.BowStorage, meteringPoint string, data *model.MqttEn
 	}
 
 	if c := updateMetaCP(metaCP, begin, end); c {
-		err = updateMeta(db, metaCP, meteringPoint, begin, end)
+		if err = updateMeta(db, metaCP, meteringPoint, begin, end); err != nil {
+			return fmt.Errorf("%w: %w", ErrMetaRecord, err)
+		}
 	}
-	return err
+	return nil
 }
 
 func organizeMetaCodeImport(data []model.MqttEnergyData) []*model.MeterCodeMeta {
@@ -158,7 +170,7 @@ func importEnergyValuesV2(
 				rowIdVisited[id] = true
 			}
 		} else {
-			glog.Errorf("Energie Values %+v different %+v", mc, metaCP)
+			glog.Errorf("Energie Values %s: source %d not in the %d data blocks", mc.Code, mc.SourceInData, len(data.Data))
 		}
 	}
 	return resources, nil
@@ -203,7 +215,7 @@ func addEnergyValueToResource(resource *model.RawSourceLine, metaCP *model.Count
 	}
 }
 
-func fetchSourceRange(db *ebow.BowStorage, key string, start, end time.Time, resources *map[string]*model.RawSourceLine) {
+func fetchSourceRange(db *ebow.BowStorage, key string, start, end time.Time, resources *map[string]*model.RawSourceLine) error {
 	sYear, sMonth, sDay := start.Year(), int(start.Month()), start.Day()
 	eYear, eMonth, eDay := end.Year(), int(end.Month()), end.Day()
 
@@ -215,6 +227,7 @@ func fetchSourceRange(db *ebow.BowStorage, key string, start, end time.Time, res
 		l := _line.Copy(len(_line.Consumers))
 		(*resources)[_line.Id] = &l
 	}
+	return iter.Err()
 }
 
 func updateMetaCP(metaCP *model.CounterPointMeta, begin, end time.Time) bool {

@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/model"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/golang/glog"
 	"github.com/spf13/viper"
 )
 
@@ -31,6 +31,12 @@ type MQTTStreamer struct {
 }
 
 func NewMqttStreamer() (*MQTTStreamer, error) {
+	client := mqtt.NewClient(clientOptions())
+
+	return &MQTTStreamer{client: client}, nil
+}
+
+func clientOptions() *mqtt.ClientOptions {
 	opts := mqtt.NewClientOptions()
 
 	brokerHost := viper.GetString("mqtt.host")
@@ -41,7 +47,11 @@ func NewMqttStreamer() (*MQTTStreamer, error) {
 	opts.AddBroker(brokerHost)
 	opts.SetClientID(brokerId)
 	opts.SetProtocolVersion(4)
-	opts.SetAutoAckDisabled(false)
+	// Manual ack (#19): the dispatcher (executeBatch) acks a message after it has been processed. With auto-ack, Paho
+	// acked as soon as the handler had handed the message to the dispatcher, and a crash before the store
+	// lost it. Unacked QoS 1 messages are redelivered by the broker when this persistent session
+	// (fixed client id, clean session false) reconnects.
+	opts.SetAutoAckDisabled(true)
 	opts.SetCleanSession(false)
 
 	opts.SetOrderMatters(false)            // Allow out of order messages (use this option unless in order delivery is essential)
@@ -55,8 +65,8 @@ func NewMqttStreamer() (*MQTTStreamer, error) {
 	opts.AutoReconnect = true
 
 	// Log events
-	opts.OnConnectionLost = func(cl mqtt.Client, err error) {
-		glog.Infof("connection lost Err: %+v (%+v)", err.Error(), cl)
+	opts.OnConnectionLost = func(_ mqtt.Client, err error) {
+		glog.Infof("connection lost: %v", err)
 	}
 	opts.OnConnect = func(mqtt.Client) {
 		glog.Info("connection established")
@@ -65,9 +75,7 @@ func NewMqttStreamer() (*MQTTStreamer, error) {
 		glog.Info("attempting to reconnect")
 	}
 
-	client := mqtt.NewClient(opts)
-
-	return &MQTTStreamer{client: client}, nil
+	return opts
 }
 
 func (m *MQTTStreamer) Connect() error {
@@ -118,7 +126,7 @@ func (m *MQTTStreamer) SendMessage(tenant string, msg *model.MqttEnergyMessage) 
 	go func() {
 		<-token.Done()
 		if token.Error() != nil {
-			fmt.Printf("MQTT ERROR PUBLISHING: %s\n", token.Error())
+			glog.Errorf("MQTT ERROR PUBLISHING: %v", token.Error())
 		}
 	}()
 	token.Wait()

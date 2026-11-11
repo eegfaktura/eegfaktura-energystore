@@ -9,6 +9,320 @@ this changelog highlights the changes relevant for overview and operations.
 ## [Unreleased]
 
 ### Security
+- **`/query` API for admins only** (energystore 261025-ca1): security relevant — details not published.
+  `/query/rawdata` and `/query/{ecid}/metadata` answer 403 unless the account is in `/EEG_ADMIN` or `/EEG_OWNER`
+  (the API client's tokens must carry the `access_groups` group mapper). Every account that used the API in
+  production is an admin. A superuser without one of these groups is refused: the realm role is not in the
+  API's tokens.
+- **Member access needs a verified e-mail address** (energystore 261025-ca1): security relevant — details not
+  published. Rollout: a member login whose e-mail address is not confirmed gets 403 on per-meter energy until the
+  address is confirmed; community totals, admin and owner logins are unaffected.
+
+### Changed
+- **CI: no image build for a commit that only changes `CHANGELOG.md`** (platform#239): pushes and pull requests whose
+  only change is the CHANGELOG, such as the release PR, skip the image build and the checks (PR checks, security
+  scan, Snyk Code; the weekly schedules still run). Tag pushes still build. A release promotes
+  the image of the last commit before the release PR; it has the same content.
+
+## [1.10.0] – 2026-11-06
+
+### Security
+- **Base image `debian:trixie-20261027-slim`** (published 2026-10-28) instead of `trixie-20261020-slim`: current Debian security updates of the runtime image.
+
+### Added
+- **Start-up line and `deployment.environment`** (dev#45 L14, Q8). At start the service writes one line with the
+  message `service start`, `event.action` = `service.start`, `service.version` and `log.effective_level` (the root
+  level, one plain value as in all services), at info whatever `LOG_LEVEL` says and without any other setting. The new environment
+  variable `DEPLOYMENT_ENVIRONMENT` sets `deployment.environment` on every line; unset or blank, the field is left
+  out. It is set per zone in the deployment.
+- **Never-log test** (dev#45 L11, Q2). `internal/logging` reads the source of every package with the Go type checker.
+  A log call (glog, `internal/logging`, `log/slog`, `log`, `fmt.Print*`) fails the suite when it uses `%+v` or `%#v`,
+  gets a value that prints field by field with any verb (any struct, `http.Header`, a client interface; errors and
+  Stringers excepted), or has an identifier with a word of the never-log list of all services (split into camelCase
+  and snake_case words, compared as whole words, also with a plural s; in an all-lower-case identifier a list word of
+  five or more letters also matches inside it), or such a word right before a verb of the format (`password=%s`).
+  Other string literals are not scanned. A legitimate exception needs an entry keyed by file, finding and log call
+  with its reason; `audit.operator` in `logging.AuditOperator` in `rest/restServer.go` is the only one.
+  Metering-point numbers are ids and may be logged.
+
+### Changed
+- **`request.id` and `tenant.id` on the warn and error lines of an HTTP request** (dev#45 L12), not only on the
+  access line, so such a line can be joined to its request. `tenant.id` appears once the token check passed. For a
+  superuser that value is the unchecked header, so for everyone it is written only in the form agreed for all
+  services, `^[A-Z0-9][A-Z0-9_-]{0,63}$` after upper-casing (GEA `GC123456-001` passes); otherwise there is no
+  `tenant.id`. The access line follows the same rule. This covers `middleware`, `rest`, `graph`, `services` and the Excel import and export, HTTP only: no
+  propagation over MQTT or gRPC. Not covered yet: the lines in `store/ebow` and `calculation`, which have no request
+  context, and info, debug and trace lines.
+- **Some log texts changed** (dev#45 L11): lines that printed a struct now name its id or a count, e.g. the dispatcher
+  start, the mail server reply, `Update Metadata`, `Update Source Line`, and the error `Energie Values ... different
+  ...`, now `Energie Values <code>: source <n> not in the <m> data blocks`. Lines that used `%+v` on plain values keep
+  their output.
+
+- **Logging clean-up after the code-quality review** (dev#45 Q1, Q4, Q5, Q9). `tenant.id`, `request.id`,
+  `trace.id` and `span.id` come only from the request context: a caller can no longer set them, so a line never
+  carries them twice, and the tenant rule is applied in one place, where the field is written. Request lines no
+  longer repeat the tenant in the text (`tenant=...` in query errors, the billing check, the member metering points,
+  the export write error and the `RAWDATA-DELETE` audit line), it is in `tenant.id` (261102-mm1). The image no longer
+  passes `-logtostderr=true -stderrthreshold=INFO`; the flags are still accepted (prod gitops passes them until
+  gitops#160). The operator commands `move` and the reset function print the metering point name and index instead
+  of the whole meta record.
+
+### Fixed
+- **A flushed response counts as begun** (dev#45 Q6). A handler that flushed and then panicked got a second
+  `WriteHeader(500)`; the connection is aborted now, as after a write.
+- **Start without the `api` Keycloak client panics with the reason** (dev#45 Q7), not with `nil`.
+- **No client-chosen tenant in the refusal lines** (dev#45 L2). A refused request no longer repeats the tenant of the
+  `tenant` or `X-Tenant` header or of the GraphQL argument in the line text.
+- **No dump of the MQTT client on connection loss** (dev#45 L3). The line printed paho's client with its connection
+  options; it logs the error now, also as `error.type` and `error.message`. The level stays info.
+- **Excel energy export: a row with an unreadable id no longer crashes the export** (ES-CQ-26). The export skips
+  such a row, like the reports do for rows after the first; before, it dereferenced the missing time and the
+  request failed.
+
+### Removed
+- **Unused code after the code-quality review** (ES-CQ-2, -3, -4, -5, -9, -10, -13, -14, -21, -24, -27, -28, -29,
+  -32, -33, -38, -44, -45). The files `initQoV.go`, `converterV2.go`, `ebowctl.go` and `config-prod.yaml`; the
+  pre-OIDC JWT middleware; the old Excel import `ImportExcelEnergyFile`; the legacy MQTT dispatcher and
+  `MockMQTTStreamer` (`golang.org/x/net` is no longer a direct dependency); unused helpers in `config`, `store`,
+  `model`, `utils`, `calculation` and `ebow`, and commented-out code. The load-curve reports ignored their `func`
+  parameter; it is no longer read (the routes are unchanged). The unused key `mqtt.inverterSubscriptionTopic` left
+  `config.yaml`. The `Makefile` now only calls `scripts/dev/*.sh` and builds the two binaries; the README describes
+  running, building, testing and the settings as they are (ES-CQ-46). Tests restore `persistence.path` and wait for
+  the waiting state instead of sleeping (ES-CQ-40, -41).
+
+## [1.9.0] – 2026-10-31
+
+### Added
+- **Health endpoints `GET /healthz` and `GET /readyz`** (also `HEAD`) for Kubernetes probes, on the HTTP port
+  (8080), without a token (the only unauthenticated endpoints). `/healthz` (liveness) always answers 200 `ok` and
+  checks nothing. `/readyz` (readiness) answers 200 `ok` while a small file can be written to and removed from
+  `persistence.path` (catches a missing directory, a read-only volume and a full disk), otherwise 503 `unavailable`;
+  the reason is logged as a warning, never returned. The check has a 2 s timeout, concurrent calls share one running
+  check, and a hanging check is not started twice. `/readyz` takes no handle from the connection pool and opens no
+  tenant database. At start energystore now creates `persistence.path` if it is missing (mode 0700, as Badger does;
+  an error is logged), so a fresh volume reports ready. The public ingress blocks `/energystore/healthz` and
+  `/energystore/readyz` (vfeeg-development/eegfaktura-gitops#159); kubelet probes reach the pods directly.
+
+### Changed
+- **Log output is now JSON on stdout** (logging concept W-261008-ca2, ES-5) — this changes what operators,
+  `kubectl logs` and Dynatrace receive. Every line (the former glog calls, the standard `log` package, the MQTT
+  publish error) goes through one module, `internal/logging`: one JSON object per line on **stdout** (glog wrote
+  text to stderr) with the ECS fields `@timestamp` (UTC, ms), `log.level`, `message`, `service.name`
+  (`eegfaktura-energystore`), `service.version`, `log.origin.file.name`/`.line` and, for errors, `error.type`/
+  `error.message`. Only whitelisted fields are written. New environment variables:
+  - `LOG_FORMAT` = `json` (default) or `text` (key=value, for local reading);
+  - `LOG_LEVEL` = `trace`, `debug`, `info` (default), `warn` or `error`; an unknown value stops the start, an empty
+    `LOG_LEVEL`/`LOG_FORMAT` is the default (same rule as the backend);
+  - `LOG_LEVEL_<PKG>` (optional) for one package, e.g. `LOG_LEVEL_MQTTCLIENT=debug`, `LOG_LEVEL_EBOW=trace`; an empty
+    value is no override;
+  - `SERVICE_VERSION` — set by the image build (release workflow: the commit, or the version for a `v*` tag build),
+    default `dev`. A promoted prod/pilot image keeps its commit: the release version is the image tag.
+  The operator CLI `estore` writes its log lines to **stderr**, so its tables on stdout stay clean, and stops with
+  exit code 2 on an invalid `LOG_*` value.
+- **The glog flags no longer set anything.** `-v`, `-vmodule`, `-logtostderr`, `-stderrthreshold` and the other
+  glog flags are still accepted (the prod deployment still passes them, pilot no longer does), `-v`/`-vmodule` with a
+  warning at start. The former
+  `V(1..3)` lines are now `debug`, `V(4)` and above `trace`. **Operations:** prod runs with `-v=3` today, so the
+  `V(3)` diagnostics (start-up steps, import counts, timings) disappear at the default `info`; set `LOG_LEVEL=debug`
+  to keep them. The former `V(3)` lines that report a failure are now `warn` and stay visible: the row-id
+  conversion error of the energy calculation (261008-ca1) and the skipped Excel import rows (now **one** warning per
+  sheet with the number of skipped rows, the first skipped row number and its cell style; before, one line per row
+  with the whole row).
+- **Access line per HTTP request** (`event.action=http.access`; info, warn for 401/403), written after the token check of the REST
+  routes, `/query` (GraphQL) and the Basic-auth `/query/*` API: `http.request.method`, `http.route` (the route
+  template, no ids; missing for unmatched paths), `http.response.status_code`, `event.duration` (ns),
+  `event.outcome` (`success`, `refused` for 401/403, `failure`), `request.id`, `trace.id`/`span.id` (from a valid W3C
+  `traceparent`), `tenant.id` (the tenant the check accepted), `client.id` (the token's `azp`; for Basic auth the API
+  client id) and `graphql.operation.name` (unset for an anonymous operation). Message `<METHOD> <route> <status>`
+  with the numeric status, `-` for an unmatched path (same convention as the backend). No user, e-mail, name, IP,
+  user agent, query value or body (DSGVO). **Known limit:** GraphQL answers a refused or failed operation with HTTP 200
+  and an `errors` array; its access line says `event.outcome=success` — the outcome reflects the HTTP status only (same
+  in the backend). More known limits (follow-ups, unchanged now): CORS preflights (`OPTIONS`, answered by the CORS
+  wrapper outside the access log) get no access line and no `X-Request-Id`; `X-Request-Id` is not an exposed CORS
+  header and `X-Request-Id`/`traceparent` are not in the allowed request headers, so browsers cannot send or read them;
+  the GraphQL websocket transport on `/query` is logged as one line with status 200 and the socket's lifetime as
+  duration, and operations on one socket share the operation name.
+- **A panic in a REST handler** is logged as one error line (`event.action=http.panic`, `error.type`, `error.message`,
+  `error.stack_trace`) and answered with 500; the access line says 500. Before, net/http logged `http: panic serving
+  <remote address>` with a plain stack (an IP in the log) and there was no access line. If the response had already
+  begun, the connection is aborted.
+  `/healthz` and `/readyz` are not logged. `X-Request-Id` is taken when it matches `[A-Za-z0-9._:-]{1,128}`,
+  otherwise a UUIDv4 (32 hex) is generated, and it is returned as a response header; `X-Request-Id` and a child
+  `traceparent` (same trace id, a new span id) are passed on to the backend call for the metering points of a member.
+  energystore had no access log before (none with IP or user agent to switch off).
+- **A panic in a GraphQL resolver is logged as one error line** (`event.action=graphql.panic`, `error.type`,
+  `error.message`, `error.stack_trace`) through the logging module, instead of gqlgen's plain-text stack on stderr.
+  The client gets the same generic `internal system error` as before.
+- **Raw-data deletion audit line** (`POST /eeg/v2/{ecid}/rawdata/delete`, superuser only): now
+  `event.action=rawdata.delete.done` (warn) or `rawdata.delete.failed` (error, newly logged) with `tenant.id` and the
+  operator's user name in `audit.operator`. Documented exception to 'no persons in logs' (decision 2026-10-30):
+  accountability over anonymity for this destructive ops tool; `audit.operator` is written on these two events only.
+
+### Security
+- **Basic authentication of the `/query` API** (energystore #39): security relevant — details not published.
+  Compatibility: clients that send Basic credentials as standard base64 (RFC 7617) are unaffected; a client that
+  encoded them URL-safe (`-`/`_`) to match the old server behaviour now gets 403.
+- **Reading of the `tenant` token claim** (energystore #14): security relevant — details not published.
+- **Sample `keycloak.json`** (energystore #15): security relevant — details not published.
+- **Energy routes for member tokens** (energystore 261025-ca1): security relevant — details not published.
+  Operations: new setting `services.backend-api` (the backend's HTTP address, e.g.
+  `http://eegfaktura-backend-service.eegfaktura:8080`); set it before rolling out this version, and roll out backend
+  1.14.0 first (an older backend refuses tokens with `aud` as a list with 401, which reads as 503 here). energystore now
+  calls the backend's `GET /participant` (contract: `meters[].meteringPoint`, `meters[].status`, `meters[].registeredSince`,
+  `meters[].participantState.activeSince`/`inactiveSince`) and needs network access to the backend on port 8080.
+  Without the setting energystore logs a warning at start. Logins without admin or owner rights get 503 on
+  per-meter requests only while the backend is unreachable, the setting is missing, or the backend refuses the
+  token (e.g. 401 for a login without any group, which the backend does not accept); admin and owner logins never
+  call the backend.
+- **Member access by metering point status** (energystore 261025-ca1): security relevant — details not published.
+  Member logins get 403 for metering points whose participation has no usable start or end date in the backend;
+  admin and owner logins are unchanged.
+- **excelize pinned to a pseudo-version until v2.12.0**: `github.com/xuri/excelize/v2` v2.11.0 →
+  `v2.11.1-0.20261003002531-6258dcebc4e2` (commit `6258dceb`, published 2026-10-03; the latest release v2.11.0 of
+  2026-07-06 lacks the fixes). Closes Dependabot alerts #21–#35 (GHSA-5h23-36rv-pm65, GHSA-fw94-4wwp-w8pw,
+  GHSA-fq3v-74gv-27gm, GHSA-rxcj-4pj5-74gr, GHSA-8mcq-6wmr-jrjv, GHSA-g27h-8qhm-6pff, GHSA-jrfj-fhj2-jjvm,
+  GHSA-8jjq-8j9w-m2v6, GHSA-c85p-xxjj-2r75, GHSA-wp2g-vpjj-g53r, GHSA-x2q3-8cjh-766f, GHSA-2j4c-ffch-9f23,
+  GHSA-r7x5-4969-99p7, GHSA-jw42-f3rr-4cc3, GHSA-mx22-3794-2vpv): panics, hangs and unbounded allocations on
+  malformed workbooks, reachable through the Excel upload. Indirect modules follow: `richardlehane/mscfb` 1.0.7 →
+  1.0.8 (2026-08-19), `xuri/efp` 0.0.1 → 0.0.2 (2026-09-21); `go.sum` also records `golang.org/x/image` 0.44.0
+  (2026-07-08). Return to a release tag once v2.12.0 is out. The new excelize writes numbers with at most 15
+  significant digits and cuts off the rest. So that the export does not change because of this, the five totals of the
+  summary sheet (B5–B9: Gesamtverbrauch, Anteil, Eigendeckung, Überschuss, Gesamte Erzeugung) are now rounded to
+  6 decimals, like the per-meter cells. The stored value is what Excel displayed before (e.g. `21547.977599`
+  instead of the float noise `21547.977598999998`), and the displayed values are unchanged. The balance in B10 is
+  computed from these rounded totals, matching its formula `ROUND(B9-B8-B7,3)`. The energy sheet and the per-meter
+  rows were already rounded to 6 decimals and are unaffected.
+- `github.com/go-jose/go-jose/v4` 4.1.4 → 4.1.6 (indirect, Dependabot).
+
+### Fixed
+- **A tenant with a suffix (`GC100403-001`) gets a clear refusal** (261008-ca3). Every read of the store answered it with
+  an error: `/report`, the Excel download and the billing check with a 500, a member with a 503, `lastRecordDate` with a
+  404 and a second body. All of them now answer **422** with the text `tenant not supported by the energy store`, also
+  the metadata read and the other reports. Nothing else changes: such a tenant still cannot read its data, and an MQTT message
+  for it is still not stored. Callers: eegfaktura-web.
+- **An ecId with dashes inside (`AT00300000000GC90001000000000-001`) is accepted again** (261016-ca1). The path check
+  refused it; a CR_MSG with such an ecId was acked, logged as ERROR, not stored and not confirmed, and is not
+  redelivered. EDA's schema allows no dash in an ECID, so this concerns other feeds (eegfaktura-v3's test feed). Leading,
+  trailing and double dashes, dots and slashes stay refused.
+- **`intra-day-report` and the `intraday` part of `combined-report`: every hour now holds its own hour** (known-errors
+  #26). The hours were shifted by one: index 0 held 01:00–01:45, index 12 held 13:00–13:45, index 23 held 00:00–00:45. If the
+  first stored row lay inside the period (a community's first day), rows also landed in the night hours before it.
+  **Reported values change:** the web's "Tagesverlauf" chart labels the index as the hour, so every bar moves one hour
+  later (the midday peak was shown an hour early). The sum of the day, stored data and all other reports stay the same.
+- **`/raw` with aggregation and the load curve keep a row in its own bucket after a gap in the rows** (#26). The bucket
+  moved one step per bucket, so after a gap all following values were reported too early, e.g. the values of 3 June under
+  2 June. **Reported values change** only for periods with such a gap; totals stay the same. An hour step below 15 minutes
+  in `agg(...)` (also 0 and negative) is now refused. Callers: eegfaktura-web, eegfaktura-v3 (`/raw`).
+- **MQTT import: a message over a DST switch is cut at local midnight, and no value is lost** (known-errors #42).
+  `SplitEnergyByDay` stepped by a fixed 24 h, so the blocks after the switch started at 01:00 (spring) or 23:00 (autumn).
+  If such a message did not end at midnight, the last slots were dropped silently: `30.03. 00:00–02:00` lost
+  `01:00–02:00` (4 slots), `26.10. 23:00–23:30` lost its 2 slots, and the message was still confirmed. These slots are now
+  stored. Rows and keys do not change; data already stored is not touched, a lost slot comes in when the day is requested
+  again. Messages of quarter-hour values that end at midnight store the same values as before.
+- **`service.version` in the log names the build.** Images built from a branch carried the branch name (`main`), which
+  cannot tell builds apart, and a promoted prod/pilot image keeps what was set at build time. It is now the commit, or
+  the version without `v` for a `v*` tag build; same as billing.
+- **Image build blocked by data races in the logging tests** (since energystore#102): the race detector in the
+  image CI reported two races. The handler of the logging module is now swapped atomically, so reconfiguring it
+  while other goroutines log is safe (in the service it is only configured at start, before any goroutine runs);
+  the Hijack test waits for its server handler over a channel. No change to the log output.
+- **No personal data or payloads in the log** (logging concept, never-log list): the request body of
+  `POST /query/rawdata` (energystore #38), MQTT message payloads (261008-ca2), the energy values when GraphQL
+  marshalling fails (261030-mm3), the recipient e-mail address of the mail export (261030-mm4) and the backend's
+  metering-point list (with addresses, 261030-mm5) are no longer logged — sizes, counts or the tenant instead.
+- **Excel import: the warning about a skipped row names the cell style of the row's first cell** (energystore
+  261030-mm2); before, it always said 0 and a lookup error was lost.
+- **Gap filling: no phantom quarter hours on the summer-time day, fill rows in their own slot** (energystore #22).
+  **This changes values in reports, raw-data queries and Excel exports.** Where the store has no row for a
+  quarter hour, the reports insert an empty row (0 kWh, quality L0). Two errors are fixed:
+  - On the day summer time starts (e.g. 29.03.2026) the clock jumps from 01:45 to 03:00. This jump was taken
+    for a missing hour: reports, raw-data queries and the Excel export showed **four extra quarter hours
+    (02:00–02:45) with 0 kWh and quality L0**, and the summary sheet counted them as L0. They are gone: the day
+    has its 92 quarter hours, and the L0 count of that day drops by four per metering point.
+  - In reports and raw-data queries (not the Excel export) the empty row for a real gap was placed one or two
+    hours **later** than the gap (winter/summer time), on top of a real quarter hour, and the gap itself had no
+    row. It now sits in the missing quarter hour.
+  kWh sums are unchanged (the inserted rows are 0 kWh). What changes: the number of rows, their timestamps, the
+  L0 counts and the quality shown for the hour or day such a row falls into. **No data repair is needed:** the
+  fill rows were never stored — both gap fills (reports/raw-data queries and the Excel export) build them in
+  memory while reading — so the correction applies to already stored data as well. One possible exception, not
+  touched by this change: an Excel file from a grid operator portal that contains rows 02:00–02:45 on the
+  summer-time day would have stored real rows for those times when it was uploaded.
+- **Tests: the export test for a metering point without stored data runs again** (energystore #24): the defect
+  was fixed in 1.8.0; the stale skip of `TestS08_ExportForAMeterWithoutData` is removed.
+- **Excel import: a new metering point with a missing or unknown "Energy direction" is refused with an error**
+  (energystore #27) naming the metering point, instead of a nil-pointer panic that the upload showed as an opaque
+  error. Nothing is stored for such a file.
+- **Excel import: decimal comma and unreadable values** (energystore #28). A value with a decimal comma (`1,5`)
+  is read as 1.5; before, it was stored as 0. Spaces around a value (also a non-breaking space) are ignored
+  (` 1,5`, `1.5 `). Note: `1,234` is read as 1.234 (decimal comma), not as one thousand two hundred thirty-four.
+  An empty or blank cell is still 0. **These cell contents now refuse the upload** with an error naming the row
+  (its timestamp) and the metering point — before, they were stored as 0 without notice: text (`n/a`, `-`, `x`),
+  Excel error values (`#N/A`, `#DIV/0!`, `#VALUE!`), numbers with thousands separators (`1.234,5`, `1,234.5`,
+  `1 234`, `1'234`) or more than one comma (`1,2,3`), and `NaN`/`Inf`/`Infinity` (any sign; these were stored
+  as such before, not as 0). Only the value cells of the recognised metering points are checked. A sheet
+  without energy rows (e.g. an empty workbook) or without the `MeteringpointID`/`Metercode` header is refused
+  with an error instead of reporting success; before, an empty sheet also rewrote the stored metering-point
+  meta without any metering point. Not changed: the quality row is still not read and every imported slot keeps
+  quality 1; negative values are still accepted.
+- **No lost metering points when the MQTT import and an Excel upload write the same community at once**
+  (energystore #33). Both read the metering-point record (`cpmeta/0`) and the rows, change them and write them
+  back; run at the same time, one import's new metering point (or values) could be overwritten by the other.
+  The imports of one store now take turns (a lock per tenant/ecId inside the service); an Excel upload holds it
+  for the whole file, so MQTT imports of that community wait until it is done. During a long upload the
+  community's MQTT messages wait unacknowledged; if the service restarts meanwhile, mosquitto delivers them again
+  and the import is idempotent, so no data is lost. A graceful shutdown waits for a running upload to finish.
+  A failed write of the record is now reported instead of being ignored.
+- **Deleting raw data no longer loses values an MQTT import writes at the same time** (energystore #34). The
+  delete (`/eeg/v2/{ecid}/rawdata/delete`) reads the rows of the range and writes them back with the metering
+  point's slots zeroed; an import of the same community in between was overwritten (values of other metering
+  points in that range lost). A real delete now takes the same per-community lock as the imports (#33); a dry run
+  only reads and does not wait.
+- **`POST /eeg/{ecid}/excel/export/{year}/{month}` answers 400 instead of crashing** (energystore #53). The route
+  passes no participant list to the export, so every call panicked and the client saw a dropped connection; no
+  mail was ever sent. It now answers `400 {"error":"no metering points given for the export"}` and still sends no
+  mail. No caller is known (web and v3 do not use it); the Excel download (`/excel/report/download`) is unchanged.
+
+## [1.8.1] – 2026-10-28
+
+### Security
+- **Go 1.26.10** (platform#181): the build image (`golang:1.26.10`), `go.mod` (`toolchain go1.26.10`; the
+  `go 1.26.0` directive is unchanged), the PR checks and the image build move from 1.26.9 to 1.26.10 (released
+  2026-10-19). It fixes CVE-2026-111943 / GO-2026-6809 (HIGH, `crypto/x509` trusted untrusted intermediate
+  certificates; reached through the outgoing HTTPS calls). A patch release: language version, GODEBUG defaults and
+  garbage collector are unchanged.
+- **Slim runtime image** (prod image scan 2026-10-28): the image was the full `golang` image (Go toolchain, git,
+  ssh, curl, gnupg, compilers, the sources until `rm`); it is now a two-stage build with the runtime on
+  `debian:trixie-20261020-slim` (the Debian release of the build image) with only `ca-certificates` and `tzdata`.
+  The image keeps `/usr/local/bin/energystore` and `/usr/local/bin/estore`, `/etc/energystore/config.yaml`,
+  `TZ=Europe/Berlin`, user `app` (1000:1000), `/opt/rawdata` (volume) and `/opt/energy` owned by it, the working
+  directory and the command. **Not in the image any more:** `curl`, `git`, `ssh`, `go`. eegfaktura-docker-compose
+  wraps the command in `url-poller.sh`, which calls `curl` inside this container: it must be adapted before it moves
+  to an image with this change (the Kubernetes manifests do not use it).
+
+### Fixed
+- **CI: the Snyk Code scan fails visibly when it cannot run.** An invalid `SNYK_TOKEN` ended the weekly and
+  push scan green without any result (`continue-on-error`); now only „issues found“ keeps the run green (the
+  issues go to Code Scanning), an authentication or tool error fails it. The Snyk CLI is pinned to 1.1308.1
+  instead of the latest version.
+
+## [1.8.0] – 2026-10-25
+
+### Security
+- **Bearer tokens: RS256 only** (platform#191, as backend#99). Both go-oidc verifiers took the allowed signing
+  algorithms from the Keycloak discovery (HS* and `none` were already dropped); they now accept RS256 only, as
+  required.
+  - App verifier (`GQLProtect` and the bearer-protected REST routes): a client-supplied bearer token signed with
+    RS384/RS512/PS*/ES*/EdDSA under a realm key was accepted; it is now rejected (401).
+  - API verifier (`ProtectApi`): it only checks the ID token the service fetches itself via password grant, so a
+    client cannot choose its algorithm. Effect: if the ID-token signature algorithm of the api client in Keycloak
+    were ever set to something other than RS256, every `ProtectApi` call would fail with 403.
+  - Logins are not affected. As of 2026-10-23 the public JWKS of Prod/Pilot (login.eegfaktura.at) and Dev hold
+    exactly one signing key (RS256), and the realm sets no different ID-token algorithm. If a realm ever got an
+    active non-RS256 signing key (e.g. on key rotation), logins would fail with 401/403.
+  - Tests also cover HS256 signed with the realm's public key (PEM and DER) and `alg=none`: rejected.
+  - The `middleware` package now has tests (fake OIDC provider, no live Keycloak) and runs in the unit-test list
+    of `pr-checks.yml` and `docker-image.yml`.
 - **CR_MSG: unpacking is limited** (platform#181). An energy data message from MQTT was unpacked completely into
   memory; a small but highly compressed payload could have filled the memory of the pod. It is now unpacked up to
   `mqtt.maxDecompressedMB` (env `ENERGYSTORE_MQTT_MAXDECOMPRESSEDMB`, default 512 MB); a larger one is logged as
@@ -17,7 +331,104 @@ this changelog highlights the changes relevant for overview and operations.
   data of one metering point and stays far below the default. The value is read once; a missing, non-numeric or
   non-positive value falls back to 512 MB with a warning (a limit of 0 would drop every message).
 
+### Fixed
+- **Excel energy report download: no panic for a metering point without stored data**
+  (`POST /eeg/{ecid}/excel/report/download`). A requested metering point without an entry in the meta record
+  `cpmeta/0` (no data ever imported for it, or none for the whole community) made the energy sheet dereference the
+  missing meta and the request ended without an answer. Such a metering point now gets no columns (the summary
+  sheet already skipped it); if no rows exist at all, the answer is the usual 404 `no_entries` („no Rows found“).
+  eegfaktura-web only requests metering points from the community's metadata, so its file is unchanged. The
+  export by mail (known error #53) has a different cause and is not changed.
+- **Report of a community without any energy data: empty report instead of 500** (`POST /eeg/v2/{ecid}/report`).
+  Without any imported data the meta record `cpmeta/0` does not exist and the report answered
+  500 `{"error":"Record doesn't exist"}`. It now answers 200 with the same shape as a report without values: the
+  requested participants with zero sums, `"meta": []`, totals 0. Other errors still answer 500. eegfaktura-web
+  (web#191) handles both answers. Summary and billing-check already answered 200 without data.
+- **Raw data export without a meter list: no empty query targets** (`POST /query/rawdata` without `cps`). The target
+  list of the community's metering points started with one empty entry per metering point. No effect on the
+  answer: the duplicates were collapsed to one empty entry and no metering point has an empty name, so it was
+  skipped on every row; only wasted work.
+- **CR_MSG: acknowledged only after it was processed, store errors no longer reported as stored** (#19). An energy
+  data message was acknowledged to the broker as soon as it was handed to the tenant worker; a crash, OOM kill or
+  restart before the store lost it. A store error was logged, but the message was still confirmed to the backend,
+  which wrote „Energiedaten empfangen“ into the process history although the data was not stored.
+  Now the message is acknowledged after it has been processed (stored, failed, undecodable, or a recovered panic);
+  a message still in process when energystore stops is redelivered by mosquitto when energystore reconnects
+  (persistent session) and imported again (the import is idempotent; the backend may get a second process
+  history entry). If any day block of a message cannot be stored, no `cr_msg_history` reply is sent: EEG admins
+  see no „Energiedaten empfangen“ entry for it, the gap shows in the check before billing, and the data has to be
+  requested again. If only some days of a message fail, the reply is dropped for the whole message; the days that
+  were stored are still in the store (a reply with only the stored days would change the entries in the process
+  history, which list the blocks as sent). An error reading or updating the meta record `cpmeta/0` ends the import
+  of the message at once and is always named in the log line; otherwise the other days are still stored. The log line is „energy data not stored, no cr_msg_history reply“
+  with tenant, ecId, metering point, conversation id and at most five day errors („… N more“).
+- **A stored row that cannot be read is an error, no longer the silent end of the data** (#31). Reports, the
+  billing basis, the raw data and load curve queries and the Excel export stopped at such a row and returned a
+  shortened result as success; they now fail with „stored record cannot be read“ (with the key for a record that
+  cannot be decoded; the cause is in the ERROR log „ebow: cannot decode record …“ or „ebow: cannot read record …“,
+  never in the API response, which could otherwise show local file paths), so a shortened result is no longer
+  passed on as complete. The web app does not present these errors well yet (a report may come back empty or show
+  a raw key such as `E_undefined_undefined`); a clear message there is a follow-up (platform#194). On the import path the store of that day is aborted: before, the rows after the unreadable one were rebuilt with the
+  imported metering point only and the values of the other metering points in those quarter hours were lost; now
+  nothing of the day is written and no „Energiedaten empfangen“ reply is sent (see #19). The CLI tools
+  (`estore data`, `estore move`, `estore reset`) stop with the error as well. Iterators release their read
+  transaction also after such an error, and a store whose meta record cannot be read or written no longer keeps
+  Badger's directory lock until the restart. Without unreadable rows nothing changes.
+
 ### Changed
+- **CR_MSG import: batched per community, fair lanes for all tenants** (concept „Energiedaten gebündelt
+  importieren“). A large request (e.g. a month for 2,400 metering points) kept energystore busy for hours, because
+  every metering point and day read and wrote the rows of all metering points; meanwhile the messages of every
+  other tenant were stuck behind it (one dispatch loop for all tenants), and the burst afterwards opened hundreds
+  of stores (OOM kills). Now:
+  - the messages already queued for a tenant are imported together: per community and day the rows and the meta
+    record `cpmeta/0` are read and written once for the whole batch, no format change. Tests compare the stored
+    rows (as stored, including the length of the quality arrays) and the whole record `cpmeta/0` (ID, SourceIdx,
+    direction, periods) with the import message by message: they are equal. A batch is unpacked and imported
+    in parts of at most about `mqtt.maxDecompressedMB` of unpacked data each, so the limit per message still
+    bounds a batch: about twice the limit of unpacked JSON per lane (the decoded data on the heap is several
+    times that). Two differences that change bytes, not
+    values: when a day batch fails and its blocks are stored one by one, rows created then may be sized with
+    the counts of the whole batch (more trailing zeros); and a day block that spans two days after the DST change
+    rewrites the rows of both days, the other day's unchanged (the single import does the same);
+  - `import.parallel` lanes (env `ENERGYSTORE_IMPORT_PARALLEL`, default 4) import at the same time, each one batch
+    of at most `import.batchMax` messages of one tenant (env `ENERGYSTORE_IMPORT_BATCHMAX`, default 50); a tenant
+    with more work queues up again behind the others (round robin), so a large request no longer delays the daily
+    data of the other communities by more than one batch per lane. Receiving a message never waits for another
+    tenant;
+  - a store is closed 15 s after its tenant's last batch as before, or already 2 s after it when more than
+    `import.parallel` stores are idle (in the background, the lanes go on); a tenant waiting for its turn keeps
+    its store open, except at the limit below when no idle store is left: then the store of the tenant waiting
+    last is closed and opened again on its turn;
+  - **limit on open importers:** `import.maxOpen` (env `ENERGYSTORE_IMPORT_MAXOPEN`, default 32; a value below
+    `import.parallel` is raised to it with a warning) bounds the number of tenants with an open importer (one
+    being closed still counts). Memory is about 90–112 MB per such tenant, more for a tenant with several
+    communities (one store each) or while reports and exports hold the same stores open; it is not a hard
+    memory limit. At the limit a lane
+    closes the longest unused idle store first (about 0.3 s) or waits until one becomes idle: when many
+    communities deliver at once, their data takes longer instead of filling the memory. Local run (100
+    communities delivering every 6 s plus a month request of a large community, window 1000): at most 32 open
+    importers, peak heap about 4.5 GB, small messages wait up to about 15–20 s (p95), instead of 100 open stores
+    and about 10 GB without the limit;
+  - per message as before: the `cr_msg_history` reply only when all its days are stored, the same ERROR log line
+    otherwise, ack after processing (#19). A day that fails in a batch is stored again message by message, so only
+    the messages with that day are affected; a meta record error falls back to the message-by-message import.
+    After a panic in a batch its messages run one by one, so only the message that panics again is lost (acked,
+    no reply).
+  - The three values are read once at start; a missing, non-numeric or non-positive value falls back to the default
+    with a warning.
+  - **Release prerequisites (together with #19, manual ack), in prod and pilot, after reading out the current
+    values:**
+    - raise mosquitto's `max_inflight_messages` (proposal 1,000; default 20). With 20 unacknowledged messages at a
+      time the batches stay at one or two messages and the throughput depends on the window, not on the import.
+      The setting is global and applies to every client (it cannot be set for the energystore client only); for
+      the clients that acknowledge right away raising it changes nothing in practice;
+    - raise `max_queued_messages` (default 1000 per client) or set it to `0` (no limit): with the manual ack a
+      burst queues at the broker, and mosquitto drops messages beyond that limit silently.
+- **Fixed with it:** `Close` of the dispatcher could return before a worker had started and closed its store
+  (known-errors #41); it now returns after every store is closed. A running batch stops at its next step
+  (message, run of messages, day) instead of finishing (50 large messages could take longer than the pod's
+  grace period); its unfinished messages stay unacknowledged and mosquitto delivers them again.
 - Dependencies: `github.com/klauspost/compress` 1.18.0 → 1.18.7 (platform#181; Trivy CVE-2026-63209, HIGH),
   an indirect dependency of `badger/v4` (`badger/v4/table` uses its `s2`/`snappy` and `zstd` packages for block
   compression; same storage format within 1.18.x). Replaces Dependabot #76.
@@ -25,6 +436,26 @@ this changelog highlights the changes relevant for overview and operations.
   only for security reasons, decision 23.10.2026), patch and minor updates come in one weekly grouped PR, new versions
   only after a 7-day cooldown. `golang` stays on 1.26 (1.27 is a minor for Dependabot). Security updates for the
   language ecosystems are unaffected.
+
+### Build and CI
+- **The image job's gate is wider.** Besides the tests it checks that the committed protobuf stubs match a
+  regeneration (`scripts/dev/generate.sh`, pinned protoc 29.3 and plugins), runs `gofmt`/`go vet`
+  (`scripts/dev/static-check.sh`), the whole test suite with the race detector (`scripts/dev/test.sh`,
+  every package except the root, was a fixed package list without `-race`) and per-package coverage floors, uploads the coverage report and runs
+  `govulncheck` (reporting only) — all before the image is built.
+- `protoc/masterdata*.pb.go` are committed; `docker build` works from a fresh checkout. The build paths
+  of `energystore`/`estore` are unchanged (moving the entry points to `cmd/` was not done, `open-points.md` ES-24).
+- Tests write Badger data only into temporary directories and fix the time zone to `Europe/Vienna`;
+  the intermittent hang of the `calculation` tests is gone (`known-errors.md` #3).
+
+### Documentation
+- `EXTERNAL_SOURCES.md` lists every source of the build, the tests and the service. The concept for
+  repairing the test environment and raising the test coverage, the storage-format concepts and the
+  working files of that work are kept outside the repository. No code change.
+
+### CI
+- `docker-image.yml`: no image build on a draft pull request — it runs when the pull request is marked ready for review (`ready_for_review`) and on every later push to it; `pr-checks.yml` still checks drafts. Pushes, tags and the deploy dispatch are unchanged.
+- `pr-checks.yml` on the test environment: the unit job runs every tested package (`scripts/dev/packages.sh`, no race detector), the full job the static check, `scripts/dev/test.sh` (race detector, coverage) and the coverage floors, in `TZ=UTC`; the report-only "Known errors" job and the protobuf generation (the stubs are committed) are gone. The results stay artifacts for the CI report collector.
 
 ## [1.7.0] – 2026-10-21
 

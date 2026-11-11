@@ -194,39 +194,6 @@ func (b *Bucket) Get(key interface{}, v interface{}) error {
 	})
 }
 
-func (b *Bucket) GetBytes(key interface{}, in []byte) (out []byte, err error) {
-	if b.err != nil {
-		return nil, b.err
-	}
-	keyBytes, err := keyCodec.Marshal(key, nil)
-	if err != nil {
-		return nil, err
-	}
-	ik := b.internalKey(keyBytes)
-	err = b.db.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get(ik)
-		if err == badger.ErrKeyNotFound {
-			return ErrNotFound
-		}
-		if err != nil {
-			return err
-		}
-		return item.Value(func(value []byte) error {
-			size := len(value)
-			if size == 0 {
-				return nil
-			}
-			if size > cap(in) {
-				in = make([]byte, size)
-			}
-			copy(in, value)
-			out = in[:size]
-			return nil
-		})
-	})
-	return
-}
-
 // Delete removes a record from the bucket by key.
 func (b *Bucket) Delete(key interface{}) error {
 	if b.db.readOnly {

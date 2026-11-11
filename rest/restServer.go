@@ -3,6 +3,7 @@ package rest
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strconv"
@@ -11,22 +12,21 @@ import (
 
 	"at.ourproject/energystore/calculation"
 	"at.ourproject/energystore/excel"
+	"at.ourproject/energystore/internal/logging"
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/middleware"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/services"
 	"at.ourproject/energystore/store"
-	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 )
 
 func NewRestServer() *mux.Router {
-	//jwtWrapper := middleware.JWTMiddleware(viper.GetString("jwt.pubKeyFile"))
+	initMemberMeters()
 	r := mux.NewRouter()
-	//s := r.PathPrefix("/rest").Subrouter()
-	//r.HandleFunc("/eeg/{year}/{month}", jwtWrapper(fetchEnergy())).Methods("GET")
-	//r.HandleFunc("/eeg/report", middleware.ProtectApp(fetchEnergyReport())).Methods("POST")
+	r.Use(logging.MuxRoute) // route template for the access line (logging.AccessLog, server.go)
 	r.HandleFunc("/eeg/v2/{ecid}/report", middleware.ProtectApp(fetchEnergyReportV2())).Methods("POST")
-	r.HandleFunc("/eeg/v2/{ecid}/meta", middleware.ProtectApp(queryMetaData())).Methods("GET")
+	r.HandleFunc("/eeg/v2/{ecid}/meta", middleware.ProtectApp(queryMetaData(true))).Methods("GET")
 	r.HandleFunc("/eeg/v2/{ecid}/raw", middleware.ProtectApp(fetchRawEnergyV2())).Methods("POST")
 	r.HandleFunc("/eeg/v2/{ecid}/rawdata/delete", middleware.ProtectApp(deleteRawData())).Methods("POST")
 	r.HandleFunc("/eeg/v2/{ecid}/intra-day-report", middleware.ProtectApp(fetchIntraDayReportV2())).Methods("POST")
@@ -39,35 +39,13 @@ func NewRestServer() *mux.Router {
 	r.HandleFunc("/eeg/{ecid}/lastRecordDate", middleware.ProtectApp(lastRecordDate())).Methods("GET")
 	r.HandleFunc("/eeg/{ecid}/excel/export/{year}/{month}", middleware.ProtectApp(exportMeteringData())).Methods("POST")
 	r.HandleFunc("/eeg/{ecid}/excel/report/download", middleware.ProtectApp(exportReport())).Methods("POST")
+	// Kubernetes probes, unauthenticated (rest/health.go)
+	r.HandleFunc("/healthz", healthz).Methods("GET", "HEAD")
+	r.HandleFunc("/readyz", readyz).Methods("GET", "HEAD")
 
 	r = InitQueryApiRouter(r)
 	return r
 }
-
-// fetchEnergyReport Rest endpoint retrieve energy values of requested participant and period pattern.
-//func fetchEnergyReport() middleware.JWTHandlerFunc {
-//	return func(w http.ResponseWriter, r *http.Request, claims *middleware.PlatformClaims, tenant string) {
-//		energy := &model.EegEnergy{}
-//
-//		var request model.EnergyReportRequest
-//		err := json.NewDecoder(r.Body).Decode(&request)
-//		if err != nil {
-//			http.Error(w, err.Error(), http.StatusBadRequest)
-//			return
-//		}
-//
-//		if energy, err = calculation.EnergyReport(tenant, request.Year, request.Segment, request.Period); err != nil {
-//			respondWithError(w, http.StatusInternalServerError, err.Error())
-//			return
-//		}
-//
-//		resp := struct {
-//			Eeg *model.EegEnergy `json:"eeg"`
-//		}{Eeg: energy}
-//
-//		respondWithJSON(w, http.StatusOK, &resp)
-//	}
-//}
 
 // fetchEnergyReportV2 Rest endpoint retrieve energy values of requested participant and period pattern.
 func fetchEnergyReportV2() middleware.JWTHandlerFunc {
@@ -90,9 +68,37 @@ func fetchEnergyReportV2() middleware.JWTHandlerFunc {
 			return
 		}
 
-		if energy, err = calculation.EnergyReportV2(tenant, ecid, request.Participants, request.ReportInterval.Year, request.ReportInterval.Segment, request.ReportInterval.Period); err != nil {
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+		var meters []string
+		for _, p := range request.Participants {
+			for _, m := range p.Meters {
+				meters = append(meters, m.MeterId)
+			}
+		}
+		own, ok := allowMeters(w, r, claims, tenant, meters)
+		if !ok {
 			return
+		}
+		for _, p := range request.Participants {
+			for _, m := range p.Meters {
+				if !clampDays(w, own, m.MeterId, &m.From, &m.Until) {
+					return
+				}
+			}
+		}
+
+		if energy, err = calculation.EnergyReportV2(tenant, ecid, request.Participants, request.ReportInterval.Year, request.ReportInterval.Segment, request.ReportInterval.Period); err != nil {
+			respondWithQueryError(r.Context(), w, http.StatusInternalServerError, err)
+			return
+		}
+		if own != nil {
+			// a member sees the meta records of its own metering points only
+			meta := energy.Meta[:0]
+			for _, m := range energy.Meta {
+				if own.Owns(m.Name) {
+					meta = append(meta, m)
+				}
+			}
+			energy.Meta = meta
 		}
 		glog.V(4).Infof("Time Monitor fetchEnergyReport. %v\n", time.Now().Sub(startMonitor))
 		respondWithJSON(w, http.StatusOK, &energy)
@@ -113,6 +119,17 @@ func fetchRawEnergyV2() middleware.JWTHandlerFunc {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		own, ok := allowMeters(w, r, claims, tenant, request.Meters)
+		if !ok {
+			return
+		}
+		if own != nil && len(request.Meters) > 0 {
+			// one range for all meters: cut to the time they were the member's
+			if request.Start, request.End, ok = own.ClampRange(request.Meters, request.Start, request.End); !ok {
+				forbidMeter(w)
+				return
+			}
+		}
 
 		cps := make([]store.TargetMP, len(request.Meters))
 		for i, meter := range request.Meters {
@@ -121,7 +138,7 @@ func fetchRawEnergyV2() middleware.JWTHandlerFunc {
 
 		resp, err := store.QueryRawData(tenant, ecId, time.UnixMilli(request.Start), time.UnixMilli(request.End), cps, r.URL.Query())
 		if err != nil {
-			respondWithError(w, http.StatusBadRequest, err.Error())
+			respondWithQueryError(r.Context(), w, http.StatusBadRequest, err)
 			return
 		}
 
@@ -166,15 +183,24 @@ func deleteRawData() middleware.JWTHandlerFunc {
 		to := time.UnixMilli(request.End)
 
 		affected, sumKwh, err := store.DeleteRawDataForMeteringPoint(tenant, ecid, request.MeteringPoint, from, to, request.DryRun)
-		if err != nil {
-			respondWithError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-
+		// Audit line with the operator's user name: documented exception to "no persons in logs"
+		// (decision 2026-10-30) — superuser-only destructive ops tool, accountability over anonymity.
+		// audit.operator is written only on rawdata.delete.done/.failed (internal/logging).
 		if !request.DryRun {
-			glog.Warningf("RAWDATA-DELETE operator=%q tenant=%s ec=%s zp=%s from=%s to=%s timesteps=%d",
-				claims.Username, tenant, ecid, request.MeteringPoint,
-				from.UTC().Format(time.RFC3339), to.UTC().Format(time.RFC3339), affected)
+			action, level := "rawdata.delete.done", slog.LevelWarn
+			attrs := []slog.Attr{logging.AuditOperator(claims.Username)}
+			if err != nil {
+				action, level = "rawdata.delete.failed", slog.LevelError
+				attrs = append(attrs, logging.ErrorAttrs(err)...)
+			}
+			// the tenant is in tenant.id (261102-mm1)
+			logging.Event(r.Context(), level, action, fmt.Sprintf("RAWDATA-DELETE ec=%s zp=%s from=%s to=%s timesteps=%d",
+				ecid, request.MeteringPoint,
+				from.UTC().Format(time.RFC3339), to.UTC().Format(time.RFC3339), affected), attrs...)
+		}
+		if err != nil {
+			respondWithQueryError(r.Context(), w, http.StatusBadRequest, err)
+			return
 		}
 
 		respondWithJSON(w, http.StatusOK, map[string]interface{}{
@@ -193,7 +219,10 @@ func lastRecordDate() middleware.JWTHandlerFunc {
 
 		lastRecord, err := services.GetLastEnergyEntry(tenant, ecid)
 		if err != nil {
-			respondWithError(w, http.StatusNotFound, "No entry found")
+			if !refuseTenant(w, err) {
+				respondWithError(w, http.StatusNotFound, "No entry found")
+			}
+			return
 		}
 		respondWithJSON(w, http.StatusOK, map[string]interface{}{"periodEnd": lastRecord})
 	}
@@ -201,6 +230,10 @@ func lastRecordDate() middleware.JWTHandlerFunc {
 
 func exportMeteringData() middleware.JWTHandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request, claims *middleware.PlatformClaims, tenant string) {
+		// sends the energy of every metering point of the community
+		if denyMember(w, claims) {
+			return
+		}
 		email := claims.Email
 		vars := mux.Vars(r)
 		var year, month int
@@ -217,11 +250,11 @@ func exportMeteringData() middleware.JWTHandlerFunc {
 			return
 		}
 
-		glog.V(3).Infof("Send Mail to %s", email)
+		glog.V(3).Infof("Send energy export mail tenant=%s", tenant)
 
-		err = excel.ExportEnergyDataToMail(tenant, ecid, email, year, month, nil)
+		err = excel.ExportEnergyDataToMail(r.Context(), tenant, ecid, email, year, month, nil)
 		if err != nil {
-			respondWithError(w, http.StatusBadRequest, err.Error())
+			respondWithQueryError(r.Context(), w, http.StatusBadRequest, err)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
@@ -242,11 +275,25 @@ func exportReport() middleware.JWTHandlerFunc {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		meters := make([]string, len(cps.Cps))
+		for i, cp := range cps.Cps {
+			meters[i] = cp.MeteringPoint
+		}
+		own, ok := allowMeters(w, r, claims, tenant, meters)
+		if !ok {
+			return
+		}
+		for i := range cps.Cps {
+			if !clampDays(w, own, cps.Cps[i].MeteringPoint, &cps.Cps[i].ActiveSince, &cps.Cps[i].InactiveSince) {
+				return
+			}
+		}
 
-		//b, err := excel.CreateExcelFile(tenant, time.UnixMilli(cps.Start), time.UnixMilli(cps.End), &cps)
-		b, err := excel.ExportEnergyToExcel(tenant, ecid, time.UnixMilli(cps.Start), time.UnixMilli(cps.End), &cps)
+		b, err := excel.ExportEnergyToExcel(r.Context(), tenant, ecid, time.UnixMilli(cps.Start), time.UnixMilli(cps.End), &cps)
 		if err != nil {
-			respondWith(w, http.StatusInternalServerError, tenant, err)
+			if !refuseTenant(w, err) {
+				respondWith(r.Context(), w, http.StatusInternalServerError, err)
+			}
 			return
 		}
 		w.Header().Set("Content-type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -257,10 +304,10 @@ func exportReport() middleware.JWTHandlerFunc {
 			time.UnixMilli(cps.End).Format("20060102")))
 
 		if _, err := b.WriteTo(w); err != nil {
-			glog.Errorf("tenant=%s error: %v", tenant, err)
+			glog.ErrorContextf(r.Context(), "error: %v", err)
 			_, err = fmt.Fprintf(w, "%s", err)
 			if err != nil {
-				glog.Errorf("tenant=%s error: %v", tenant, err)
+				glog.ErrorContextf(r.Context(), "error: %v", err)
 			}
 		}
 		glog.Infof("tenant=%s Energy Export finish (%v Sec.)", tenant, time.Now().Sub(start).Seconds())
@@ -288,7 +335,7 @@ func fetchIntraDayReportV2() middleware.JWTHandlerFunc {
 		resp, err := store.QueryIntraDayReport(tenant, ecid, time.UnixMilli(request.Start), time.UnixMilli(request.End))
 		glog.V(4).Infof("tenant=%s Time Monitor fetchIntraDayReport. %v Sec.", tenant, time.Now().Sub(startMonitor).Seconds())
 		if err != nil {
-			respondWithError(w, http.StatusBadRequest, err.Error())
+			respondWithQueryError(r.Context(), w, http.StatusBadRequest, err)
 			return
 		}
 		respondWithJSON(w, http.StatusOK, &resp)
@@ -303,9 +350,8 @@ func fetchLoadCurveReportV2() middleware.JWTHandlerFunc {
 		startMonitor := time.Now()
 		glog.V(4).Infof("Start Time Monitor fetchLoadCurveReport. %s\n", tenant)
 		var request struct {
-			Start int64   `json:"start"`
-			End   int64   `json:"end"`
-			Func  *string `json:"func"`
+			Start int64 `json:"start"`
+			End   int64 `json:"end"`
 		}
 
 		err := json.NewDecoder(r.Body).Decode(&request)
@@ -314,10 +360,10 @@ func fetchLoadCurveReportV2() middleware.JWTHandlerFunc {
 			return
 		}
 
-		resp, err := store.QueryLoadCurveReport(tenant, ecid, time.UnixMilli(request.Start), time.UnixMilli(request.End), request.Func)
+		resp, err := store.QueryLoadCurveReport(tenant, ecid, time.UnixMilli(request.Start), time.UnixMilli(request.End))
 		glog.V(4).Infof("Time Monitor fetchLoadCurveReport. %v\n", time.Now().Sub(startMonitor))
 		if err != nil {
-			respondWithError(w, http.StatusBadRequest, err.Error())
+			respondWithQueryError(r.Context(), w, http.StatusBadRequest, err)
 			return
 		}
 		respondWithJSON(w, http.StatusOK, &resp)
@@ -331,26 +377,16 @@ func getLoadCurveReportV2() middleware.JWTHandlerFunc {
 
 		startMonitor := time.Now()
 		glog.V(4).Infof("Start Time Monitor fetchLoadCurveReport. %s\n", tenant)
-		var request struct {
-			Start int64   `json:"start"`
-			End   int64   `json:"end"`
-			Func  *string `json:"func"`
-		}
-
+		var start, end int64
 		startQuery := r.URL.Query().Get("start")
 		endQuery := r.URL.Query().Get("end")
-		funcQuery := r.URL.Query().Get("func")
 
 		var err error
 		if len(startQuery) > 0 {
-			request.Start, err = strconv.ParseInt(startQuery, 10, 64)
+			start, err = strconv.ParseInt(startQuery, 10, 64)
 		}
 		if len(endQuery) > 0 {
-			request.End, err = strconv.ParseInt(endQuery, 10, 64)
-		}
-
-		if len(funcQuery) > 0 {
-			request.Func = &funcQuery
+			end, err = strconv.ParseInt(endQuery, 10, 64)
 		}
 
 		if err != nil {
@@ -358,10 +394,10 @@ func getLoadCurveReportV2() middleware.JWTHandlerFunc {
 			return
 		}
 
-		resp, err := store.QueryLoadCurveReport(tenant, ecid, time.UnixMilli(request.Start), time.UnixMilli(request.End), request.Func)
+		resp, err := store.QueryLoadCurveReport(tenant, ecid, time.UnixMilli(start), time.UnixMilli(end))
 		glog.V(4).Infof("Time Monitor fetchLoadCurveReport. %v\n", time.Now().Sub(startMonitor))
 		if err != nil {
-			respondWithError(w, http.StatusBadRequest, err.Error())
+			respondWithQueryError(r.Context(), w, http.StatusBadRequest, err)
 			return
 		}
 		respondWithJSON(w, http.StatusOK, &resp)
@@ -390,7 +426,7 @@ func fetchCombinedReportV2() middleware.JWTHandlerFunc {
 		resp, err := store.QueryCombinedReports(tenant, ecid, request.Reports, time.UnixMilli(request.Start), time.UnixMilli(request.End))
 		glog.V(4).Infof("Time Monitor fetchCombinedReport. %v\n", time.Now().Sub(startMonitor))
 		if err != nil {
-			respondWithError(w, http.StatusBadRequest, err.Error())
+			respondWithQueryError(r.Context(), w, http.StatusBadRequest, err)
 			return
 		}
 		respondWithJSON(w, http.StatusOK, &resp)
@@ -434,7 +470,7 @@ func getCombinedReportV2() middleware.JWTHandlerFunc {
 		resp, err := store.QueryCombinedReports(tenant, ecid, request.Reports, time.UnixMilli(request.Start), time.UnixMilli(request.End))
 		glog.V(4).Infof("Time Monitor fetchCombinedReport. %v\n", time.Now().Sub(startMonitor))
 		if err != nil {
-			respondWithError(w, http.StatusBadRequest, err.Error())
+			respondWithQueryError(r.Context(), w, http.StatusBadRequest, err)
 			return
 		}
 		respondWithJSON(w, http.StatusOK, &resp)
@@ -460,7 +496,7 @@ func fetchSummaryReportV2() middleware.JWTHandlerFunc {
 		resp, err := calculation.EnergySummary(tenant, ecid, request.Year, request.Segment, request.Period)
 		glog.V(4).Infof("Time Monitor fetchSummaryReport. %v\n", time.Now().Sub(startMonitor))
 		if err != nil {
-			respondWithError(w, http.StatusBadRequest, err.Error())
+			respondWithQueryError(r.Context(), w, http.StatusBadRequest, err)
 			return
 		}
 

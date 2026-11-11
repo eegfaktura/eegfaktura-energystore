@@ -6,15 +6,20 @@ import (
 	"regexp"
 	"sync"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/model"
-	"github.com/golang/glog"
 )
 
-// idPattern begrenzt Mandant und ecId auf Buchstaben und Ziffern. Beide fliessen in den
+// idPattern begrenzt den Mandanten auf Buchstaben und Ziffern (ecId: ecIdPattern). Beide fliessen in den
 // Dateipfad basePath/<tenant>/<ecId> ein; ohne Pruefung koennte ein Wert mit "/" oder ".."
 // aus dem vorgesehenen Verzeichnis ausbrechen. Die echten Werte (z.B. "TE100200",
 // "AT00999900000TC100200000000000002") sind rein alphanumerisch und bleiben gueltig.
 var idPattern = regexp.MustCompile(`^[A-Za-z0-9]+$`)
+
+// ecIdPattern also allows single dashes inside an ecId ("AT00300000000GC90001000000000-001"): no EDA message
+// carries one (ECID is [0-9A-Za-z]{1,33}), but a refused ecId means the message's energy is not stored at all
+// (261016-ca1), and a dash cannot leave the directory.
+var ecIdPattern = regexp.MustCompile(`^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$`)
 
 var (
 	connectionPool = NewPool(20)
@@ -91,34 +96,19 @@ type BowStorage struct {
 
 var turns = newTurns()
 
-//func OpenStorage(tenant, ecId string) (*BowStorage, error) {
-//	t := strings.ToLower(tenant)
-//	basePath := viper.GetString("persistence.path")
-//	unlock := turns.lock(t)
-//	db, err := ebow.Open(filepath.Join(fmt.Sprintf("%s/%s", basePath, t), ecId), ebow.SetLogger(ebowLogger{5}))
-//	if err != nil {
-//		unlock()
-//		return nil, err
-//	}
-//	return &BowStorage{db, unlock}, nil
-//}
-//
-//func (b *BowStorage) Close() {
-//	_ = b.db.Close()
-//	b.unlock()
-//	return
-//}
+// ErrTenantNotSupported refuses a tenant longer than 8 characters, e.g. a sub-community with a suffix (261008-ca3).
+var ErrTenantNotSupported = errors.New("tenant not supported by the energy store")
 
 func OpenStorage(tenant, ecId string) (*BowStorage, error) {
 	if len(tenant) > 8 {
 		glog.Errorf("tenant %s is too long", tenant)
-		return nil, fmt.Errorf("tenant is too long (%s)", tenant)
+		return nil, ErrTenantNotSupported
 	}
 	if !idPattern.MatchString(tenant) {
 		glog.Errorf("invalid tenant %q", tenant)
 		return nil, fmt.Errorf("invalid tenant")
 	}
-	if !idPattern.MatchString(ecId) {
+	if !ecIdPattern.MatchString(ecId) {
 		glog.Errorf("invalid ecId %q for tenant %s", ecId, tenant)
 		return nil, fmt.Errorf("invalid ecId")
 	}
@@ -141,15 +131,13 @@ func (b *BowStorage) GetTenant() string {
 	return b.tenant
 }
 
+// LockWrites serialises the read-modify-writes of one store (cpmeta/0 and the rows): the MQTT import,
+// the Excel upload and the raw-data delete of the same ecId (known-errors #33, #34). It returns the unlock function.
+func (b *BowStorage) LockWrites() func() {
+	return turns.lock(poolKey(b.tenant, b.ecId))
+}
+
 func (b *BowStorage) SetLines(line []*model.RawSourceLine) error {
-	return b.SetLinesRaw("rawdata", line)
-}
-
-func (b *BowStorage) SetLinesG2(line []*model.RawSourceLine) error {
-	return b.SetLinesRaw("rawdata", line)
-}
-
-func (b *BowStorage) SetLinesG3(line []*model.RawSourceLine) error {
 	return b.SetLinesRaw("rawdata", line)
 }
 
@@ -163,16 +151,6 @@ func (b *BowStorage) SetLinesRaw(bucket string, line []*model.RawSourceLine) err
 
 func (b *BowStorage) SetLine(line *model.RawSourceLine) error {
 	return b.db.Bucket("rawdata").Put(line)
-}
-
-func (b *BowStorage) SetReport(line *model.EnergyReport) error {
-	return b.db.Bucket("rawdata").Put(line)
-}
-
-func (b *BowStorage) GetReport(period string) (*model.EnergyReport, error) {
-	var report model.EnergyReport = model.EnergyReport{}
-	err := b.db.Bucket("rawdata").Get(period, &report)
-	return &report, err
 }
 
 func (b *BowStorage) SetMeta(line *model.RawSourceMeta) error {
@@ -197,21 +175,7 @@ func (b *BowStorage) GetLineRange(bucket, key, until string) IRange {
 func (b *BowStorage) GetLine(line *model.RawSourceLine) error {
 	return b.db.Bucket("rawdata").Get(line.Id, line)
 }
-func (b *BowStorage) GetLineG2(line *model.RawSourceLine) error {
-	return b.db.Bucket("rawdata").Get(line.Id, line)
-}
-func (b *BowStorage) GetLineG3(line *model.RawSourceLine) error {
-	return b.db.Bucket("rawdata").Get(line.Id, line)
-}
 
 func (b *BowStorage) ListBuckets() ([]string, error) {
 	return b.db.Buckets(), nil
-}
-
-func (b *BowStorage) GetBucket(name string) (*Iter, error) {
-	return b.db.Bucket(name).Iter(), nil
-}
-
-func GenerateCPKey(year int, month int) string {
-	return fmt.Sprintf("CP/%.4d/%.2d", year, month)
 }

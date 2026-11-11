@@ -5,16 +5,18 @@ import (
 	"compress/gzip"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
+	"at.ourproject/energystore/internal/logging/glog"
 	"at.ourproject/energystore/model"
 	"at.ourproject/energystore/store"
 	"at.ourproject/energystore/store/ebow"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/golang/glog"
 	"github.com/spf13/viper"
 )
 
@@ -23,6 +25,9 @@ type TenantEnergyImporter struct {
 	db       map[string]*ebow.BowStorage
 	dbMutx   sync.Mutex
 	streamer *MQTTStreamer
+	// replied: messages of the running batch whose reply went out; kept only when the batch panics, so the
+	// message-by-message rerun does not reply them twice. Keys are the broker's messages (pointers).
+	replied map[mqtt.Message]bool
 }
 
 func NewTenantEnergyImporter(tenant string, streamer *MQTTStreamer) *TenantEnergyImporter {
@@ -30,6 +35,7 @@ func NewTenantEnergyImporter(tenant string, streamer *MQTTStreamer) *TenantEnerg
 		Tenant:   tenant,
 		db:       make(map[string]*ebow.BowStorage),
 		streamer: streamer,
+		replied:  map[mqtt.Message]bool{},
 	}
 }
 
@@ -71,26 +77,6 @@ func (tmw *TenantEnergyImporter) ensureDb(ecId string) (*ebow.BowStorage, error)
 	return st, nil
 }
 
-func (tmw *TenantEnergyImporter) Execute(msg mqtt.Message) {
-	data := decodeMessage(msg.Payload())
-	if data == nil {
-		glog.Errorf("Data without content. tenant=%s", tmw.Tenant)
-		return
-	}
-
-	monitor := time.Now()
-	glog.V(3).Infof("Execute Energy Data Message for Topic (%v)", tmw.Tenant)
-	err := tmw.Import(data)
-	if err != nil {
-		glog.Errorf("%v tenant=%s", err, tmw.Tenant)
-		return
-	}
-	tmw.streamer.SendMessage(tmw.Tenant, data)
-	glog.V(3).Infof("Execution finished in %d ms (%v)", time.Since(monitor).Milliseconds(), tmw.Tenant)
-}
-
-const daySeconds = int64(24 * 60 * 60 * 1000)
-
 func dayStart(ts int64) int64 {
 	t := time.UnixMilli(ts).In(time.Local)
 	return time.Date(
@@ -100,15 +86,25 @@ func dayStart(ts int64) int64 {
 	).UnixMilli()
 }
 
+// nextDayStart is the following local midnight. A day has 23, 24 or 25 hours (known-errors #42).
+func nextDayStart(ts int64) int64 {
+	t := time.UnixMilli(ts).In(time.Local)
+	next := time.Date(t.Year(), t.Month(), t.Day()+1, 0, 0, 0, 0, t.Location())
+	if !next.After(t) { // a DST gap at midnight: 00:00 does not exist that day
+		next = next.Add(time.Hour)
+	}
+	return next.UnixMilli()
+}
+
 func SplitEnergyByDay(src model.MqttEnergy) []model.MqttEnergy {
 	var result []model.MqttEnergy
 
 	startDay := dayStart(src.Start)
 	endDay := dayStart(src.End)
 
-	for day := startDay; day <= endDay; day += daySeconds {
+	for day, next := startDay, nextDayStart(startDay); day <= endDay; day, next = next, nextDayStart(next) {
 		dayStartTs := max(day, src.Start)
-		dayEndTs := min(day+daySeconds, src.End)
+		dayEndTs := min(next, src.End)
 
 		var dayData []model.MqttEnergyData
 
@@ -150,12 +146,66 @@ func SplitEnergyByDay(src model.MqttEnergy) []model.MqttEnergy {
 	return result
 }
 
+// maxImportErrors limits how many day block errors an import reports (the rest is counted), so the
+// log line of a long message stays short.
+const maxImportErrors = 5
+
+// importErrors joins the errors of failed day blocks on one line; errors.Is/As see the listed ones,
+// which always include a meta record error (store.ErrMetaRecord), also beyond the cap.
+type importErrors struct {
+	errs    []error
+	omitted int
+}
+
+func (e *importErrors) Error() string {
+	msgs := make([]string, len(e.errs))
+	for i, err := range e.errs {
+		msgs[i] = err.Error()
+	}
+	s := strings.Join(msgs, "; ")
+	if e.omitted > 0 {
+		s += fmt.Sprintf("; … %d more", e.omitted)
+	}
+	return s
+}
+
+func (e *importErrors) Unwrap() []error { return e.errs }
+
+func (e *importErrors) add(err error) {
+	// A meta record error ends the import and is always kept, also beyond the cap.
+	if len(e.errs) < maxImportErrors || errors.Is(err, store.ErrMetaRecord) {
+		e.errs = append(e.errs, err)
+	} else {
+		e.omitted++
+	}
+}
+
+// err returns nil when no block failed.
+func (e *importErrors) err() error {
+	if len(e.errs) == 0 {
+		return nil
+	}
+	return e
+}
+
+// blockError names the period of the failed day block.
+func blockError(block *model.MqttEnergy, err error) error {
+	return fmt.Errorf("store %s - %s: %w",
+		time.UnixMilli(block.Start).Format(time.RFC3339),
+		time.UnixMilli(block.End).Format(time.RFC3339), err)
+}
+
+// Import stores every day block of the message. A block that fails does not stop the others; the
+// errors of the failed blocks are returned together (#19), so the message is not confirmed as stored.
+// An error of the store as a whole (the meta record) ends the import at once: every further block
+// would fail the same way.
 func (tmw *TenantEnergyImporter) Import(data *model.MqttEnergyMessage) error {
 	st, err := tmw.ensureDb(data.EcId)
 	if err != nil {
 		return fmt.Errorf("open store ecId=%s: %w", data.EcId, err)
 	}
 
+	errs := &importErrors{}
 	for i := range data.Energy {
 
 		groupedEnergy := SplitEnergyByDay(data.Energy[i])
@@ -164,27 +214,32 @@ func (tmw *TenantEnergyImporter) Import(data *model.MqttEnergyMessage) error {
 		for n := range groupedEnergy {
 			if err := store.StoreEnergyV2(st, data.Meter.MeteringPoint, &groupedEnergy[n]); err != nil {
 				glog.Errorf("Error storing Energy: %v (Metering-Point: %s)", err, data.Meter.MeteringPoint)
-				continue
+				errs.add(blockError(&groupedEnergy[n], err))
+				if errors.Is(err, store.ErrMetaRecord) {
+					return errs
+				}
 			}
 		}
 	}
-	return nil
+	return errs.err()
 }
 
-func decodeMessage(msg []byte) *model.MqttEnergyMessage {
+// decodeMessageSize also returns the size of the unpacked JSON (the decoded message on the heap is several
+// times larger).
+func decodeMessageSize(msg []byte) (*model.MqttEnergyMessage, int64) {
 	decompressed, err := decryptMessage(msg)
 	if err != nil {
-		glog.Errorf("Error decoding CR_MSG transport payload. %s", err.Error())
-		return nil
+		glog.Errorf("Error decoding CR_MSG transport payload. %v", err)
+		return nil, 0
 	}
 
 	m := model.MqttEnergyMessage{}
 	err = json.Unmarshal(decompressed, &m)
 	if err != nil {
 		glog.Errorf("Error decoding MQTT message. %s", err.Error())
-		return nil
+		return nil, 0
 	}
-	return &m
+	return &m, int64(len(decompressed))
 }
 
 func decryptMessage(msg []byte) ([]byte, error) {
