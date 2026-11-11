@@ -39,7 +39,7 @@ func seed(t *testing.T) *apitest.Fakes {
 		require.NoError(t, db.SetLine(testsupport.RawLine(testsupport.RowId(ts), []float64{v, v / 2, v / 4}, nil)))
 	}
 	fakeoidc.ResetUsers()
-	fakeoidc.SetUser(apiUser, apiPass, map[string]any{"tenant": []string{tenant}})
+	fakeoidc.SetUser(apiUser, apiPass, map[string]any{"tenant": []string{tenant}, "access_groups": []string{"/EEG_ADMIN"}}) // /query is admin-only
 	return apitest.StartFakes(t)
 }
 

@@ -32,7 +32,7 @@ func TestMemberOfGeaCommunity(t *testing.T) {
 	h := memberRouter(t, backend.URL)
 	gea := "Bearer " + fakeoidc.Token(map[string]any{
 		"tenant": []string{tenant, "GC123456-001"}, "access_groups": []string{"/EEG_USER"}, "sub": "gea-member",
-		"email": "member@example.org", "realm_access": map[string]any{"roles": []string{}},
+		"email": "member@example.org", "email_verified": true, "realm_access": map[string]any{"roles": []string{}},
 	})
 
 	for name, rt := range perMeter(meter) {
@@ -55,7 +55,7 @@ func TestMemberOfATenantWithSuffixIsRefusedWith422(t *testing.T) {
 	t.Cleanup(backend.Close)
 	token := "Bearer " + fakeoidc.Token(map[string]any{
 		"tenant": []string{sub}, "access_groups": []string{"/EEG_USER"}, "sub": "member",
-		"email": "member@example.org", "realm_access": map[string]any{"roles": []string{}},
+		"email": "member@example.org", "email_verified": true, "realm_access": map[string]any{"roles": []string{}},
 	})
 	rt := perMeter(meter)["raw"]
 

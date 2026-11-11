@@ -24,8 +24,10 @@ import (
 func InitQueryApiRouter(r *mux.Router) *mux.Router {
 	s := r.PathPrefix("/query").Subrouter()
 
-	s.HandleFunc("/rawdata", middleware.ProtectApi(queryRawData())).Methods("POST")
-	s.HandleFunc("/{ecid}/metadata", middleware.ProtectApi(queryMetaData(false))).Methods("POST")
+	// admin, owner and superuser only (energystore 261025-ca1): there is no bearer token to look up a
+	// member's own metering points with
+	s.HandleFunc("/rawdata", middleware.ProtectApi(noMembers(queryRawData()))).Methods("POST")
+	s.HandleFunc("/{ecid}/metadata", middleware.ProtectApi(noMembers(queryMetaData(false)))).Methods("POST")
 	return r
 }
 
@@ -93,7 +95,7 @@ func targetsOf(meters []*protobuf.MeteringPoint) []store.TargetMP {
 }
 
 // queryMetaData lists the meta data of the community's metering points; with restrict a member sees its
-// own metering points only (bearer route; the Basic-auth /query API is not restricted).
+// own metering points only (bearer route; the Basic-auth /query API is admin-only and passes false).
 func queryMetaData(restrict bool) middleware.JWTHandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request, claims *middleware.PlatformClaims, tenant string) {
 		vars := mux.Vars(r)

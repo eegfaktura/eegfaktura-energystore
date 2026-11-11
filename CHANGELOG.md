@@ -8,6 +8,16 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Security
+- **`/query` API for admins only** (energystore 261025-ca1): security relevant — details not published.
+  `/query/rawdata` and `/query/{ecid}/metadata` answer 403 unless the account is in `/EEG_ADMIN` or `/EEG_OWNER`
+  (the API client's tokens must carry the `access_groups` group mapper). Every account that used the API in
+  production is an admin. A superuser without one of these groups is refused: the realm role is not in the
+  API's tokens.
+- **Member access needs a verified e-mail address** (energystore 261025-ca1): security relevant — details not
+  published. Rollout: a member login whose e-mail address is not confirmed gets 403 on per-meter energy until the
+  address is confirmed; community totals, admin and owner logins are unaffected.
+
 ### Changed
 - **CI: no image build for a commit that only changes `CHANGELOG.md`** (platform#239): pushes and pull requests whose
   only change is the CHANGELOG, such as the release PR, skip the image build and the checks (PR checks, security

@@ -238,7 +238,7 @@ func TestBasicCredentialsStandardEncoding(t *testing.T) {
 	seed(t)
 	h := apitest.Router()
 	for _, pass := range []string{"a~~?", "pa??w0rd", "sec:ret?>"} {
-		fakeoidc.SetUser(apiUser, pass, map[string]any{"tenant": []string{tenant}})
+		fakeoidc.SetUser(apiUser, pass, map[string]any{"tenant": []string{tenant}, "access_groups": []string{"/EEG_ADMIN"}})
 		auth := apitest.Basic(apiUser, pass)
 		require.True(t, strings.ContainsAny(auth[len("Basic "):], "+/") || strings.Contains(pass, ":"))
 		rec := apitest.Do(h, apitest.Request{Method: "POST", Path: "/query/" + ecId + "/metadata",
