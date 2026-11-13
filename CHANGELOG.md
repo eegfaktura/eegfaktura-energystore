@@ -8,6 +8,15 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+## [1.11.0] – 2026-11-11
+
+### Security
+- **excelize 2.11.1** (eegfaktura/eegfaktura-energystore#117, CVE-2026-107223, high): a crafted workbook with an
+  unbounded `<col max>` could hang the process or exhaust its memory. Was a pre-release commit of 2.11.1.
+
+### Changed
+- **Base image `debian:trixie-20261104-slim`** (eegfaktura/eegfaktura-energystore#116), was `trixie-20261027-slim`.
+
 ### Security
 - **`/query` API for admins only** (energystore 261025-ca1): security relevant — details not published.
   `/query/rawdata` and `/query/{ecid}/metadata` answer 403 unless the account is in `/EEG_ADMIN` or `/EEG_OWNER`
