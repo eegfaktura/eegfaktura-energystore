@@ -28,6 +28,10 @@ this changelog highlights the changes relevant for overview and operations.
   address is confirmed; community totals, admin and owner logins are unaffected.
 
 ### Changed
+- Dependabot (Docker base images): no more major updates (legacy system, replaced by v3 in the medium term; majors
+  only for security reasons, decision 23.10.2026), patch and minor updates come in one weekly grouped PR, new versions
+  only after a 7-day cooldown. `golang` stays on 1.26 (1.27 is a minor for Dependabot). Security updates for the
+  language ecosystems are unaffected.
 - **CI: no image build for a commit that only changes `CHANGELOG.md`** (platform#239): pushes and pull requests whose
   only change is the CHANGELOG, such as the release PR, skip the image build and the checks (PR checks, security
   scan, Snyk Code; the weekly schedules still run). Tag pushes still build. A release promotes
