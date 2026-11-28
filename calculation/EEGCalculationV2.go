@@ -2,7 +2,9 @@ package calculation
 
 import (
 	"fmt"
+	"maps"
 	"math"
+	"slices"
 	"sort"
 	"time"
 
@@ -442,7 +444,9 @@ func appendEnergyToParticipantMeter(
 	dailyReport.rCons.RoundToFixed(6)
 	dailyReport.rShar.RoundToFixed(6)
 	dailyReport.rAlloc.RoundToFixed(6)
-	for meterId, meterReports := range reportValues.meters {
+	// sorted meter ids: the community totals are float sums and must not depend on map order (261128-mm1)
+	for _, meterId := range slices.Sorted(maps.Keys(reportValues.meters)) {
+		meterReports := reportValues.meters[meterId]
 		if meta, ok := cpMeta[meterId]; ok {
 			for _, p := range meterReports {
 				from := utils.TruncateToDay(time.UnixMilli(p.From))

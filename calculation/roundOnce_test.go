@@ -122,10 +122,10 @@ func runReport(tb testing.TB, lines []*model.RawSourceLine, cpMeta map[string]*m
 	require.NoError(tb, err)
 }
 
-// TestCalcParticipantReportGolden pins the report to the output of the former per-meter
-// rounding: every meter value (summaries, intermediates, buckets) bit for bit. The two
-// community totals are compared with a tolerance: they are summed in Go map order
-// (reportValues.meters), so their last bit already varied from run to run before.
+// TestCalcParticipantReportGolden pins the whole report bit for bit. The meter values
+// (summaries, intermediates, buckets) are the output of the former per-meter rounding; the
+// two community totals are those of the sorted summation (261128-mm1), before which their
+// last bits depended on Go map order.
 func TestCalcParticipantReportGolden(t *testing.T) {
 	lines, cpMeta, metaInfo := reportFixture(8, 3, 4)
 	report := reportRequest(8, 3)
@@ -142,11 +142,6 @@ func TestCalcParticipantReportGolden(t *testing.T) {
 	require.NoError(t, err)
 	var want model.ReportResponse
 	require.NoError(t, json.Unmarshal(raw, &want))
-
-	require.InEpsilon(t, want.TotalConsumption, report.TotalConsumption, 1e-12)
-	require.InEpsilon(t, want.TotalProduction, report.TotalProduction, 1e-12)
-	want.TotalConsumption, want.TotalProduction = 0, 0
-	report.TotalConsumption, report.TotalProduction = 0, 0
 
 	wantJSON, err := json.MarshalIndent(want, "", "  ")
 	require.NoError(t, err)
