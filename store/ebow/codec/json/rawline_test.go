@@ -2,6 +2,7 @@ package json
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"math/rand"
@@ -49,7 +50,8 @@ func prefilled() model.RawSourceLine {
 }
 
 // checkSame decodes data with Codec and with encoding/json, into a zero and into a prefilled row, and
-// fails unless both agree on error and result.
+// fails unless both agree on error and on the row, also after a type error. A syntax error into the
+// prefilled row is the documented exception (decodeRawSourceLine): there only the error is compared.
 func checkSame(t testing.TB, data []byte) {
 	for _, zero := range []bool{true, false} {
 		var want, got model.RawSourceLine // own backing arrays each, so neither decoder writes into the other's
@@ -61,10 +63,37 @@ func checkSame(t testing.TB, data []byte) {
 		if (errWant == nil) != (errGot == nil) {
 			t.Fatalf("%q: encoding/json error %v, codec error %v", data, errWant, errGot)
 		}
-		if errWant == nil && !sameRow(want, got) {
+		var syntaxErr *json.SyntaxError
+		if (zero || !errors.As(errWant, &syntaxErr)) && !sameRow(want, got) {
 			t.Fatalf("%q: encoding/json %+v, codec %+v", data, want, got)
 		}
 	}
+}
+
+// monthRows returns the stored rows of one month of a community: n quarter hours with cons consumers (3
+// values each) and prod producers (2 values each), values in kWh with 6 decimals, a fifth of them 0.
+func monthRows(n, cons, prod int) [][]byte {
+	rnd := rand.New(rand.NewSource(1))
+	val := func() float64 {
+		if rnd.Intn(5) == 0 {
+			return 0
+		}
+		return math.Round(rnd.Float64()*rnd.Float64()*2*1e6) / 1e6
+	}
+	out := make([][]byte, n)
+	for k := range out {
+		l := model.RawSourceLine{Id: fmt.Sprintf("CP/2026/10/%02d/%02d/%02d/00", k/96+1, (k%96)/4, (k%4)*15)}
+		for i := 0; i < cons*3; i++ {
+			l.Consumers = append(l.Consumers, val())
+			l.QoVConsumers = append(l.QoVConsumers, 1+rnd.Intn(3))
+		}
+		for i := 0; i < prod*2; i++ {
+			l.Producers = append(l.Producers, val())
+			l.QoVProducers = append(l.QoVProducers, 1)
+		}
+		out[k], _ = json.Marshal(l)
+	}
+	return out
 }
 
 // randomValue covers what the store holds (kWh with up to 6 decimals, 0) and the edges of float64.
@@ -142,10 +171,22 @@ func TestRawSourceLineShapes(t *testing.T) {
 		`{"Consumers":[1,null,2]}`, `{"Consumers":[null]}`, `{"Consumers":nul}`, `{"Consumers":nullx}`,
 		`{"Consumers":[1,]}`, `{"Consumers":[,1]}`, `{"Consumers":[1 2]}`, `{"Consumers":[[1]]}`,
 		`{"Consumers":[1]`, `{"Consumers":[1]}x`, `{"Consumers":[1]}{}`, `{"Id":"a",}`, `{"Id":"a""Consumers":[]}`,
-		`{"Id" "a"}`, `[]`, `null`, ``, ` `, `"x"`, `{"Consumers":[1],"Id":"a","Producers":[2]}`,
+		`{"Id" "a"}`, `[]`, `null`, ``, ` `, `"x"`, `{"Consumers":[1],"Id":"a","Producers":[2]}`, `{"Id`, `{"Id":"abc`,
+		`{"Consumers":[1,2],"Id":5}`, `{"Consumers":[1,2],"QoVConsumers":[1.5],"Producers":[3]}`,
 	} {
 		checkSame(t, []byte(s))
 	}
+}
+
+// The documented difference: on a syntax error the fast path has already written into the reused row's
+// backing array, encoding/json has not. The slice header stays; callers discard the row on an error.
+func TestRawSourceLineSyntaxErrorWritesBackingArray(t *testing.T) {
+	data := []byte(`{"Consumers":[1,2],"Id":`)
+	plain, l := prefilled(), prefilled()
+	require.Error(t, json.Unmarshal(data, &plain))
+	require.Error(t, Codec{}.Unmarshal(data, &l))
+	assert.Equal(t, []float64{9, 9, 9, 9}, plain.Consumers)
+	assert.Equal(t, []float64{1, 2, 9, 9}, l.Consumers)
 }
 
 // Like encoding/json the fast path writes into the backing array of the reused row and keeps fields

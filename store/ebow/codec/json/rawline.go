@@ -9,10 +9,15 @@ import (
 // decodeRawSourceLine decodes an energy row the way encoding/json does, without reflection. It only
 // accepts the shape the store writes: one object with the exact keys Id, Consumers, Producers,
 // QoVConsumers and QoVProducers, an Id without escapes or non-ASCII bytes, arrays of JSON numbers or null.
-// On anything else it returns false and leaves the fields of r as they were, so the caller decodes the
-// row with encoding/json. Like encoding/json it reuses the backing arrays of r's slices (and writes into
-// them before it may give up), sets a null array to nil and an empty one to an empty non-nil slice, keeps
-// fields the row does not name, and lets the last of duplicate keys win.
+// On anything else it returns false without assigning r's fields, so the caller decodes the row with
+// encoding/json. Like encoding/json it reuses the backing arrays of r's slices, sets a null array to nil
+// and an empty one to an empty non-nil slice, keeps fields the row does not name, and lets the last of
+// duplicate keys win.
+//
+// It writes into those backing arrays before it may give up. When encoding/json then decodes the row,
+// the result is the same: it writes the same elements again. On a syntax error encoding/json writes
+// nothing, so the contents of r's slices can differ from what plain encoding/json leaves ([9 9 9 9]
+// becomes [1 2 9 9]). Every caller discards the row on a decode error.
 func decodeRawSourceLine(data []byte, r *model.RawSourceLine) bool {
 	d := rowDecoder{b: data}
 	id, cons, prod, qovCons, qovProd := r.Id, r.Consumers, r.Producers, r.QoVConsumers, r.QoVProducers
@@ -26,9 +31,11 @@ func decodeRawSourceLine(data []byte, r *model.RawSourceLine) bool {
 				return false
 			}
 			d.skipWS()
-			switch key {
+			switch string(key) { // a switch on a converted []byte does not allocate
 			case "Id":
-				id, ok = d.str()
+				var b []byte
+				b, ok = d.str()
+				id = string(b)
 			case "Consumers":
 				cons, ok = floats(&d, cons)
 			case "Producers":
@@ -85,23 +92,23 @@ func (d *rowDecoder) consume(c byte) bool {
 	return false
 }
 
-// str reads a string of printable ASCII without escapes, after optional whitespace.
-func (d *rowDecoder) str() (string, bool) {
+// str reads a string of printable ASCII without escapes, after optional whitespace, and returns the
+// bytes between the quotes.
+func (d *rowDecoder) str() ([]byte, bool) {
 	if !d.consume('"') {
-		return "", false
+		return nil, false
 	}
 	start := d.i
 	for ; d.i < len(d.b); d.i++ {
 		switch c := d.b[d.i]; {
 		case c == '"':
-			s := string(d.b[start:d.i])
 			d.i++
-			return s, true
+			return d.b[start : d.i-1], true
 		case c < 0x20 || c >= 0x80 || c == '\\':
-			return "", false
+			return nil, false
 		}
 	}
-	return "", false
+	return nil, false
 }
 
 // null reads the literal null.

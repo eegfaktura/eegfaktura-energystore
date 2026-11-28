@@ -5,7 +5,8 @@ import (
 )
 
 // FuzzRowDecoder compares the codec (fast path with fallback) with encoding/json on arbitrary input:
-// both must agree on error and result. Run locally: go test ./store/ebow/codec/json -run '^$'
+// both must agree on error and row as checkSame defines it (the row also after a type error, not after
+// a syntax error into a prefilled row). Run locally: go test ./store/ebow/codec/json -run '^$'
 // -fuzz FuzzRowDecoder -fuzztime 2m. Without -fuzz only the seeds run.
 func FuzzRowDecoder(f *testing.F) {
 	for _, row := range monthRows(4, 5, 2) {
