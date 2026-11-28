@@ -8,6 +8,13 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Changed
+- **Energy report: rounding once per day** instead of once per requested metering point. The report rounded the
+  daily values of all consumers (and of every time window) again for each requested metering point. Now it rounds
+  them once per day and window; the rounding is idempotent, so the values are the same (golden test against the
+  former output). A report for 500 consumers + 10 producers over 30 days takes about **45 % less time** (benchmark:
+  0.34 s before, 0.18 s after).
+
 ## [1.11.0] – 2026-11-11
 
 ### Security
