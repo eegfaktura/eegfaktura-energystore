@@ -9,6 +9,12 @@ this changelog highlights the changes relevant for overview and operations.
 ## [Unreleased]
 
 ### Changed
+- **REST and GraphQL answers compressed** (gzip, or deflate when the client names that first) when the client
+  sends `Accept-Encoding` (browsers always do; web, admin and API applications on `/query/rawdata` get it then).
+  A client without the header gets plain JSON as before. `Vary: Accept-Encoding` on every route but the download. In
+  production the ingress does not compress: the energy report (`POST /eeg/v2/{ecid}/report`) sent up to 1.5 MB of
+  JSON. Level `BestSpeed`. Not compressed: the Excel download (`/eeg/{ecid}/excel/report/download`, xlsx is a zip
+  already) and websocket upgrades. gorilla/handlers was a dependency already.
 - **Energy report: rounding once per day** instead of once per requested metering point. The report rounded the
   daily values of all consumers (and of every time window) again for each requested metering point. Now it rounds
   them once per day and window; the rounding is idempotent, so the values are the same (golden test against the

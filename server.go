@@ -112,7 +112,7 @@ func main() {
 	allowedCredentials := handlers.AllowCredentials()
 
 	server := &http.Server{
-		Handler: handlers.CORS(allowedOrigins, allowedHeaders, allowedMethods, allowedCredentials)(logging.AccessLog(r)),
+		Handler: handlers.CORS(allowedOrigins, allowedHeaders, allowedMethods, allowedCredentials)(rest.HTTPHandler(r)),
 		Addr:    fmt.Sprintf("0.0.0.0:%s", port),
 		// Good practice: enforce timeouts for servers you create!
 		//
