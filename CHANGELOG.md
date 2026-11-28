@@ -15,6 +15,12 @@ this changelog highlights the changes relevant for overview and operations.
   former output). A report for 500 consumers + 10 producers over 30 days takes about **45 % less time** (benchmark:
   0.34 s before, 0.18 s after).
 
+### Fixed
+- **Energy report: community totals reproducible** (energystore 261128-mm1, pre-existing): `totalConsumption` and
+  `totalProduction` were summed in random map order, so their last bits could differ between two runs of the same
+  report. They are now summed in sorted metering-point order. Only the last bits change (far below the 6 decimal
+  places); the values per metering point are unchanged.
+
 ## [1.11.0] – 2026-11-11
 
 ### Security
