@@ -8,6 +8,13 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Changed
+- **Energy rows are read about three times faster.** Reports, the Excel export and the other readers of the
+  quarter-hour rows decode them with a decoder of their own instead of `encoding/json` (benchmark, 500
+  consumers + 100 producers over 30 days: 1.17–1.24 s before, 0.37–0.39 s after). The values are the same bit
+  for bit; a row in any other shape than the one the store writes is still decoded by `encoding/json`. The
+  stored format and writing are unchanged.
+
 ## [1.11.0] – 2026-11-11
 
 ### Security
