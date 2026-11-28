@@ -8,6 +8,8 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+## [1.12.0] – 2026-11-28
+
 ### Changed
 - **REST and GraphQL answers compressed** (gzip, or deflate when the client names that first) when the client
   sends `Accept-Encoding` (browsers always do; web, admin and API applications on `/query/rawdata` get it then).
