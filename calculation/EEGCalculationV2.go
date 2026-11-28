@@ -2,7 +2,9 @@ package calculation
 
 import (
 	"fmt"
+	"maps"
 	"math"
+	"slices"
 	"sort"
 	"time"
 
@@ -365,6 +367,10 @@ func appendBucketsToParticipantMeter(
 	if len(windowSums) == 0 {
 		return
 	}
+	// round once per window and day, not once per meter (rounding is in place and idempotent)
+	for _, ws := range windowSums {
+		ws.rAlloc.RoundToFixed(6)
+	}
 	for meterId, meterReports := range reportValues.meters {
 		meta, ok := cpMeta[meterId]
 		if !ok {
@@ -392,7 +398,7 @@ func appendBucketsToParticipantMeter(
 				switch meta.Dir {
 				case model.CONSUMER_DIRECTION:
 					// billing quantity of a consumer is the utilization
-					sums[tw.Key] += ws.rAlloc.RoundToFixed(6).GetElm(meta.SourceIdx, 0)
+					sums[tw.Key] += ws.rAlloc.GetElm(meta.SourceIdx, 0)
 				case model.PRODUCER_DIRECTION:
 					// billing quantity of a producer is production - allocation
 					sums[tw.Key] += ws.rProd.GetElm(meta.SourceIdx, 0) - ws.rDist.GetElm(meta.SourceIdx, 0)
@@ -434,7 +440,13 @@ func appendEnergyToParticipantMeter(
 	lineTime time.Time,
 	appendIntermediate func(*model.MeterReport, []float64, model.MeterDirection)) error {
 
-	for meterId, meterReports := range reportValues.meters {
+	// round once per day, not once per meter (rounding is in place and idempotent)
+	dailyReport.rCons.RoundToFixed(6)
+	dailyReport.rShar.RoundToFixed(6)
+	dailyReport.rAlloc.RoundToFixed(6)
+	// sorted meter ids: the community totals are float sums and must not depend on map order (261128-mm1)
+	for _, meterId := range slices.Sorted(maps.Keys(reportValues.meters)) {
+		meterReports := reportValues.meters[meterId]
 		if meta, ok := cpMeta[meterId]; ok {
 			for _, p := range meterReports {
 				from := utils.TruncateToDay(time.UnixMilli(p.From))
@@ -447,9 +459,9 @@ func appendEnergyToParticipantMeter(
 					switch meta.Dir {
 					case model.CONSUMER_DIRECTION:
 						values := []float64{
-							dailyReport.rCons.RoundToFixed(6).GetElm(meta.SourceIdx, 0),
-							dailyReport.rShar.RoundToFixed(6).GetElm(meta.SourceIdx, 0),
-							dailyReport.rAlloc.RoundToFixed(6).GetElm(meta.SourceIdx, 0),
+							dailyReport.rCons.GetElm(meta.SourceIdx, 0),
+							dailyReport.rShar.GetElm(meta.SourceIdx, 0),
+							dailyReport.rAlloc.GetElm(meta.SourceIdx, 0),
 						}
 						p.Report.Summary.Consumption += values[0]
 						p.Report.Summary.Allocation += values[1]

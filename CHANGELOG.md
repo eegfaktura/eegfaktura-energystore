@@ -15,11 +15,22 @@ this changelog highlights the changes relevant for overview and operations.
   production the ingress does not compress: the energy report (`POST /eeg/v2/{ecid}/report`) sent up to 1.5 MB of
   JSON. Level `BestSpeed`. Not compressed: the Excel download (`/eeg/{ecid}/excel/report/download`, xlsx is a zip
   already) and websocket upgrades. gorilla/handlers was a dependency already.
+- **Energy report: rounding once per day** instead of once per requested metering point. The report rounded the
+  daily values of all consumers (and of every time window) again for each requested metering point. Now it rounds
+  them once per day and window; the rounding is idempotent, so the values are the same (golden test against the
+  former output). A report for 500 consumers + 10 producers over 30 days takes about **45 % less time** (benchmark:
+  0.34 s before, 0.18 s after).
 - **Energy rows are read about three times faster.** Reports, the Excel export and the other readers of the
   quarter-hour rows decode them with a decoder of their own instead of `encoding/json` (benchmark, 500
   consumers + 100 producers over 30 days: 1.17–1.24 s before, 0.37–0.39 s after). The values are the same bit
   for bit; a row in any other shape than the one the store writes is still decoded by `encoding/json`. The
   stored format and writing are unchanged.
+
+### Fixed
+- **Energy report: community totals reproducible** (energystore 261128-mm1, pre-existing): `totalConsumption` and
+  `totalProduction` were summed in random map order, so their last bits could differ between two runs of the same
+  report. They are now summed in sorted metering-point order. Only the last bits change (far below the 6 decimal
+  places); the values per metering point are unchanged.
 
 ## [1.11.0] – 2026-11-11
 
