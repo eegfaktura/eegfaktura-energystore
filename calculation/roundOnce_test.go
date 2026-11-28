@@ -13,8 +13,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// updateGolden rewrites testdata/report_golden.json. The committed file was generated
-// with the algorithm that still rounded the day matrices once per requested meter.
+// updateGolden rewrites testdata/report_golden.json:
+// `go test ./calculation -run Golden -update-golden`.
+// Regenerate only when the report output is meant to change.
 var updateGolden = flag.Bool("update-golden", false, "rewrite testdata/report_golden.json")
 
 // sliceRange is a plain ebow.IRange over prepared lines (no mock bookkeeping, so the
@@ -79,8 +80,9 @@ func reportFixture(consumers, producers, days int) ([]*model.RawSourceLine, map[
 }
 
 // reportRequest asks for every meter of the fixture. Variants: ZVT windows on every
-// second meter, a consumer active on days 2-3 only, a consumer in two participations,
-// and a requested meter without energy data.
+// second meter, a consumer with windows active on days 2-3 only, a consumer in two
+// consecutive participations (owner change after day 2), and a requested meter without
+// energy data.
 func reportRequest(consumers, producers int) *model.ReportResponse {
 	from := time.Date(2024, 1, 1, 0, 0, 0, 0, time.Local).UnixMilli()
 	until := time.Date(2024, 12, 31, 0, 0, 0, 0, time.Local).UnixMilli()
@@ -101,12 +103,13 @@ func reportRequest(consumers, producers int) *model.ReportResponse {
 	for p := 0; p < producers; p++ {
 		add(fmt.Sprintf("PROD%d", p), p)
 	}
-	report.ParticipantReports[1].Meters[0].From = time.Date(2024, 1, 2, 0, 0, 0, 0, time.Local).UnixMilli()
-	report.ParticipantReports[1].Meters[0].Until = time.Date(2024, 1, 3, 0, 0, 0, 0, time.Local).UnixMilli()
+	report.ParticipantReports[2].Meters[0].From = time.Date(2024, 1, 2, 0, 0, 0, 0, time.Local).UnixMilli()
+	report.ParticipantReports[2].Meters[0].Until = time.Date(2024, 1, 3, 0, 0, 0, 0, time.Local).UnixMilli()
+	report.ParticipantReports[0].Meters[0].Until = time.Date(2024, 1, 2, 0, 0, 0, 0, time.Local).UnixMilli()
 	report.ParticipantReports = append(report.ParticipantReports, model.ParticipantReport{
 		ParticipantId: "P-second",
 		Meters: []*model.MeterReport{
-			{MeterId: "CONS0", From: from, Until: until, TimeWindows: windows[:1]},
+			{MeterId: "CONS0", From: time.Date(2024, 1, 3, 0, 0, 0, 0, time.Local).UnixMilli(), Until: until, TimeWindows: windows[:1]},
 			{MeterId: "NODATA", From: from, Until: until},
 		},
 	})

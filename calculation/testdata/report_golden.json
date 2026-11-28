@@ -8,7 +8,7 @@
           "meterId": "CONS0",
           "meterDir": "",
           "from": 1704063600000,
-          "until": 1735599600000,
+          "until": 1704150000000,
           "timeWindows": [
             {
               "key": "T1",
@@ -24,45 +24,39 @@
           "report": {
             "id": "",
             "summary": {
-              "consumption": 395.00345,
-              "utilization": 99.551441,
-              "allocation": 201.710701,
+              "consumption": 186.607954,
+              "utilization": 49.638002,
+              "allocation": 95.868617,
               "production": 0
             },
             "intermediate": {
               "id": "IRP/2023/01",
               "consumption": [
                 98.774675,
-                87.833279,
-                98.74547,
-                109.650026
+                87.833279
               ],
               "utilization": [
                 25.063612,
-                24.57439,
-                23.761071,
-                26.152368
+                24.57439
               ],
               "allocation": [
                 52.410533,
-                43.458084,
-                48.867242,
-                56.974842
+                43.458084
               ],
               "production": []
             },
             "buckets": [
               {
                 "key": "BASE",
-                "kWh": 46.315789
+                "kWh": 23.95837
               },
               {
                 "key": "T1",
-                "kWh": 9.21407
+                "kWh": 5.762559
               },
               {
                 "key": "T2",
-                "kWh": 44.021582
+                "kWh": 19.917073
               }
             ]
           }
@@ -75,32 +69,35 @@
         {
           "meterId": "CONS1",
           "meterDir": "",
-          "from": 1704150000000,
-          "until": 1704236400000,
+          "from": 1704063600000,
+          "until": 1735599600000,
           "report": {
             "id": "",
             "summary": {
-              "consumption": 193.937312,
-              "utilization": 48.213412,
-              "allocation": 98.05033,
+              "consumption": 385.900658,
+              "utilization": 92.046541,
+              "allocation": 189.371261,
               "production": 0
             },
             "intermediate": {
               "id": "IRP/2023/01",
               "consumption": [
-                0,
+                96.774392,
                 93.777958,
-                100.159354
+                100.159354,
+                95.188954
               ],
               "utilization": [
-                0,
+                20.97272,
                 22.923713,
-                25.289699
+                25.289699,
+                22.860409
               ],
               "allocation": [
-                0,
+                44.797671,
                 49.070671,
-                48.979659
+                48.979659,
+                46.52326
               ],
               "production": []
             }
@@ -114,8 +111,8 @@
         {
           "meterId": "CONS2",
           "meterDir": "",
-          "from": 1704063600000,
-          "until": 1735599600000,
+          "from": 1704150000000,
+          "until": 1704236400000,
           "timeWindows": [
             {
               "key": "T1",
@@ -131,45 +128,42 @@
           "report": {
             "id": "",
             "summary": {
-              "consumption": 381.552602,
-              "utilization": 94.613206,
-              "allocation": 201.890626,
+              "consumption": 195.18805,
+              "utilization": 53.442745,
+              "allocation": 109.272693,
               "production": 0
             },
             "intermediate": {
               "id": "IRP/2023/01",
               "consumption": [
-                96.301765,
+                0,
                 97.248875,
-                97.939175,
-                90.062787
+                97.939175
               ],
               "utilization": [
-                20.742397,
+                0,
                 29.962127,
-                23.480618,
-                20.428064
+                23.480618
               ],
               "allocation": [
-                42.682708,
+                0,
                 55.406647,
-                53.866046,
-                49.935225
+                53.866046
               ],
               "production": []
             },
             "buckets": [
               {
                 "key": "BASE",
-                "kWh": 44.944619
+                "kWh": 27.16385
               },
               {
                 "key": "T1",
-                "kWh": 8.330829
+                "kWh": 4.507239
               },
               {
                 "key": "T2",
-                "kWh": 41.337758
+                "kWh": 21.771656
               }
             ]
           }
@@ -607,7 +601,7 @@
         {
           "meterId": "CONS0",
           "meterDir": "",
-          "from": 1704063600000,
+          "from": 1704236400000,
           "until": 1735599600000,
           "timeWindows": [
             {
@@ -619,28 +613,28 @@
           "report": {
             "id": "",
             "summary": {
-              "consumption": 395.00345,
-              "utilization": 99.551441,
-              "allocation": 201.710701,
+              "consumption": 208.395496,
+              "utilization": 49.913439,
+              "allocation": 105.842084,
               "production": 0
             },
             "intermediate": {
               "id": "IRP/2023/01",
               "consumption": [
-                98.774675,
-                87.833279,
+                0,
+                0,
                 98.74547,
                 109.650026
               ],
               "utilization": [
-                25.063612,
-                24.57439,
+                0,
+                0,
                 23.761071,
                 26.152368
               ],
               "allocation": [
-                52.410533,
-                43.458084,
+                0,
+                0,
                 48.867242,
                 56.974842
               ],
@@ -649,11 +643,11 @@
             "buckets": [
               {
                 "key": "BASE",
-                "kWh": 90.337371
+                "kWh": 46.461928
               },
               {
                 "key": "T1",
-                "kWh": 9.21407
+                "kWh": 3.451511
               }
             ]
           }
@@ -685,5 +679,5 @@
   ],
   "meta": null,
   "totalProduction": 11307.2367541,
-  "totalConsumption": 3268.378751999999
+  "totalConsumption": 2878.974096
 }
