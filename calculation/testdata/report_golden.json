@@ -1,0 +1,683 @@
+{
+  "id": "",
+  "participantReports": [
+    {
+      "participantId": "P-CONS0",
+      "meters": [
+        {
+          "meterId": "CONS0",
+          "meterDir": "",
+          "from": 1704063600000,
+          "until": 1704150000000,
+          "timeWindows": [
+            {
+              "key": "T1",
+              "from": "06:00",
+              "to": "08:00"
+            },
+            {
+              "key": "T2",
+              "from": "20:00",
+              "to": "06:00"
+            }
+          ],
+          "report": {
+            "id": "",
+            "summary": {
+              "consumption": 186.607954,
+              "utilization": 49.638002,
+              "allocation": 95.868617,
+              "production": 0
+            },
+            "intermediate": {
+              "id": "IRP/2023/01",
+              "consumption": [
+                98.774675,
+                87.833279
+              ],
+              "utilization": [
+                25.063612,
+                24.57439
+              ],
+              "allocation": [
+                52.410533,
+                43.458084
+              ],
+              "production": []
+            },
+            "buckets": [
+              {
+                "key": "BASE",
+                "kWh": 23.95837
+              },
+              {
+                "key": "T1",
+                "kWh": 5.762559
+              },
+              {
+                "key": "T2",
+                "kWh": 19.917073
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "participantId": "P-CONS1",
+      "meters": [
+        {
+          "meterId": "CONS1",
+          "meterDir": "",
+          "from": 1704063600000,
+          "until": 1735599600000,
+          "report": {
+            "id": "",
+            "summary": {
+              "consumption": 385.900658,
+              "utilization": 92.046541,
+              "allocation": 189.371261,
+              "production": 0
+            },
+            "intermediate": {
+              "id": "IRP/2023/01",
+              "consumption": [
+                96.774392,
+                93.777958,
+                100.159354,
+                95.188954
+              ],
+              "utilization": [
+                20.97272,
+                22.923713,
+                25.289699,
+                22.860409
+              ],
+              "allocation": [
+                44.797671,
+                49.070671,
+                48.979659,
+                46.52326
+              ],
+              "production": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "participantId": "P-CONS2",
+      "meters": [
+        {
+          "meterId": "CONS2",
+          "meterDir": "",
+          "from": 1704150000000,
+          "until": 1704236400000,
+          "timeWindows": [
+            {
+              "key": "T1",
+              "from": "06:00",
+              "to": "08:00"
+            },
+            {
+              "key": "T2",
+              "from": "20:00",
+              "to": "06:00"
+            }
+          ],
+          "report": {
+            "id": "",
+            "summary": {
+              "consumption": 195.18805,
+              "utilization": 53.442745,
+              "allocation": 109.272693,
+              "production": 0
+            },
+            "intermediate": {
+              "id": "IRP/2023/01",
+              "consumption": [
+                0,
+                97.248875,
+                97.939175
+              ],
+              "utilization": [
+                0,
+                29.962127,
+                23.480618
+              ],
+              "allocation": [
+                0,
+                55.406647,
+                53.866046
+              ],
+              "production": []
+            },
+            "buckets": [
+              {
+                "key": "BASE",
+                "kWh": 27.16385
+              },
+              {
+                "key": "T1",
+                "kWh": 4.507239
+              },
+              {
+                "key": "T2",
+                "kWh": 21.771656
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "participantId": "P-CONS3",
+      "meters": [
+        {
+          "meterId": "CONS3",
+          "meterDir": "",
+          "from": 1704063600000,
+          "until": 1735599600000,
+          "report": {
+            "id": "",
+            "summary": {
+              "consumption": 373.388108,
+              "utilization": 90.053675,
+              "allocation": 188.291465,
+              "production": 0
+            },
+            "intermediate": {
+              "id": "IRP/2023/01",
+              "consumption": [
+                82.390782,
+                102.75867,
+                94.838181,
+                93.400475
+              ],
+              "utilization": [
+                19.633417,
+                21.791349,
+                25.194877,
+                23.434032
+              ],
+              "allocation": [
+                47.404977,
+                47.76426,
+                47.031181,
+                46.091047
+              ],
+              "production": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "participantId": "P-CONS4",
+      "meters": [
+        {
+          "meterId": "CONS4",
+          "meterDir": "",
+          "from": 1704063600000,
+          "until": 1735599600000,
+          "timeWindows": [
+            {
+              "key": "T1",
+              "from": "06:00",
+              "to": "08:00"
+            },
+            {
+              "key": "T2",
+              "from": "20:00",
+              "to": "06:00"
+            }
+          ],
+          "report": {
+            "id": "",
+            "summary": {
+              "consumption": 391.718733,
+              "utilization": 97.066307,
+              "allocation": 201.51419,
+              "production": 0
+            },
+            "intermediate": {
+              "id": "IRP/2023/01",
+              "consumption": [
+                96.286503,
+                99.996335,
+                93.801176,
+                101.634719
+              ],
+              "utilization": [
+                23.53662,
+                25.319814,
+                21.253611,
+                26.956262
+              ],
+              "allocation": [
+                47.583949,
+                48.734352,
+                46.617019,
+                58.57887
+              ],
+              "production": []
+            },
+            "buckets": [
+              {
+                "key": "BASE",
+                "kWh": 44.216868
+              },
+              {
+                "key": "T1",
+                "kWh": 5.248135
+              },
+              {
+                "key": "T2",
+                "kWh": 47.601304
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "participantId": "P-CONS5",
+      "meters": [
+        {
+          "meterId": "CONS5",
+          "meterDir": "",
+          "from": 1704063600000,
+          "until": 1735599600000,
+          "report": {
+            "id": "",
+            "summary": {
+              "consumption": 357.783887,
+              "utilization": 87.268959,
+              "allocation": 178.498145,
+              "production": 0
+            },
+            "intermediate": {
+              "id": "IRP/2023/01",
+              "consumption": [
+                80.527321,
+                90.724962,
+                87.686238,
+                98.845366
+              ],
+              "utilization": [
+                19.38214,
+                22.13165,
+                20.725611,
+                25.029558
+              ],
+              "allocation": [
+                38.354019,
+                48.008564,
+                41.533176,
+                50.602386
+              ],
+              "production": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "participantId": "P-CONS6",
+      "meters": [
+        {
+          "meterId": "CONS6",
+          "meterDir": "",
+          "from": 1704063600000,
+          "until": 1735599600000,
+          "timeWindows": [
+            {
+              "key": "T1",
+              "from": "06:00",
+              "to": "08:00"
+            },
+            {
+              "key": "T2",
+              "from": "20:00",
+              "to": "06:00"
+            }
+          ],
+          "report": {
+            "id": "",
+            "summary": {
+              "consumption": 391.325272,
+              "utilization": 104.273065,
+              "allocation": 195.893679,
+              "production": 0
+            },
+            "intermediate": {
+              "id": "IRP/2023/01",
+              "consumption": [
+                105.959339,
+                99.854021,
+                92.938702,
+                92.57321
+              ],
+              "utilization": [
+                31.684177,
+                26.646228,
+                25.362964,
+                20.579696
+              ],
+              "allocation": [
+                55.352769,
+                48.875311,
+                49.502237,
+                42.163362
+              ],
+              "production": []
+            },
+            "buckets": [
+              {
+                "key": "BASE",
+                "kWh": 46.865438
+              },
+              {
+                "key": "T1",
+                "kWh": 9.538291
+              },
+              {
+                "key": "T2",
+                "kWh": 47.869336
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "participantId": "P-CONS7",
+      "meters": [
+        {
+          "meterId": "CONS7",
+          "meterDir": "",
+          "from": 1704063600000,
+          "until": 1735599600000,
+          "report": {
+            "id": "",
+            "summary": {
+              "consumption": 388.665938,
+              "utilization": 92.917713,
+              "allocation": 191.472703,
+              "production": 0
+            },
+            "intermediate": {
+              "id": "IRP/2023/01",
+              "consumption": [
+                101.741228,
+                91.125477,
+                100.013353,
+                95.78588
+              ],
+              "utilization": [
+                24.913765,
+                24.164477,
+                20.53353,
+                23.305941
+              ],
+              "allocation": [
+                51.155269,
+                46.718266,
+                44.788333,
+                48.810835
+              ],
+              "production": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "participantId": "P-PROD0",
+      "meters": [
+        {
+          "meterId": "PROD0",
+          "meterDir": "",
+          "from": 1704063600000,
+          "until": 1735599600000,
+          "timeWindows": [
+            {
+              "key": "T1",
+              "from": "06:00",
+              "to": "08:00"
+            },
+            {
+              "key": "T2",
+              "from": "20:00",
+              "to": "06:00"
+            }
+          ],
+          "report": {
+            "id": "",
+            "summary": {
+              "consumption": 0,
+              "utilization": 0,
+              "allocation": 1872.61941,
+              "production": 3716.31715
+            },
+            "intermediate": {
+              "id": "IRP/2023/01",
+              "consumption": [],
+              "utilization": [],
+              "allocation": [
+                436.23146640000004,
+                490.21979120000003,
+                442.0811686,
+                504.0869838
+              ],
+              "production": [
+                859.0803198999996,
+                968.7392016000001,
+                909.9264813000002,
+                978.5711475000002
+              ]
+            },
+            "buckets": [
+              {
+                "key": "BASE",
+                "kWh": 1011.880292
+              },
+              {
+                "key": "T1",
+                "kWh": 148.409976
+              },
+              {
+                "key": "T2",
+                "kWh": 683.407472
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "participantId": "P-PROD1",
+      "meters": [
+        {
+          "meterId": "PROD1",
+          "meterDir": "",
+          "from": 1704063600000,
+          "until": 1735599600000,
+          "report": {
+            "id": "",
+            "summary": {
+              "consumption": 0,
+              "utilization": 0,
+              "allocation": 2101.950265,
+              "production": 3949.56217
+            },
+            "intermediate": {
+              "id": "IRP/2023/01",
+              "consumption": [],
+              "utilization": [],
+              "allocation": [
+                550.4169252999999,
+                514.5415086999999,
+                507.9032100999999,
+                529.0886206999999
+              ],
+              "production": [
+                1086.8712091,
+                950.3725570999999,
+                964.7608750999999,
+                947.5575288000001
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "participantId": "P-PROD2",
+      "meters": [
+        {
+          "meterId": "PROD2",
+          "meterDir": "",
+          "from": 1704063600000,
+          "until": 1735599600000,
+          "timeWindows": [
+            {
+              "key": "T1",
+              "from": "06:00",
+              "to": "08:00"
+            },
+            {
+              "key": "T2",
+              "from": "20:00",
+              "to": "06:00"
+            }
+          ],
+          "report": {
+            "id": "",
+            "summary": {
+              "consumption": 0,
+              "utilization": 0,
+              "allocation": 1806.195122,
+              "production": 3641.357434
+            },
+            "intermediate": {
+              "id": "IRP/2023/01",
+              "consumption": [],
+              "utilization": [],
+              "allocation": [
+                461.48830670000007,
+                460.25593129999976,
+                453.19543300000015,
+                431.2554512000001
+              ],
+              "production": [
+                930.9330012999999,
+                897.738663,
+                852.5775248999997,
+                960.1082445000004
+              ]
+            },
+            "buckets": [
+              {
+                "key": "BASE",
+                "kWh": 972.910863
+              },
+              {
+                "key": "T1",
+                "kWh": 134.737004
+              },
+              {
+                "key": "T2",
+                "kWh": 727.514445
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "participantId": "P-second",
+      "meters": [
+        {
+          "meterId": "CONS0",
+          "meterDir": "",
+          "from": 1704236400000,
+          "until": 1735599600000,
+          "timeWindows": [
+            {
+              "key": "T1",
+              "from": "06:00",
+              "to": "08:00"
+            }
+          ],
+          "report": {
+            "id": "",
+            "summary": {
+              "consumption": 208.395496,
+              "utilization": 49.913439,
+              "allocation": 105.842084,
+              "production": 0
+            },
+            "intermediate": {
+              "id": "IRP/2023/01",
+              "consumption": [
+                0,
+                0,
+                98.74547,
+                109.650026
+              ],
+              "utilization": [
+                0,
+                0,
+                23.761071,
+                26.152368
+              ],
+              "allocation": [
+                0,
+                0,
+                48.867242,
+                56.974842
+              ],
+              "production": []
+            },
+            "buckets": [
+              {
+                "key": "BASE",
+                "kWh": 46.461928
+              },
+              {
+                "key": "T1",
+                "kWh": 3.451511
+              }
+            ]
+          }
+        },
+        {
+          "meterId": "NODATA",
+          "meterDir": "",
+          "from": 1704063600000,
+          "until": 1735599600000,
+          "report": {
+            "id": "",
+            "summary": {
+              "consumption": 0,
+              "utilization": 0,
+              "allocation": 0,
+              "production": 0
+            },
+            "intermediate": {
+              "id": "",
+              "consumption": [],
+              "utilization": [],
+              "allocation": [],
+              "production": []
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "meta": null,
+  "totalProduction": 11307.2367541,
+  "totalConsumption": 2878.974096
+}
